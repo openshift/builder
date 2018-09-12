@@ -112,10 +112,12 @@ func dockerPullImage(client DockerClient, name string, authConfig docker.AuthCon
 
 	glog.V(4).Infof("pulling image %q with ref %#v as repository: %s and tag: %s", name, ref, ref.Exact(), tag)
 	return retryImageAction("Pull", func() error {
+		progressWriter := imageprogress.NewPullWriter(logProgress)
+		defer progressWriter.Close()
 		opts := docker.PullImageOptions{
 			Repository:    ref.Exact(),
 			Tag:           tag,
-			OutputStream:  imageprogress.NewPullWriter(logProgress),
+			OutputStream:  progressWriter,
 			RawJSONStream: true,
 		}
 		if glog.Is(5) {
@@ -146,7 +148,9 @@ func dockerPushImage(client DockerClient, name string, authConfig docker.AuthCon
 			logProgress := func(s string) {
 				glog.V(0).Infof("%s", s)
 			}
-			progressWriter = imageprogress.NewPushWriter(logProgress)
+			pw := imageprogress.NewPushWriter(logProgress)
+			defer pw.Close()
+			progressWriter = pw
 		}
 		digestWriter = newDigestWriter()
 
