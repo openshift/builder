@@ -1,0 +1,20 @@
+FROM docker.io/library/centos:7
+LABEL io.k8s.display-name="OpenShift Origin Builder" \
+      io.k8s.description="This is a component of OpenShift Origin and is responsible for executing image builds." \
+      io.openshift.tags="openshift,builder"
+
+RUN INSTALL_PKGS=" \
+      which tar wget hostname sysvinit-tools util-linux \
+      socat tree findutils lsof bind-utils \
+      git tar bsdtar \
+      " && \
+    yum install -y ${INSTALL_PKGS} && \
+    rpm -V ${INSTALL_PKGS} && \
+    yum clean all
+
+COPY openshift-builder /usr/bin
+RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \
+    ln -s /usr/bin/openshift-builder /usr/bin/openshift-docker-build && \
+    ln -s /usr/bin/openshift-builder /usr/bin/openshift-git-clone && \
+    ln -s /usr/bin/openshift-builder /usr/bin/openshift-manage-dockerfile && \
+    ln -s /usr/bin/openshift-builder /usr/bin/openshift-extract-image-content
