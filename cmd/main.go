@@ -52,7 +52,7 @@ func CommandFor(basename string) *cobra.Command {
 	case "openshift-extract-image-content":
 		cmd = NewCommandExtractImageContent(basename)
 	default:
-		fmt.Println("unknown command name: %s", basename)
+		fmt.Printf("unknown command name: %s\n", basename)
 		os.Exit(1)
 	}
 
