@@ -3,7 +3,7 @@ PROG  := openshift-builder
 
 .PHONY: all build clean test build-image build-devel-image
 
-all: generate build build-image
+all: build build-image
 
 build:
 	go build -o $(PROG) "./cmd"
