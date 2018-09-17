@@ -9,7 +9,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 
-	"github.com/openshift/origin/pkg/build/builder/crioclient"
+	"github.com/openshift/builder/pkg/build/builder/crioclient"
 )
 
 // getContainerNetworkConfig determines whether the builder is running as a container

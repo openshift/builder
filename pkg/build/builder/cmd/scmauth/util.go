@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	builder "github.com/openshift/origin/pkg/build/builder"
-	utilglog "github.com/openshift/origin/pkg/build/builder/util/glog"
+	builder "github.com/openshift/builder/pkg/build/builder"
+	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
 )
 
 var glog = utilglog.ToFile(os.Stderr, 2)

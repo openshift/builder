@@ -19,11 +19,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
+	"github.com/openshift/builder/pkg/build/builder/timing"
+	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
-	"github.com/openshift/origin/pkg/build/builder/cmd/dockercfg"
-	"github.com/openshift/origin/pkg/build/builder/timing"
-	builderutil "github.com/openshift/origin/pkg/build/builder/util"
-	"github.com/openshift/origin/pkg/build/builder/util/dockerfile"
 )
 
 // defaultDockerfilePath is the default path of the Dockerfile

@@ -9,7 +9,7 @@ import (
 
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 
-	builder "github.com/openshift/origin/pkg/build/builder"
+	builder "github.com/openshift/builder/pkg/build/builder"
 )
 
 const (

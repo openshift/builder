@@ -17,8 +17,8 @@ import (
 	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
 	buildfake "github.com/openshift/client-go/build/clientset/versioned/fake"
-	"github.com/openshift/origin/pkg/build/builder/util/dockerfile"
 
 	"github.com/openshift/library-go/pkg/git"
 )

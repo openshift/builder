@@ -15,7 +15,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
-	builderutil "github.com/openshift/origin/pkg/build/builder/util"
+	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 	s2iutil "github.com/openshift/source-to-image/pkg/util"
 )

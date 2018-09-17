@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openshift/origin/pkg/build/builder"
+	"github.com/openshift/builder/pkg/build/builder"
 )
 
 func secretDir(t *testing.T, files ...string) string {

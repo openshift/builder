@@ -31,12 +31,12 @@ import (
 	"github.com/openshift/source-to-image/pkg/util"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/builder/pkg/build/builder/timing"
+	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
+	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/library-go/pkg/git"
-	"github.com/openshift/origin/pkg/build/builder/timing"
-	builderutil "github.com/openshift/origin/pkg/build/builder/util"
-	"github.com/openshift/origin/pkg/build/builder/util/dockerfile"
-	utilglog "github.com/openshift/origin/pkg/build/builder/util/glog"
 )
 
 const (

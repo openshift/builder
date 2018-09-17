@@ -11,7 +11,7 @@ import (
 
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
-	utilglog "github.com/openshift/origin/pkg/build/builder/util/glog"
+	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
 )
 
 var glog = utilglog.ToFile(os.Stderr, 2)

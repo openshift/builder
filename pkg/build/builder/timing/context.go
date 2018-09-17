@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
-	utilglog "github.com/openshift/origin/pkg/build/builder/util/glog"
+	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
 )
 
 var glog = utilglog.ToFile(os.Stderr, 2)
