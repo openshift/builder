@@ -15,6 +15,7 @@ import (
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 
 	"github.com/openshift/library-go/pkg/git"
+	"github.com/openshift/library-go/pkg/serviceability"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
@@ -88,6 +89,7 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 	// sourceSecretsDir (SOURCE_SECRET_PATH)
 	cfg.sourceSecretDir = os.Getenv("SOURCE_SECRET_PATH")
 
+	needsDocker = false
 	if needsDocker {
 		if _, ok := os.LookupEnv("DOCKER_HOST"); ok {
 			// dockerClient and dockerEndpoint (DOCKER_HOST)
@@ -356,6 +358,14 @@ func RunExtractImageContent(out io.Writer) error {
 	}
 	if cfg.cleanup != nil {
 		defer cfg.cleanup()
+	}
+	switch {
+	case glog.Is(4):
+		serviceability.InitLogrus("DEBUG")
+	case glog.Is(2):
+		serviceability.InitLogrus("INFO")
+	case glog.Is(0):
+		serviceability.InitLogrus("WARN")
 	}
 	return cfg.extractImageContent()
 }

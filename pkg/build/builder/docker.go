@@ -302,25 +302,6 @@ func (d *DockerBuilder) copyLocalObject(s localObjectBuildSource, sourceDir, tar
 	return nil
 }
 
-// setupPullSecret provides a Docker authentication configuration when the
-// PullSecret is specified.
-func (d *DockerBuilder) setupPullSecret() (*docker.AuthConfigurations, error) {
-	if len(os.Getenv(dockercfg.PullAuthType)) == 0 {
-		return nil, nil
-	}
-	glog.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, os.Getenv(dockercfg.PullAuthType))
-	dockercfgPath := dockercfg.GetDockercfgFile(os.Getenv(dockercfg.PullAuthType))
-	if len(dockercfgPath) == 0 {
-		return nil, fmt.Errorf("no docker config file found in '%s'", os.Getenv(dockercfg.PullAuthType))
-	}
-	glog.V(2).Infof("Using Docker config file %s", dockercfgPath)
-	r, err := os.Open(dockercfgPath)
-	if err != nil {
-		return nil, fmt.Errorf("'%s': %s", dockercfgPath, err)
-	}
-	return docker.NewAuthConfigurations(r)
-}
-
 // dockerBuild performs a docker build on the source that has been retrieved
 func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string) error {
 	var noCache bool
@@ -340,11 +321,18 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 		noCache = d.build.Spec.Strategy.DockerStrategy.NoCache
 		forcePull = d.build.Spec.Strategy.DockerStrategy.ForcePull
 	}
-	auth, err := d.setupPullSecret()
-	if err != nil {
-		return err
+
+	var auth *docker.AuthConfigurations
+	var err error
+	path := os.Getenv(dockercfg.PullAuthType)
+	if len(path) != 0 {
+		auth, err = GetDockerAuthConfiguration(path)
+		if err != nil {
+			return err
+		}
 	}
-	if err := d.copySecrets(d.build.Spec.Source.Secrets, dir); err != nil {
+
+	if err = d.copySecrets(d.build.Spec.Source.Secrets, dir); err != nil {
 		return err
 	}
 	if err = d.copyConfigMaps(d.build.Spec.Source.ConfigMaps, dir); err != nil {
@@ -396,13 +384,10 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 		}
 	}
 
-	if _, ok := d.dockerClient.(*docker.Client); ok {
-		return dockerBuildImage(d.dockerClient, dir, d.tar, &opts)
-	}
 	if dc, ok := d.dockerClient.(*DaemonlessClient); ok {
 		return buildDaemonlessImage(dc.SystemContext, dc.Store, dc.Isolation, dir, imageOptimizationPolicy, &opts)
 	}
-	return d.dockerClient.BuildImage(opts)
+	return dockerBuildImage(d.dockerClient, dir, d.tar, &opts)
 }
 
 func getDockerfilePath(dir string, build *buildapiv1.Build) string {
