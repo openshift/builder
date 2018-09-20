@@ -13,7 +13,7 @@
 FROM openshift/origin-release:golang-1.10
 COPY . /go/src/github.com/openshift/builder
 RUN cd /go/src/github.com/openshift/builder && \
-    go build -o openshift-builder ./cmd
+    hack/build.sh
 
 FROM docker.io/library/centos:7
 LABEL io.k8s.display-name="OpenShift Origin Builder" \

@@ -6,16 +6,17 @@ PROG  := openshift-builder
 all: build build-image test verify
 
 build:
-	go build -o $(PROG) "./cmd"
+	hack/build.sh
 
 build-image:
+	rm -f "$(PROG)"
 	docker build -t "$(IMAGE)" .
 
 build-devel-image: build
 	docker build -t "$(IMAGE)" -f Dockerfile-dev .
 
 test:
-	go test ./...
+	hack/test.sh
 
 verify:
 	hack/verify.sh
