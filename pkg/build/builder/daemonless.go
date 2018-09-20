@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containers/buildah"
+	"github.com/containers/buildah/imagebuildah"
+	"github.com/containers/buildah/util"
 	"github.com/containers/image/pkg/docker/config"
 	"github.com/containers/image/pkg/sysregistriesv2"
 	"github.com/containers/image/transports/alltransports"
@@ -22,9 +25,6 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	buildapiv1 "github.com/openshift/api/build/v1"
 	"github.com/pkg/errors"
-	"github.com/projectatomic/buildah"
-	"github.com/projectatomic/buildah/imagebuildah"
-	"github.com/projectatomic/buildah/util"
 )
 
 func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration) error {

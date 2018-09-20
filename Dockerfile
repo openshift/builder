@@ -29,6 +29,10 @@ RUN INSTALL_PKGS=" \
     rpm -V ${INSTALL_PKGS} && \
     yum clean all
 
+COPY imagecontent/policy.json /etc/containers/
+COPY imagecontent/registries.conf /etc/containers/
+COPY imagecontent/storage.conf /etc/containers/
+
 COPY --from=0 /go/src/github.com/openshift/builder/openshift-builder /usr/bin
 RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-docker-build && \
