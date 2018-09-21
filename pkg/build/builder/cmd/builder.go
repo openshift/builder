@@ -10,6 +10,7 @@ import (
 	istorage "github.com/containers/image/storage"
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
+	"github.com/containers/storage/pkg/reexec"
 
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
@@ -299,6 +300,7 @@ func (s2iBuilder) Build(dockerClient bld.DockerClient, sock string, buildsClient
 }
 
 func runBuild(out io.Writer, builder builder) error {
+	reexec.Init()
 	cfg, err := newBuilderConfigFromEnvironment(out, true)
 	if err != nil {
 		return err
@@ -352,6 +354,7 @@ func RunManageDockerfile(out io.Writer) error {
 // RunExtractImageContent extracts files from existing images
 // into the build working directory.
 func RunExtractImageContent(out io.Writer) error {
+	reexec.Init()
 	cfg, err := newBuilderConfigFromEnvironment(out, true)
 	if err != nil {
 		return err
