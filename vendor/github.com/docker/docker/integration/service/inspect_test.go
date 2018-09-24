@@ -6,18 +6,22 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/integration-cli/daemon"
 	"github.com/docker/docker/integration-cli/request"
 	"github.com/gotestyourself/gotestyourself/poll"
+	"github.com/gotestyourself/gotestyourself/skip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
 
 func TestInspect(t *testing.T) {
+	skip.IfCondition(t, !testEnv.IsLocalDaemon())
+	defer setupTest(t)()
 	d := newSwarm(t)
 	defer d.Stop(t)
 	client, err := request.NewClientForHost(d.Sock())
@@ -73,6 +77,7 @@ func fullSwarmServiceSpec(name string, replicas uint64) swarm.ServiceSpec {
 					Nameservers: []string{"8.8.8.8"},
 					Search:      []string{"somedomain"},
 				},
+				Isolation: container.IsolationDefault,
 			},
 			RestartPolicy: &swarm.RestartPolicy{
 				Delay:       &restartDelay,
@@ -110,7 +115,7 @@ const defaultSwarmPort = 2477
 func newSwarm(t *testing.T) *daemon.Swarm {
 	d := &daemon.Swarm{
 		Daemon: daemon.New(t, "", dockerdBinary, daemon.Config{
-			Experimental: testEnv.ExperimentalDaemon(),
+			Experimental: testEnv.DaemonInfo.ExperimentalBuild,
 		}),
 		// TODO: better method of finding an unused port
 		Port: defaultSwarmPort,

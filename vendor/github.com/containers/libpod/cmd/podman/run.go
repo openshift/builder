@@ -10,6 +10,7 @@ import (
 
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
+	"github.com/containers/libpod/pkg/rootless"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -38,6 +39,9 @@ var runCommand = cli.Command{
 func runCmd(c *cli.Context) error {
 	if err := createInit(c); err != nil {
 		return err
+	}
+	if os.Geteuid() != 0 {
+		rootless.SetSkipStorageSetup(true)
 	}
 
 	runtime, err := libpodruntime.GetContainerRuntime(c)
@@ -117,7 +121,7 @@ func runCmd(c *cli.Context) error {
 		return err
 	}
 
-	if ecode, err := ctr.Wait(libpod.WaitTimeout); err != nil {
+	if ecode, err := ctr.Wait(); err != nil {
 		if errors.Cause(err) == libpod.ErrNoSuchCtr {
 			// The container may have been removed
 			// Go looking for an exit file

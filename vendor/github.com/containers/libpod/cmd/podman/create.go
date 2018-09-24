@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/go-connections/nat"
 	"github.com/docker/go-units"
+	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -59,6 +60,10 @@ var createCommand = cli.Command{
 func createCmd(c *cli.Context) error {
 	if err := createInit(c); err != nil {
 		return err
+	}
+
+	if os.Geteuid() != 0 {
+		rootless.SetSkipStorageSetup(true)
 	}
 
 	runtime, err := libpodruntime.GetContainerRuntime(c)
@@ -455,6 +460,10 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		}
 		blkioWeight = uint16(u)
 	}
+	var mountList []spec.Mount
+	if mountList, err = parseMounts(c.StringSlice("mount")); err != nil {
+		return nil, err
+	}
 
 	if err = parseVolumes(c.StringSlice("volume")); err != nil {
 		return nil, err
@@ -522,17 +531,6 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		if len(c.StringSlice("publish")) > 0 || c.Bool("publish-all") {
 			return nil, errors.Errorf("cannot set port bindings on an existing container network namespace")
 		}
-	}
-
-	shmDir := ""
-	if ipcMode.IsHost() {
-		shmDir = "/dev/shm"
-	} else if ipcMode.IsContainer() {
-		ctr, err := runtime.LookupContainer(ipcMode.Container())
-		if err != nil {
-			return nil, errors.Wrapf(err, "container %q not found", ipcMode.Container())
-		}
-		shmDir = ctr.ShmDir()
 	}
 
 	// USER
@@ -771,7 +769,6 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 			Ulimit:    c.StringSlice("ulimit"),
 		},
 		Rm:          c.Bool("rm"),
-		ShmDir:      shmDir,
 		StopSignal:  stopSignal,
 		StopTimeout: c.Uint("stop-timeout"),
 		Sysctl:      sysctl,
@@ -780,6 +777,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		Tty:         tty,
 		User:        user,
 		UsernsMode:  usernsMode,
+		Mounts:      mountList,
 		Volumes:     c.StringSlice("volume"),
 		WorkDir:     workDir,
 		Rootfs:      rootfs,
@@ -800,6 +798,11 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		fmt.Fprintln(os.Stderr, warning)
 	}
 	return config, nil
+}
+
+type namespace interface {
+	IsContainer() bool
+	Container() string
 }
 
 func joinOrCreateRootlessUserNamespace(createConfig *cc.CreateConfig, runtime *libpod.Runtime) (bool, int, error) {
@@ -833,5 +836,26 @@ func joinOrCreateRootlessUserNamespace(createConfig *cc.CreateConfig, runtime *l
 		}
 	}
 
+	namespacesStr := []string{string(createConfig.IpcMode), string(createConfig.NetMode), string(createConfig.UsernsMode), string(createConfig.PidMode), string(createConfig.UtsMode)}
+	for _, i := range namespacesStr {
+		if cc.IsNS(i) {
+			return rootless.JoinNSPath(cc.NS(i))
+		}
+	}
+
+	namespaces := []namespace{createConfig.IpcMode, createConfig.NetMode, createConfig.UsernsMode, createConfig.PidMode, createConfig.UtsMode}
+	for _, i := range namespaces {
+		if i.IsContainer() {
+			ctr, err := runtime.LookupContainer(i.Container())
+			if err != nil {
+				return false, -1, err
+			}
+			pid, err := ctr.PID()
+			if err != nil {
+				return false, -1, err
+			}
+			return rootless.JoinNS(uint(pid))
+		}
+	}
 	return rootless.BecomeRootInUserNS()
 }

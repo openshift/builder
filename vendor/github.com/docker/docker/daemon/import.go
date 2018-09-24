@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/builder/dockerfile"
 	"github.com/docker/docker/builder/remotecontext"
 	"github.com/docker/docker/dockerversion"
+	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/archive"
@@ -26,32 +27,32 @@ import (
 // inConfig (if src is "-"), or from a URI specified in src. Progress output is
 // written to outStream. Repository and tag names can optionally be given in
 // the repo and tag arguments, respectively.
-func (daemon *Daemon) ImportImage(src string, repository, platform string, tag string, msg string, inConfig io.ReadCloser, outStream io.Writer, changes []string) error {
+func (daemon *Daemon) ImportImage(src string, repository, os string, tag string, msg string, inConfig io.ReadCloser, outStream io.Writer, changes []string) error {
 	var (
 		rc     io.ReadCloser
 		resp   *http.Response
 		newRef reference.Named
 	)
 
-	// Default the platform if not supplied.
-	if platform == "" {
-		platform = runtime.GOOS
+	// Default the operating system if not supplied.
+	if os == "" {
+		os = runtime.GOOS
 	}
 
 	if repository != "" {
 		var err error
 		newRef, err = reference.ParseNormalizedNamed(repository)
 		if err != nil {
-			return validationError{err}
+			return errdefs.InvalidParameter(err)
 		}
 		if _, isCanonical := newRef.(reference.Canonical); isCanonical {
-			return validationError{errors.New("cannot import digest reference")}
+			return errdefs.InvalidParameter(errors.New("cannot import digest reference"))
 		}
 
 		if tag != "" {
 			newRef, err = reference.WithTag(newRef, tag)
 			if err != nil {
-				return validationError{err}
+				return errdefs.InvalidParameter(err)
 			}
 		}
 	}
@@ -69,7 +70,7 @@ func (daemon *Daemon) ImportImage(src string, repository, platform string, tag s
 		}
 		u, err := url.Parse(src)
 		if err != nil {
-			return validationError{err}
+			return errdefs.InvalidParameter(err)
 		}
 
 		resp, err = remotecontext.GetWithStatusError(u.String())
@@ -90,11 +91,11 @@ func (daemon *Daemon) ImportImage(src string, repository, platform string, tag s
 	if err != nil {
 		return err
 	}
-	l, err := daemon.stores[platform].layerStore.Register(inflatedLayerData, "", layer.Platform(platform))
+	l, err := daemon.stores[os].layerStore.Register(inflatedLayerData, "", layer.OS(os))
 	if err != nil {
 		return err
 	}
-	defer layer.ReleaseAndLog(daemon.stores[platform].layerStore, l)
+	defer layer.ReleaseAndLog(daemon.stores[os].layerStore, l)
 
 	created := time.Now().UTC()
 	imgConfig, err := json.Marshal(&image.Image{
@@ -102,7 +103,7 @@ func (daemon *Daemon) ImportImage(src string, repository, platform string, tag s
 			DockerVersion: dockerversion.Version,
 			Config:        config,
 			Architecture:  runtime.GOARCH,
-			OS:            platform,
+			OS:            os,
 			Created:       created,
 			Comment:       msg,
 		},
@@ -119,14 +120,14 @@ func (daemon *Daemon) ImportImage(src string, repository, platform string, tag s
 		return err
 	}
 
-	id, err := daemon.stores[platform].imageStore.Create(imgConfig)
+	id, err := daemon.stores[os].imageStore.Create(imgConfig)
 	if err != nil {
 		return err
 	}
 
 	// FIXME: connect with commit code and call refstore directly
 	if newRef != nil {
-		if err := daemon.TagImageWithReference(id, platform, newRef); err != nil {
+		if err := daemon.TagImageWithReference(id, os, newRef); err != nil {
 			return err
 		}
 	}

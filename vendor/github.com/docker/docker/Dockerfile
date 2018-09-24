@@ -23,7 +23,7 @@
 # the case. Therefore, you don't have to disable it anymore.
 #
 
-FROM debian:jessie
+FROM debian:stretch
 
 # allow replacing httpredir or deb mirror
 ARG APT_MIRROR=deb.debian.org
@@ -51,21 +51,31 @@ RUN apt-get update && apt-get install -y \
 	less \
 	libapparmor-dev \
 	libcap-dev \
+	libdevmapper-dev \
+	libnet-dev \
 	libnl-3-dev \
 	libprotobuf-c0-dev \
 	libprotobuf-dev \
-	libsystemd-journal-dev \
+	libseccomp-dev \
+	libsystemd-dev \
 	libtool \
+	libudev-dev \
 	mercurial \
 	net-tools \
+	pigz \
 	pkg-config \
 	protobuf-compiler \
 	protobuf-c-compiler \
+	python-backports.ssl-match-hostname \
 	python-dev \
 	python-mock \
 	python-pip \
+	python-requests \
+	python-setuptools \
 	python-websocket \
+	python-wheel \
 	tar \
+	thin-provisioning-tools \
 	vim \
 	vim-common \
 	xfsprogs \
@@ -73,42 +83,12 @@ RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	&& pip install awscli==1.10.15
 
-# Get lvm2 sources to build statically linked devmapper library
-ENV LVM2_VERSION 2.02.173
-RUN mkdir -p /usr/local/lvm2 \
-	&& curl -fsSL "https://mirrors.kernel.org/sourceware/lvm2/LVM2.${LVM2_VERSION}.tgz" \
-		| tar -xzC /usr/local/lvm2 --strip-components=1
-
-# Compile and install (only the needed library)
-RUN cd /usr/local/lvm2 \
-	&& ./configure \
-		--build="$(gcc -print-multiarch)" \
-		--enable-static_link \
-		--enable-pkgconfig \
-	&& make -C include \
-	&& make -C libdm install_device-mapper
-
-# Install seccomp: the version shipped upstream is too old
-ENV SECCOMP_VERSION 2.3.2
-RUN set -x \
-	&& export SECCOMP_PATH="$(mktemp -d)" \
-	&& curl -fsSL "https://github.com/seccomp/libseccomp/releases/download/v${SECCOMP_VERSION}/libseccomp-${SECCOMP_VERSION}.tar.gz" \
-		| tar -xzC "$SECCOMP_PATH" --strip-components=1 \
-	&& ( \
-		cd "$SECCOMP_PATH" \
-		&& ./configure --prefix=/usr/local \
-		&& make \
-		&& make install \
-		&& ldconfig \
-	) \
-	&& rm -rf "$SECCOMP_PATH"
-
 # Install Go
 # IMPORTANT: If the version of Go is updated, the Windows to Linux CI machines
 #            will need updating, to avoid errors. Ping #docker-maintainers on IRC
 #            with a heads-up.
 # IMPORTANT: When updating this please note that stdlib archive/tar pkg is vendored
-ENV GO_VERSION 1.8.3
+ENV GO_VERSION 1.9.2
 RUN curl -fsSL "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
 	| tar -xzC /usr/local
 
@@ -116,11 +96,9 @@ ENV PATH /go/bin:/usr/local/go/bin:$PATH
 ENV GOPATH /go
 
 # Install CRIU for checkpoint/restore support
-ENV CRIU_VERSION 2.12.1
-# Install dependancy packages specific to criu
-RUN apt-get install libnet-dev -y && \
-	mkdir -p /usr/src/criu \
-	&& curl -sSL https://github.com/xemul/criu/archive/v${CRIU_VERSION}.tar.gz | tar -v -C /usr/src/criu/ -xz --strip-components=1 \
+ENV CRIU_VERSION 3.6
+RUN mkdir -p /usr/src/criu \
+	&& curl -sSL https://github.com/checkpoint-restore/criu/archive/v${CRIU_VERSION}.tar.gz | tar -C /usr/src/criu/ -xz --strip-components=1 \
 	&& cd /usr/src/criu \
 	&& make \
 	&& make install-criu
@@ -155,11 +133,8 @@ RUN set -x \
 	&& rm -rf "$GOPATH"
 
 # Get the "docker-py" source so we can run their integration tests
-ENV DOCKER_PY_COMMIT a962578e515185cf06506050b2200c0b81aa84ef
+ENV DOCKER_PY_COMMIT 1d6b5b203222ba5df7dedfcd1ee061a452f99c8a
 # To run integration tests docker-pycreds is required.
-# Before running the integration tests conftest.py is
-# loaded which results in loads auth.py that
-# imports the docker-pycreds module.
 RUN git clone https://github.com/docker/docker-py.git /docker-py \
 	&& cd /docker-py \
 	&& git checkout -q $DOCKER_PY_COMMIT \
@@ -193,11 +168,12 @@ RUN echo "source $PWD/hack/make/.integration-test-helpers" >> /etc/bash.bashrc
 
 # Get useful and necessary Hub images so we can "docker load" locally instead of pulling
 COPY contrib/download-frozen-image-v2.sh /go/src/github.com/docker/docker/contrib/
+# TODO: when issue #35963 fixed, we can upgrade the busybox to multi-arch
 RUN ./contrib/download-frozen-image-v2.sh /docker-frozen-images \
-	buildpack-deps:jessie@sha256:85b379ec16065e4fe4127eb1c5fb1bcc03c559bd36dbb2e22ff496de55925fa6 \
+	buildpack-deps:jessie@sha256:dd86dced7c9cd2a724e779730f0a53f93b7ef42228d4344b25ce9a42a1486251 \
 	busybox:latest@sha256:32f093055929dbc23dec4d03e09dfe971f5973a9ca5cf059cbfb644c206aa83f \
-	debian:jessie@sha256:72f784399fd2719b4cb4e16ef8e369a39dc67f53d978cd3e2e7bf4e502c7b793 \
-	hello-world:latest@sha256:c5515758d4c5e1e838e9cd307f6c6a0d620b5e07e6f927b07d05f6d12a1ac8d7
+	debian:jessie@sha256:287a20c5f73087ab406e6b364833e3fb7b3ae63ca0eb3486555dc27ed32c6e60 \
+	hello-world:latest@sha256:be0cd392e45be79ffeffa6b05338b98ebb16c87b255f48e297ec7f98e123905c
 # See also ensureFrozenImagesLinux() in "integration-cli/fixtures_linux_daemon_test.go" (which needs to be updated when adding images to this list)
 
 # Install tomlv, vndr, runc, containerd, tini, docker-proxy dockercli
@@ -214,5 +190,9 @@ RUN ln -s /usr/local/completion/bash/docker /etc/bash_completion.d/docker
 # Wrap all commands in the "docker-in-docker" script to allow nested containers
 ENTRYPOINT ["hack/dind"]
 
+# Options for hack/validate/gometalinter
+ENV GOMETALINTER_OPTS="--deadline=2m"
+
 # Upload docker source
 COPY . /go/src/github.com/docker/docker
+

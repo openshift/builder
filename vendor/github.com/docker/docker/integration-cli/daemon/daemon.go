@@ -222,7 +222,7 @@ func (d *Daemon) StartWithLogFile(out *os.File, providedArgs ...string) error {
 		return errors.Wrapf(err, "[%s] could not find docker binary in $PATH", d.id)
 	}
 	args := append(d.GlobalFlags,
-		"--containerd", "/var/run/docker/libcontainerd/docker-containerd.sock",
+		"--containerd", "/var/run/docker/containerd/docker-containerd.sock",
 		"--data-root", d.Root,
 		"--exec-root", d.execRoot,
 		"--pidfile", fmt.Sprintf("%s/docker.pid", d.Folder),
@@ -348,11 +348,7 @@ func (d *Daemon) Kill() error {
 		return err
 	}
 
-	if err := os.Remove(fmt.Sprintf("%s/docker.pid", d.Folder)); err != nil {
-		return err
-	}
-
-	return nil
+	return os.Remove(fmt.Sprintf("%s/docker.pid", d.Folder))
 }
 
 // Pid returns the pid of the daemon
@@ -457,11 +453,9 @@ out2:
 		return err
 	}
 
-	if err := os.Remove(fmt.Sprintf("%s/docker.pid", d.Folder)); err != nil {
-		return err
-	}
+	d.cmd.Wait()
 
-	return nil
+	return os.Remove(fmt.Sprintf("%s/docker.pid", d.Folder))
 }
 
 // Restart will restart the daemon by first stopping it and the starting it.

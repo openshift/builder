@@ -1,5 +1,5 @@
-hash: bfd5b64f65a11cdf4f3760db1732b5878192db515ea4f4390db7e5ee0c651f6f
-updated: 2018-09-20T15:19:45.363930554-04:00
+hash: bbcf9e8cfafc16b09bb8b22d24c4ca6f68bd1af0a2611ee5cdcfcae628f5a448
+updated: 2018-09-24T13:49:04.58621748-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -11,6 +11,10 @@ imports:
   version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - name: github.com/certifi/gocertifi
   version: ee1a9a0726d2ae45f54118cac878c990d4016ded
+- name: github.com/containerd/continuity
+  version: 7f53d412b9eb1cbf744c2063185d703a0ee34700
+  subpackages:
+  - pathdriver
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
   subpackages:
@@ -21,11 +25,12 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: b2252395fe5a8f6d934eeeccbf1a5b3d9f338be0
+  version: c8199fc161a0a394a0fe46fed045b8f40cf8d87d
   subpackages:
   - bind
   - chroot
   - docker
+  - imagebuildah
   - unshare
   - util
 - name: github.com/containers/image
@@ -63,7 +68,7 @@ imports:
   - types
   - version
 - name: github.com/containers/libpod
-  version: 6191ffb6c563b3739e17c5b953eb68fb47b8a2bc
+  version: af791f340cfc3f8134e1fe0e3b0a6d3597706277
   subpackages:
   - pkg/chrootuser
   - pkg/rootless
@@ -125,7 +130,7 @@ imports:
   - registry/storage/cache/memory
   - uuid
 - name: github.com/docker/docker
-  version: 095e6c40a62271add3e6e9d4079c448dcfc28296
+  version: 39377bb96d459d2ef59bd2bad75468638a7f86a3
   repo: https://github.com/nalind/docker.git
   subpackages:
   - api
@@ -154,18 +159,15 @@ imports:
   - pkg/homedir
   - pkg/idtools
   - pkg/ioutils
-  - pkg/jsonlog
   - pkg/jsonmessage
   - pkg/longpath
   - pkg/mount
   - pkg/pools
-  - pkg/promise
   - pkg/signal
   - pkg/stdcopy
   - pkg/system
   - pkg/term
   - pkg/term/windows
-  - pkg/tlsconfig
 - name: github.com/docker/docker-credential-helpers
   version: 73e5f5dbfea31ee3b81111ebbf189785fa69731c
   subpackages:
@@ -212,7 +214,7 @@ imports:
   - proto
   - sortkeys
 - name: github.com/golang/glog
-  version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
+  version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/golang/groupcache
   version: 02826c3e79038b59d737d3b1c0a1d937f71a4433
   subpackages:
@@ -302,11 +304,11 @@ imports:
   - libcontainer/system
   - libcontainer/user
 - name: github.com/opencontainers/runtime-spec
-  version: 02137cd4e50b37a01665e1731fcd4ac2d2178230
+  version: 5684b8af48c1ac3b1451fa499724e30e3c20a294
   subpackages:
   - specs-go
 - name: github.com/opencontainers/runtime-tools
-  version: 745f94087ae6234087aabd63bda7f93bf686b62f
+  version: 46a577fa781823cf4ea91784cd49550cf4ee053e
   subpackages:
   - error
   - filepath
@@ -320,24 +322,9 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: 4507dcb6a81f6593aa336c5b47927cf0ae297b72
+  version: 739bd301126c341c6caddf2cb3e3935ae9e9fff9
   subpackages:
-  - apps/v1
-  - authorization/v1
   - build/v1
-  - image
-  - image/docker10
-  - image/dockerpre012
-  - image/v1
-  - network/v1
-  - oauth/v1
-  - pkg/serialization
-  - project/v1
-  - quota/v1
-  - route/v1
-  - security/v1
-  - template/v1
-  - user/v1
 - name: github.com/openshift/client-go
   version: 431ec9a26e5021f35fa41ee9a89842db9bfdb370
   subpackages:
@@ -346,7 +333,6 @@ imports:
   - build/clientset/versioned/scheme
   - build/clientset/versioned/typed/build/v1
   - build/clientset/versioned/typed/build/v1/fake
-  - build/listers/build/v1
 - name: github.com/openshift/imagebuilder
   version: fbd4f31c568b767447302e08fb3531b33bcbf837
   subpackages:
@@ -355,7 +341,7 @@ imports:
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: c45781559e320a91f9d392579bdbb757d8ebae72
+  version: 91ddbc425e02ec6b43b523dacae4a85b4f180e6b
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -363,53 +349,14 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: 73a8394d3076476ec367f6d2ab3da1beda3ea55f
+  version: 6b2bfb68f8f3e19bef24dbaca342567fc4106633
   subpackages:
   - pkg/api/apihelpers
-  - pkg/api/legacy
-  - pkg/apps/apis/apps
-  - pkg/apps/apis/apps/v1
-  - pkg/authorization/apis/authorization
-  - pkg/authorization/apis/authorization/internal/serviceaccount
-  - pkg/authorization/apis/authorization/v1
   - pkg/build/apis/build
-  - pkg/build/apis/build/internal_helpers
-  - pkg/build/apis/build/v1
-  - pkg/build/buildapihelpers
-  - pkg/build/builder
   - pkg/build/builder/cmd/dockercfg
-  - pkg/build/builder/cmd/scmauth
-  - pkg/build/builder/crioclient
-  - pkg/build/builder/timing
-  - pkg/build/builder/util
-  - pkg/build/builder/util/dockerfile
   - pkg/build/builder/util/glog
-  - pkg/build/util
-  - pkg/image/apis/image
-  - pkg/image/apis/image/docker10
-  - pkg/image/apis/image/reference
-  - pkg/image/apis/image/v1
-  - pkg/image/internal/digest
-  - pkg/image/internal/reference
-  - pkg/network/apis/network
-  - pkg/network/apis/network/v1
-  - pkg/oauth/apis/oauth
-  - pkg/oauth/apis/oauth/v1
-  - pkg/project/apis/project
-  - pkg/project/apis/project/v1
-  - pkg/quota/apis/quota
-  - pkg/quota/apis/quota/v1
-  - pkg/route/apis/route
-  - pkg/route/apis/route/v1
-  - pkg/security/apis/security
-  - pkg/security/apis/security/v1
-  - pkg/security/securitycontextconstraints/util
-  - pkg/template/apis/template
-  - pkg/template/apis/template/v1
-  - pkg/user/apis/user
-  - pkg/user/apis/user/v1
 - name: github.com/openshift/source-to-image
-  version: 8f7dcac0d9fd3fcb97d7c251dc9dd60fe47bb101
+  version: 402b6f8302ae9a5c35643d939b607c715136ea36
   subpackages:
   - pkg/api
   - pkg/api/constants
@@ -459,9 +406,6 @@ imports:
   - fflib/v1/internal
 - name: github.com/projectatomic/buildah
   version: b2252395fe5a8f6d934eeeccbf1a5b3d9f338be0
-  subpackages:
-  - imagebuildah
-  - util
 - name: github.com/prometheus/client_golang
   version: e7e903064f5e9eb5da98208bae10b475d4db0f8c
   subpackages:
@@ -481,7 +425,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/cobra
-  version: 8d114be902bc9f08717804830a55c48378108a28
+  version: c439c4fa093711d42e1b01acb1235b52004753c1
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: github.com/syndtr/gocapability
@@ -775,7 +719,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 4dcbab859230e775d12ea834c8afca1bbfcc56aa
+  version: f60e56e6c55d81008b10ca879b7f5bafe30ef74c
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events
@@ -877,7 +821,6 @@ imports:
   - pkg/controller
   - pkg/controller/deployment/util
   - pkg/credentialprovider
-  - pkg/credentialprovider/secrets
   - pkg/features
   - pkg/fieldpath
   - pkg/kubectl

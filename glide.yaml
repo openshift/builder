@@ -5,7 +5,7 @@ import:
   - reference
 - package: github.com/docker/docker
   repo:    https://github.com/nalind/docker.git
-  version: b68221c37e+SIGUNUSED
+  version: master
 
   subpackages:
   - api/types
@@ -97,4 +97,8 @@ import:
   version: ip-registry
 # new enough to know how to disable itself when cross-compiling
 - package: github.com/opencontainers/selinux
-  version: b6fa367ed7f534f9ba25391cc2d467085dbb445a  
+  version: b6fa367ed7f534f9ba25391cc2d467085dbb445a
+- package: github.com/opencontainers/runtime-tools
+  version: master
+- package: github.com/opencontainers/runtime-spec
+  version: master
