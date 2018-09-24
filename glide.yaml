@@ -90,8 +90,8 @@ import:
 - package: github.com/containers/storage
   version: 02db7cbb0bb082681f9855131fec8c8e1a3f4cb6
 # builds
-- package: github.com/projectatomic/buildah
-  version: b2252395fe5a8f6d934eeeccbf1a5b3d9f338be0
+- package: github.com/containers/buildah
+  version: master
 - package: github.com/containers/image
   repo:    https://github.com/nalind/image
   version: ip-registry
