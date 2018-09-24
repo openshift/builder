@@ -19,8 +19,7 @@ import (
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
 	//"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/projectatomic/buildah"
-	//	"github.com/projectatomic/buildah/imagebuildah"
+	"github.com/containers/buildah"
 
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 	//	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
