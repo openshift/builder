@@ -1,9 +1,9 @@
 IMAGE ?= docker.io/openshift/origin-docker-builder:latest
 PROG  := openshift-builder
 
-.PHONY: all build clean test build-image build-devel-image
+.PHONY: all build build-image build-devel-image clean test verify
 
-all: build build-image
+all: build build-image test verify
 
 build:
 	go build -o $(PROG) "./cmd"
@@ -16,6 +16,9 @@ build-devel-image: build
 
 test:
 	go test ./...
+
+verify:
+	hack/verify.sh
 
 clean:
 	rm -- "$(PROG)"
