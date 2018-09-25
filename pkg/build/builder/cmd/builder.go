@@ -90,7 +90,6 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 	// sourceSecretsDir (SOURCE_SECRET_PATH)
 	cfg.sourceSecretDir = os.Getenv("SOURCE_SECRET_PATH")
 
-	needsDocker = false
 	if needsDocker {
 		if _, ok := os.LookupEnv("DOCKER_HOST"); ok {
 			// dockerClient and dockerEndpoint (DOCKER_HOST)
