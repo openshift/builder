@@ -312,16 +312,42 @@ func runBuild(out io.Writer, builder builder) error {
 
 // RunDockerBuild creates a docker builder and runs its build
 func RunDockerBuild(out io.Writer) error {
+	switch {
+	case glog.Is(4):
+		serviceability.InitLogrus("DEBUG")
+	case glog.Is(2):
+		serviceability.InitLogrus("INFO")
+	case glog.Is(0):
+		serviceability.InitLogrus("WARN")
+	}
+
 	return runBuild(out, dockerBuilder{})
 }
 
 // RunS2IBuild creates a S2I builder and runs its build
 func RunS2IBuild(out io.Writer) error {
+	switch {
+	case glog.Is(4):
+		serviceability.InitLogrus("DEBUG")
+	case glog.Is(2):
+		serviceability.InitLogrus("INFO")
+	case glog.Is(0):
+		serviceability.InitLogrus("WARN")
+	}
 	return runBuild(out, s2iBuilder{})
 }
 
 // RunGitClone performs a git clone using the build defined in the environment
 func RunGitClone(out io.Writer) error {
+	switch {
+	case glog.Is(4):
+		serviceability.InitLogrus("DEBUG")
+	case glog.Is(2):
+		serviceability.InitLogrus("INFO")
+	case glog.Is(0):
+		serviceability.InitLogrus("WARN")
+	}
+
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
 		return err
@@ -340,6 +366,15 @@ func RunGitClone(out io.Writer) error {
 // and also adds some env and label values to the dockerfile based on
 // the build information.
 func RunManageDockerfile(out io.Writer) error {
+	switch {
+	case glog.Is(4):
+		serviceability.InitLogrus("DEBUG")
+	case glog.Is(2):
+		serviceability.InitLogrus("INFO")
+	case glog.Is(0):
+		serviceability.InitLogrus("WARN")
+	}
+
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
 		return err
@@ -353,14 +388,6 @@ func RunManageDockerfile(out io.Writer) error {
 // RunExtractImageContent extracts files from existing images
 // into the build working directory.
 func RunExtractImageContent(out io.Writer) error {
-	reexec.Init()
-	cfg, err := newBuilderConfigFromEnvironment(out, true)
-	if err != nil {
-		return err
-	}
-	if cfg.cleanup != nil {
-		defer cfg.cleanup()
-	}
 	switch {
 	case glog.Is(4):
 		serviceability.InitLogrus("DEBUG")
@@ -368,6 +395,15 @@ func RunExtractImageContent(out io.Writer) error {
 		serviceability.InitLogrus("INFO")
 	case glog.Is(0):
 		serviceability.InitLogrus("WARN")
+	}
+
+	reexec.Init()
+	cfg, err := newBuilderConfigFromEnvironment(out, true)
+	if err != nil {
+		return err
+	}
+	if cfg.cleanup != nil {
+		defer cfg.cleanup()
 	}
 	return cfg.extractImageContent()
 }
