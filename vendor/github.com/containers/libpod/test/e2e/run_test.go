@@ -50,10 +50,10 @@ var _ = Describe("Podman run", func() {
 
 	It("podman run a container based on local image with short options and args", func() {
 		// regression test for #714
-		session := podmanTest.Podman([]string{"run", ALPINE, "find", "/", "-name", "etc"})
+		session := podmanTest.Podman([]string{"run", ALPINE, "find", "/etc", "-name", "hosts"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
-		match, _ := session.GrepString("/etc")
+		match, _ := session.GrepString("/etc/hosts")
 		Expect(match).Should(BeTrue())
 	})
 
@@ -81,7 +81,7 @@ var _ = Describe("Podman run", func() {
 		session := podmanTest.Podman([]string{"run", "-it", "--security-opt", "label=disable", ALPINE, "cat", "/proc/self/attr/current"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
-		match, _ := session.GrepString("unconfined_t")
+		match, _ := session.GrepString("spc_t")
 		Expect(match).Should(BeTrue())
 	})
 

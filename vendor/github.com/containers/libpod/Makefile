@@ -1,6 +1,6 @@
 GO ?= go
 DESTDIR ?= /
-EPOCH_TEST_COMMIT ?= 58e6395e9801acb29483dc7d7836952d2116106d
+EPOCH_TEST_COMMIT ?= 63379c213325188a492d33981a6a525a19048d40
 HEAD ?= HEAD
 CHANGELOG_BASE ?= HEAD~
 CHANGELOG_TARGET ?= HEAD
@@ -18,13 +18,12 @@ ETCDIR ?= ${DESTDIR}/etc
 ETCDIR_LIBPOD ?= ${ETCDIR}/crio
 TMPFILESDIR ?= ${PREFIX}/lib/tmpfiles.d
 SYSTEMDDIR ?= ${PREFIX}/lib/systemd/system
-BUILDTAGS ?= seccomp $(shell hack/btrfs_tag.sh) $(shell hack/libdm_tag.sh) $(shell hack/btrfs_installed_tag.sh) $(shell hack/ostree_tag.sh) $(shell hack/selinux_tag.sh) $(shell hack/apparmor_tag.sh) varlink
+BUILDTAGS ?= seccomp $(shell hack/btrfs_tag.sh) $(shell hack/btrfs_installed_tag.sh) $(shell hack/ostree_tag.sh) $(shell hack/selinux_tag.sh) $(shell hack/apparmor_tag.sh) varlink exclude_graphdriver_devicemapper
 BUILDTAGS_CROSS ?= containers_image_openpgp containers_image_ostree_stub exclude_graphdriver_btrfs exclude_graphdriver_devicemapper exclude_graphdriver_overlay
 ifneq (,$(findstring varlink,$(BUILDTAGS)))
 	PODMAN_VARLINK_DEPENDENCIES = cmd/podman/varlink/iopodman.go
 endif
 
-PYTHON ?= /usr/bin/python3
 HAS_PYTHON3 := $(shell command -v python3 2>/dev/null)
 
 BASHINSTALLDIR=${PREFIX}/share/bash-completion/completions
@@ -138,12 +137,10 @@ clean:
 		libpod/container_easyjson.go \
 		libpod/pod_easyjson.go \
 		$(MANPAGES) ||:
-ifdef HAS_PYTHON3
-		$(MAKE) -C contrib/python/podman clean
-		$(MAKE) -C contrib/python/pypodman clean
-endif
 	find . -name \*~ -delete
 	find . -name \#\* -delete
+	$(MAKE) -C contrib/python/podman clean
+	$(MAKE) -C contrib/python/pypodman clean
 
 libpodimage:
 	docker build -t ${LIBPOD_IMAGE} .
@@ -173,10 +170,9 @@ localunit: varlink_generate
 	$(GO) test -tags "$(BUILDTAGS)" -cover $(PACKAGES)
 
 ginkgo:
-	ginkgo -v test/e2e/
+	ginkgo -v -tags "$(BUILDTAGS)" -cover -flakeAttempts 3 -progress -trace -noColor test/e2e/.
 
-localintegration: varlink_generate test-binaries clientintegration
-	ginkgo -v -cover -flakeAttempts 3 -progress -trace -noColor test/e2e/.
+localintegration: varlink_generate test-binaries clientintegration ginkgo
 
 clientintegration:
 	$(MAKE) -C contrib/python/podman integration
@@ -268,7 +264,15 @@ uninstall:
 
 .PHONY: install.tools
 
-install.tools: .install.gitvalidation .install.gometalinter .install.md2man .install.easyjson
+install.tools: .install.gitvalidation .install.gometalinter .install.md2man .install.easyjson .install.ginkgo .install.gomega
+
+.install.gomega: .gopathok
+	$(GO) get github.com/onsi/gomega/...
+
+.install.ginkgo: .gopathok
+	if [ ! -x "$(GOBIN)/ginkgo" ]; then \
+		$(GO) get -u github.com/onsi/ginkgo/ginkgo; \
+	fi
 
 .install.gitvalidation: .gopathok
 	if [ ! -x "$(GOBIN)/git-validation" ]; then \
@@ -290,7 +294,7 @@ install.tools: .install.gitvalidation .install.gometalinter .install.md2man .ins
 	fi
 
 .install.easyjson: .gopathok
-	if [ ! -x "$(GOBIN)/easyffjson" ]; then\
+	if [ ! -x "$(GOBIN)/easyffjson" ]; then \
 		  $(GO) get -u github.com/mailru/easyjson/...; \
 	fi
 
@@ -309,11 +313,11 @@ easyjson_generate: .gopathok libpod/container_easyjson.go libpod/pod_easyjson.go
 
 libpod/container_easyjson.go: libpod/container.go
 	rm -f libpod/container_easyjson.go
-	cd "$(GOPKGDIR)" && easyjson ./libpod/container.go
+	cd "$(GOPKGDIR)" && easyjson -build_tags "$(BUILDTAGS)" ./libpod/container.go
 
 libpod/pod_easyjson.go: libpod/pod.go
 	rm -f libpod/pod_easyjson.go
-	cd "$(GOPKGDIR)" && easyjson ./libpod/pod.go
+	cd "$(GOPKGDIR)" && easyjson -build_tags "$(BUILDTAGS)" ./libpod/pod.go
 
 .PHONY: install.libseccomp.sudo
 install.libseccomp.sudo:
