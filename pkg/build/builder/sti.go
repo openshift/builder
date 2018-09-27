@@ -322,6 +322,7 @@ func (s *S2IBuilder) Build() error {
 	}
 
 	opts := dockerclient.BuildImageOptions{
+		Context:             ctx,
 		Name:                buildTag,
 		RmTmpContainer:      true,
 		ForceRmTmpContainer: true,

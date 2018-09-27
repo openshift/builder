@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/containers/storage/pkg/reexec"
 	"github.com/spf13/cobra"
 
 	"k8s.io/apiserver/pkg/util/logs"
@@ -18,6 +19,10 @@ import (
 )
 
 func main() {
+	if reexec.Init() {
+		return
+	}
+
 	logs.InitLogs()
 	defer logs.FlushLogs()
 	defer serviceability.BehaviorOnPanic(os.Getenv("OPENSHIFT_ON_PANIC"), version.Get())()
