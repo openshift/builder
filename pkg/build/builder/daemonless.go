@@ -371,14 +371,6 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 		},
 	}
 
-	runOptions := buildah.RunOptions{
-		Isolation:  isolation,
-		Entrypoint: createOpts.Config.Entrypoint,
-		Cmd:        createOpts.Config.Cmd,
-		Stdout:     attachOpts.OutputStream,
-		Stderr:     attachOpts.ErrorStream,
-	}
-
 	builder, err := buildah.NewBuilder(ctx, store, builderOptions)
 	if err != nil {
 		return err
@@ -389,7 +381,19 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 		}
 	}()
 
-	return builder.Run(append(createOpts.Config.Entrypoint, createOpts.Config.Cmd...), runOptions)
+	entrypoint := createOpts.Config.Entrypoint
+	if len(entrypoint) == 0 {
+		entrypoint = builder.Entrypoint()
+	}
+	runOptions := buildah.RunOptions{
+		Isolation:  isolation,
+		Entrypoint: entrypoint,
+		Cmd:        createOpts.Config.Cmd,
+		Stdout:     attachOpts.OutputStream,
+		Stderr:     attachOpts.ErrorStream,
+	}
+
+	return builder.Run(append(entrypoint, createOpts.Config.Cmd...), runOptions)
 }
 
 func downloadFromDaemonlessContainer(builder *buildah.Builder, id string, path string, outputStream io.Writer) error {
