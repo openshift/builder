@@ -36,7 +36,7 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 
 	_, err := alltransports.ParseImageName("docker://" + imageName)
 	if err != nil {
-		return err
+		return fmt.Errorf("error parsing image name to pull %s: %v", "docker://"+imageName, err)
 	}
 
 	systemContext := sc
