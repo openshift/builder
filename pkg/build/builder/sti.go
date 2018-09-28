@@ -354,6 +354,7 @@ func (s *S2IBuilder) Build() error {
 
 	startTime := metav1.Now()
 	err = s.buildImage("/tmp/dockercontext", buildapiv1.ImageOptimizationNone, &opts)
+	//time.Sleep(60 * time.Minute)
 	timing.RecordNewStep(ctx, buildapiv1.StageBuild, buildapiv1.StepDockerBuild, startTime, metav1.Now())
 	if err != nil {
 		// TODO: Create new error states

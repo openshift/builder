@@ -401,14 +401,8 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, imag
 		pullPolicy = buildah.PullAlways
 	}
 
-	tempDir, err := ioutil.TempDir(buildWorkDirMount, "buildah_storage")
-	if err != nil {
-		return fmt.Errorf("error setting up buildah storage tempdir: %v", err)
-	}
 	storeOptions := storage.DefaultStoreOptions
 	storeOptions.GraphDriverName = "overlay"
-	storeOptions.RunRoot = filepath.Join(tempDir, "runroot")
-	storeOptions.GraphRoot = filepath.Join(tempDir, "root")
 	store, err := storage.GetStore(storeOptions)
 	if err != nil {
 		return err
@@ -426,7 +420,7 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, imag
 	}
 
 	var systemContext types.SystemContext
-	systemContext.AuthFilePath = filepath.Join(tempDir, "config.json")
+	systemContext.AuthFilePath = "/tmp/config.json"
 
 	// TODO remove this, get CAs+insecure registry config from host.
 	systemContext.OCIInsecureSkipTLSVerify = true
