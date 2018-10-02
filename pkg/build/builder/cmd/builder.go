@@ -55,6 +55,7 @@ type builderConfig struct {
 	dockerEndpoint  string
 	buildsClient    buildclientv1.BuildInterface
 	cleanup         func()
+	store           storage.Store
 }
 
 func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderConfig, error) {
@@ -126,6 +127,7 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 			}
 
 			store, err := storage.GetStore(storeOptions)
+			cfg.store = store
 			if err != nil {
 				return nil, err
 			}
@@ -261,7 +263,7 @@ func (c *builderConfig) extractImageContent() error {
 	}()
 
 	buildDir := bld.InputContentPath
-	return bld.ExtractImageContent(ctx, c.dockerClient, buildDir, c.build)
+	return bld.ExtractImageContent(ctx, c.dockerClient, c.store, buildDir, c.build)
 }
 
 // execute is responsible for running a build

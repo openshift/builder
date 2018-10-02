@@ -197,6 +197,11 @@ func (d *DockerBuilder) pullImage(name string, authConfig docker.AuthConfigurati
 		Repository: repository,
 		Tag:        tag,
 	}
+
+	if options.Tag == "" && strings.Contains(name, "@") {
+		options.Repository = name
+	}
+
 	return d.dockerClient.PullImage(options, authConfig)
 }
 

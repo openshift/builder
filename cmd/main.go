@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -33,11 +34,64 @@ func main() {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
+	_, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	if !os.IsNotExist(err) {
+		err := Copy("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "/etc/pki/tls/certs/cluster.crt")
+		if err != nil {
+			fmt.Printf("Error setting up cluster CA link: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	/*
+		_, err = os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
+		if !os.IsNotExist(err) {
+			err = Copy("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt", "/etc/pki/tls/certs/service.crt")
+			if err != nil {
+				fmt.Printf("Error setting up service CA link: %v", err)
+				os.Exit(1)
+			}
+		}
+	*/
+
+	/*
+		_, err = os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
+		if !os.IsNotExist(err) {
+			os.MkdirAll("/etc/docker/certs.d/docker-registry.default.svc:5000/", os.ModeDir|os.ModePerm)
+			err = Copy("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt", "/etc/docker/certs.d/docker-registry.default.svc:5000/service.crt")
+			if err != nil {
+				fmt.Printf("Error setting up service CA link: %v", err)
+				os.Exit(1)
+			}
+		}
+	*/
 	basename := filepath.Base(os.Args[0])
 	command := CommandFor(basename)
 	if err := command.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// Copy the src file to dst. Any existing file will be overwritten and will not
+// copy file attributes.
+func Copy(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 // CommandFor returns the appropriate command for this base name,

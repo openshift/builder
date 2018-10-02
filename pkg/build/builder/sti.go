@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	dockerclient "github.com/fsouza/go-dockerclient"
@@ -135,7 +136,6 @@ func makeVolumeSpec(src localObjectBuildSource, mountPath string) s2iapi.VolumeS
 // Build executes S2I build based on configured builder, S2I builder factory
 // and S2I config validator
 func (s *S2IBuilder) Build() error {
-
 	var err error
 	ctx := timing.NewContext(context.Background())
 	defer func() {
@@ -233,6 +233,7 @@ func (s *S2IBuilder) Build() error {
 	config.PullAuthentication = s2iapi.AuthConfig{Username: t.Username, Password: t.Password, Email: t.Email, ServerAddress: t.ServerAddress}
 
 	if s.build.Spec.Strategy.SourceStrategy.ForcePull || !isImagePresent(s.dockerClient, config.BuilderImage) {
+		// TODO why aren't we timing this?
 		err = s.pullImage(config.BuilderImage, t)
 		if err != nil {
 			return err
@@ -353,8 +354,8 @@ func (s *S2IBuilder) Build() error {
 	}
 
 	startTime := metav1.Now()
+
 	err = s.buildImage("/tmp/dockercontext", buildapiv1.ImageOptimizationNone, &opts)
-	//time.Sleep(60 * time.Minute)
 	timing.RecordNewStep(ctx, buildapiv1.StageBuild, buildapiv1.StepDockerBuild, startTime, metav1.Now())
 	if err != nil {
 		// TODO: Create new error states
@@ -442,11 +443,17 @@ func (s *S2IBuilder) setupPullSecret() (*dockerclient.AuthConfigurations, error)
 }
 
 func (s *S2IBuilder) pullImage(name string, authConfig dockerclient.AuthConfiguration) error {
+	glog.V(2).Infof("Explicitly pulling image %s", name)
 	repository, tag := dockerclient.ParseRepositoryTag(name)
 	options := dockerclient.PullImageOptions{
 		Repository: repository,
 		Tag:        tag,
 	}
+
+	if options.Tag == "" && strings.Contains(name, "@") {
+		options.Repository = name
+	}
+
 	return s.dockerClient.PullImage(options, authConfig)
 }
 

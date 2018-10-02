@@ -13,6 +13,7 @@ import (
 	"time"
 
 	//"github.com/sirupsen/logrus"
+	realglog "github.com/golang/glog"
 
 	"github.com/containers/image/pkg/docker/config"
 	"github.com/containers/image/types"
@@ -130,7 +131,7 @@ func ManageDockerfile(dir string, build *buildapiv1.Build) error {
 	return nil
 }
 
-func ExtractImageContent(ctx context.Context, dockerClient DockerClient, dir string, build *buildapiv1.Build) error {
+func ExtractImageContent(ctx context.Context, dockerClient DockerClient, store storage.Store, dir string, build *buildapiv1.Build) error {
 	os.MkdirAll(dir, 0777)
 	forcePull := false
 	switch {
@@ -150,7 +151,7 @@ func ExtractImageContent(ctx context.Context, dockerClient DockerClient, dir str
 		if image.PullSecret == nil {
 			imageSecretIndex = -1
 		}
-		err := extractSourceFromImage(ctx, dockerClient, image.From.Name, dir, imageSecretIndex, image.Paths, forcePull)
+		err := extractSourceFromImage(ctx, dockerClient, store, image.From.Name, dir, imageSecretIndex, image.Paths, forcePull)
 		if err != nil {
 			return err
 		}
@@ -393,7 +394,7 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 	return nil
 }
 
-func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, image, buildDir string, imageSecretIndex int, paths []buildapiv1.ImageSourcePath, forcePull bool) error {
+func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, store storage.Store, image, buildDir string, imageSecretIndex int, paths []buildapiv1.ImageSourcePath, forcePull bool) error {
 	glog.V(4).Infof("Extracting image source from image %s", image)
 
 	pullPolicy := buildah.PullIfMissing
@@ -401,14 +402,17 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, imag
 		pullPolicy = buildah.PullAlways
 	}
 
-	storeOptions := storage.DefaultStoreOptions
-	storeOptions.GraphDriverName = "overlay"
-	store, err := storage.GetStore(storeOptions)
-	if err != nil {
-		return err
-	}
+	/*
+		storeOptions := storage.DefaultStoreOptions
+		storeOptions.GraphDriverName = "overlay"
+		store, err := storage.GetStore(storeOptions)
+		if err != nil {
+			return err
+		}
+	*/
 
 	var auths *docker.AuthConfigurations
+	var err error
 	if imageSecretIndex != -1 {
 		pullSecretPath := os.Getenv(fmt.Sprintf("%s%d", dockercfg.PullSourceAuthType, imageSecretIndex))
 		if len(pullSecretPath) > 0 {
@@ -452,6 +456,10 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, imag
 	}
 
 	mountPath, err := builder.Mount("")
+	defer func() {
+		err := builder.Unmount()
+		realglog.Errorf("failed to unmount: %v", err)
+	}()
 	if err != nil {
 		return fmt.Errorf("error mounting image content from image %s: %v", image, err)
 	}
