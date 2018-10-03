@@ -27,6 +27,7 @@ package reference
 import (
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -195,6 +196,8 @@ func Parse(s string) (Reference, error) {
 		if ReferenceRegexp.FindStringSubmatch(strings.ToLower(s)) != nil {
 			return nil, ErrNameContainsUppercase
 		}
+		fmt.Printf("could not parse %s", s)
+		debug.PrintStack()
 		return nil, ErrReferenceInvalidFormat
 	}
 
@@ -258,6 +261,8 @@ func WithName(name string) (Named, error) {
 
 	match := anchoredNameRegexp.FindStringSubmatch(name)
 	if match == nil || len(match) != 3 {
+		fmt.Printf("could not withname %s", name)
+		debug.PrintStack()
 		return nil, ErrReferenceInvalidFormat
 	}
 	return repository{
