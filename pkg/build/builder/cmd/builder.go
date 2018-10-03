@@ -10,6 +10,7 @@ import (
 	istorage "github.com/containers/image/storage"
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
+	realglog "github.com/golang/glog"
 
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
@@ -312,41 +313,50 @@ func runBuild(out io.Writer, builder builder) error {
 
 // RunDockerBuild creates a docker builder and runs its build
 func RunDockerBuild(out io.Writer) error {
-	switch {
-	case glog.Is(4):
-		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
-		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
-
+	realglog.V(5)
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 	return runBuild(out, dockerBuilder{})
 }
 
 // RunS2IBuild creates a S2I builder and runs its build
 func RunS2IBuild(out io.Writer) error {
-	switch {
-	case glog.Is(4):
-		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
-		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 	return runBuild(out, s2iBuilder{})
 }
 
 // RunGitClone performs a git clone using the build defined in the environment
 func RunGitClone(out io.Writer) error {
-	switch {
-	case glog.Is(4):
-		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
-		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
@@ -366,14 +376,17 @@ func RunGitClone(out io.Writer) error {
 // and also adds some env and label values to the dockerfile based on
 // the build information.
 func RunManageDockerfile(out io.Writer) error {
-	switch {
-	case glog.Is(4):
-		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
-		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
@@ -388,14 +401,17 @@ func RunManageDockerfile(out io.Writer) error {
 // RunExtractImageContent extracts files from existing images
 // into the build working directory.
 func RunExtractImageContent(out io.Writer) error {
-	switch {
-	case glog.Is(4):
-		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
-		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 	cfg, err := newBuilderConfigFromEnvironment(out, true)
 	if err != nil {
 		return err
