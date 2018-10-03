@@ -38,33 +38,19 @@ func main() {
 	if !os.IsNotExist(err) {
 		err := Copy("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "/etc/pki/tls/certs/cluster.crt")
 		if err != nil {
-			fmt.Printf("Error setting up cluster CA link: %v", err)
+			fmt.Printf("Error setting up cluster CA cert: %v", err)
 			os.Exit(1)
 		}
 	}
 
-	/*
-		_, err = os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
-		if !os.IsNotExist(err) {
-			err = Copy("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt", "/etc/pki/tls/certs/service.crt")
-			if err != nil {
-				fmt.Printf("Error setting up service CA link: %v", err)
-				os.Exit(1)
-			}
+	_, err = os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
+	if !os.IsNotExist(err) {
+		err = Copy("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt", "/etc/pki/tls/certs/service.crt")
+		if err != nil {
+			fmt.Printf("Error setting up service CA cert: %v", err)
+			os.Exit(1)
 		}
-	*/
-
-	/*
-		_, err = os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
-		if !os.IsNotExist(err) {
-			os.MkdirAll("/etc/docker/certs.d/docker-registry.default.svc:5000/", os.ModeDir|os.ModePerm)
-			err = Copy("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt", "/etc/docker/certs.d/docker-registry.default.svc:5000/service.crt")
-			if err != nil {
-				fmt.Printf("Error setting up service CA link: %v", err)
-				os.Exit(1)
-			}
-		}
-	*/
+	}
 	basename := filepath.Base(os.Args[0])
 	command := CommandFor(basename)
 	if err := command.Execute(); err != nil {

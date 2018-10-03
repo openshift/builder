@@ -23,8 +23,10 @@ import (
 	"github.com/containers/storage/pkg/idtools"
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	buildapiv1 "github.com/openshift/api/build/v1"
 	"github.com/pkg/errors"
+
+	buildapiv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/library-go/pkg/image/reference"
 )
 
 func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration) error {
@@ -49,13 +51,24 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	if err != nil {
 		return fmt.Errorf("error reading system registries configuration: %v", err)
 	}
-	if registry := sysregistriesv2.FindRegistry(imageName, registries); registry != nil {
-		if authConfig.Username != "" && authConfig.Password != "" {
-			glog.V(2).Infof("Setting authentication for registry %q for %q.", registry.URL, imageName)
-			if err := config.SetAuthentication(&systemContext, registry.URL, authConfig.Username, authConfig.Password); err != nil {
-				return err
-			}
+
+	ref, err := reference.Parse(imageName)
+	if err != nil {
+		return fmt.Errorf("error parsing image name %s: %v", ref, err)
+	}
+	if ref.Registry == "" {
+		glog.V(2).Infof("defaulting registry to docker.io for image %s", imageName)
+		ref.Registry = "docker.io"
+	}
+
+	if authConfig.Username != "" && authConfig.Password != "" {
+		glog.V(2).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
+		if err := config.SetAuthentication(&systemContext, ref.Registry, authConfig.Username, authConfig.Password); err != nil {
+			return err
 		}
+	}
+
+	if registry := sysregistriesv2.FindRegistry(imageName, registries); registry != nil {
 		if registry.Insecure {
 			glog.V(2).Infof("Registry %q is marked as insecure in the registries configuration.", registry.URL)
 			systemContext.DockerInsecureSkipTLSVerify = true
