@@ -141,6 +141,8 @@ in the [API.md](https://github.com/containers/libpod/blob/master/API.md) file in
 
 [type ImageSearch](#ImageSearch)
 
+[type InfoDistribution](#InfoDistribution)
+
 [type InfoGraphStatus](#InfoGraphStatus)
 
 [type InfoHost](#InfoHost)
@@ -176,6 +178,8 @@ in the [API.md](https://github.com/containers/libpod/blob/master/API.md) file in
 [error ImageNotFound](#ImageNotFound)
 
 [error NoContainerRunning](#NoContainerRunning)
+
+[error NoContainersInPod](#NoContainersInPod)
 
 [error PodContainerError](#PodContainerError)
 
@@ -1115,6 +1119,13 @@ is_automated [bool](https://godoc.org/builtin#bool)
 name [string](https://godoc.org/builtin#string)
 
 star_count [int](https://godoc.org/builtin#int)
+### <a name="InfoDistribution"></a>type InfoDistribution
+
+InfoDistribution describes the the host's distribution
+
+distribution [string](https://godoc.org/builtin#string)
+
+version [string](https://godoc.org/builtin#string)
 ### <a name="InfoGraphStatus"></a>type InfoGraphStatus
 
 InfoGraphStatus describes the detailed status of the storage driver
@@ -1127,6 +1138,10 @@ supports_d_type [string](https://godoc.org/builtin#string)
 ### <a name="InfoHost"></a>type InfoHost
 
 InfoHost describes the host stats portion of PodmanInfo
+
+buildah_version [string](https://godoc.org/builtin#string)
+
+distribution [InfoDistribution](#InfoDistribution)
 
 mem_free [int](https://godoc.org/builtin#int)
 
@@ -1319,6 +1334,10 @@ ImageNotFound means the image could not be found by the provided name or ID in l
 ### <a name="NoContainerRunning"></a>type NoContainerRunning
 
 NoContainerRunning means none of the containers requested are running in a command that requires a running container.
+### <a name="NoContainersInPod"></a>type NoContainersInPod
+
+NoContainersInPod means a pod has no containers on which to perform operation. It contains
+the pod ID.
 ### <a name="PodContainerError"></a>type PodContainerError
 
 PodContainerError means a container associated with a pod failed to preform an operation. It contains

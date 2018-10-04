@@ -104,6 +104,13 @@ func (i *LibpodAPI) StartPod(call iopodman.VarlinkCall, name string) error {
 	if err != nil {
 		return call.ReplyPodNotFound(name)
 	}
+	ctnrs, err := pod.AllContainers()
+	if err != nil {
+		return call.ReplyErrorOccurred(err.Error())
+	}
+	if 0 == len(ctnrs) {
+		return call.ReplyNoContainersInPod(name)
+	}
 	ctrErrs, err := pod.Start(getContext())
 	callErr := handlePodCall(call, pod, ctrErrs, err)
 	if callErr != nil {
@@ -118,7 +125,7 @@ func (i *LibpodAPI) StopPod(call iopodman.VarlinkCall, name string) error {
 	if err != nil {
 		return call.ReplyPodNotFound(name)
 	}
-	ctrErrs, err := pod.Stop(true)
+	ctrErrs, err := pod.Stop(getContext(), true)
 	callErr := handlePodCall(call, pod, ctrErrs, err)
 	if callErr != nil {
 		return err
@@ -131,6 +138,13 @@ func (i *LibpodAPI) RestartPod(call iopodman.VarlinkCall, name string) error {
 	pod, err := i.Runtime.LookupPod(name)
 	if err != nil {
 		return call.ReplyPodNotFound(name)
+	}
+	ctnrs, err := pod.AllContainers()
+	if err != nil {
+		return call.ReplyErrorOccurred(err.Error())
+	}
+	if 0 == len(ctnrs) {
+		return call.ReplyNoContainersInPod(name)
 	}
 	ctrErrs, err := pod.Restart(getContext())
 	callErr := handlePodCall(call, pod, ctrErrs, err)

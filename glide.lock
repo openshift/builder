@@ -1,5 +1,5 @@
-hash: 353fd9f8c50cc2d6f7a0eca6b6ee60c59e8e0153bf60c2da8c6095aa6ecbf405
-updated: 2018-09-27T17:01:29.631244245-04:00
+hash: 7c7f2d095e0dcc1817feddfaa5e309a9598e7cc13bf2336f448745396a17b0ac
+updated: 2018-10-04T14:36:42.381572789-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -12,7 +12,7 @@ imports:
 - name: github.com/certifi/gocertifi
   version: ee1a9a0726d2ae45f54118cac878c990d4016ded
 - name: github.com/containerd/continuity
-  version: 7f53d412b9eb1cbf744c2063185d703a0ee34700
+  version: be9bd761db19d4fc551d40be908f02e00487511d
   subpackages:
   - pathdriver
 - name: github.com/containernetworking/cni
@@ -25,7 +25,8 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 278dedf98e5db547056265082d24fa79922b6e5e
+  version: 23f201854100218dba4bbed8ad1602f3252f8462
+  repo: https://github.com/nalind/buildah
   subpackages:
   - bind
   - chroot
@@ -34,7 +35,7 @@ imports:
   - unshare
   - util
 - name: github.com/containers/image
-  version: e08f1f6210d4a544c057137091083fa6b9f6a625
+  version: 2b9799f666246a40936f4ad8592b15c8d77bf09b
   repo: https://github.com/nalind/image
   subpackages:
   - copy
@@ -68,7 +69,7 @@ imports:
   - types
   - version
 - name: github.com/containers/libpod
-  version: e7e81e6448dc4ad1d53ef51e8175d717d18a8197
+  version: 3c31e176c7dfce3c86a45ff4750f740a5f8f9321
   subpackages:
   - pkg/chrootuser
   - pkg/rootless
@@ -322,7 +323,7 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: cc577cdc22a21a372000477f72df3d4409197ea8
+  version: c9d033a0b3c3dfca1c70722720c3aea184022496
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
@@ -341,7 +342,7 @@ imports:
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: 91ddbc425e02ec6b43b523dacae4a85b4f180e6b
+  version: 80f2f78af2af54fd257580a3680cba397b79cc49
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -349,7 +350,7 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: 9a86799836120930ef11d16f82b7558159438f4d
+  version: 9b0a97cfabb0e2a82c016d834d6494e67a3b2a75
   subpackages:
   - pkg/api/apihelpers
   - pkg/build/apis/build
@@ -718,7 +719,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 91e65b9c79c34a3be0850c5725127964e628a572
+  version: 852d32d3b3526363bad501101fc2e73b344b1d9a
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events

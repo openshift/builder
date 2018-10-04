@@ -91,7 +91,8 @@ import:
   version: 02db7cbb0bb082681f9855131fec8c8e1a3f4cb6
 # builds
 - package: github.com/containers/buildah
-  version: master
+  repo: https://github.com/nalind/buildah
+  version: unshare-error
 - package: github.com/containers/image
   repo:    https://github.com/nalind/image
   version: ip-registry

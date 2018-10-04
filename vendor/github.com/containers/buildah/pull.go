@@ -195,7 +195,6 @@ func pullImage(ctx context.Context, store storage.Store, imageName string, optio
 		return destRef, nil
 	}
 
-	logrus.Debugf("error pulling image: %v", pullError)
 	// If no image was found, we should handle.  Lets be nicer to the user and see if we can figure out why.
 	registryPath := sysregistries.RegistriesConfPath(sc)
 	searchRegistries, err := getRegistries(sc)

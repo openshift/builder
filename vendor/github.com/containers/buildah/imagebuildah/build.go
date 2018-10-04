@@ -325,6 +325,9 @@ func (b *Executor) Preserve(path string) error {
 		archivedPath := filepath.Join(b.mountPoint, cachedPath)
 		logrus.Debugf("no longer need cache of %q in %q", archivedPath, b.volumeCache[cachedPath])
 		if err := os.Remove(b.volumeCache[cachedPath]); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			return errors.Wrapf(err, "error removing %q", b.volumeCache[cachedPath])
 		}
 		delete(b.volumeCache, cachedPath)
@@ -343,6 +346,9 @@ func (b *Executor) volumeCacheInvalidate(path string) error {
 	}
 	for _, cachedPath := range invalidated {
 		if err := os.Remove(b.volumeCache[cachedPath]); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			return errors.Wrapf(err, "error removing volume cache %q", b.volumeCache[cachedPath])
 		}
 		archivedPath := filepath.Join(b.mountPoint, cachedPath)
@@ -648,20 +654,25 @@ func (b *Executor) Prepare(ctx context.Context, ib *imagebuilder.Builder, node *
 	for _, v := range builder.Volumes() {
 		volumes[v] = struct{}{}
 	}
+	ports := map[docker.Port]struct{}{}
+	for _, p := range builder.Ports() {
+		ports[docker.Port(p)] = struct{}{}
+	}
 	dConfig := docker.Config{
-		Hostname:   builder.Hostname(),
-		Domainname: builder.Domainname(),
-		User:       builder.User(),
-		Env:        builder.Env(),
-		Cmd:        builder.Cmd(),
-		Image:      from,
-		Volumes:    volumes,
-		WorkingDir: builder.WorkDir(),
-		Entrypoint: builder.Entrypoint(),
-		Labels:     builder.Labels(),
-		Shell:      builder.Shell(),
-		StopSignal: builder.StopSignal(),
-		OnBuild:    builder.OnBuild(),
+		Hostname:     builder.Hostname(),
+		Domainname:   builder.Domainname(),
+		User:         builder.User(),
+		Env:          builder.Env(),
+		Cmd:          builder.Cmd(),
+		Image:        from,
+		Volumes:      volumes,
+		WorkingDir:   builder.WorkDir(),
+		Entrypoint:   builder.Entrypoint(),
+		Labels:       builder.Labels(),
+		Shell:        builder.Shell(),
+		StopSignal:   builder.StopSignal(),
+		OnBuild:      builder.OnBuild(),
+		ExposedPorts: ports,
 	}
 	var rootfs *docker.RootFS
 	if builder.Docker.RootFS != nil {
@@ -751,6 +762,7 @@ func (b *Executor) Execute(ctx context.Context, ib *imagebuilder.Builder, node *
 	checkForLayers := true
 	children := node.Children
 	commitName := b.output
+	b.containerIDs = nil
 	for i, node := range node.Children {
 		step := ib.Step()
 		if err := step.Resolve(node); err != nil {

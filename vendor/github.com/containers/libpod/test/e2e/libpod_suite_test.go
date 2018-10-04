@@ -31,7 +31,7 @@ var (
 	CGROUP_MANAGER     = "systemd"
 	STORAGE_OPTIONS    = "--storage-driver vfs"
 	ARTIFACT_DIR       = "/tmp/.artifacts"
-	CACHE_IMAGES       = []string{ALPINE, BB, fedoraMinimal, nginx, redis, registry, infra}
+	CACHE_IMAGES       = []string{ALPINE, BB, fedoraMinimal, nginx, redis, registry, infra, labels}
 	RESTORE_IMAGES     = []string{ALPINE, BB}
 	ALPINE             = "docker.io/library/alpine:latest"
 	BB                 = "docker.io/library/busybox:latest"
@@ -41,6 +41,7 @@ var (
 	redis              = "docker.io/library/redis:alpine"
 	registry           = "docker.io/library/registry:2"
 	infra              = "k8s.gcr.io/pause:3.1"
+	labels             = "quay.io/baude/alpine_labels:latest"
 	defaultWaitTimeout = 90
 )
 
@@ -62,6 +63,7 @@ type PodmanTest struct {
 	ArtifactPath        string
 	TempDir             string
 	CgroupManager       string
+	Host                HostOS
 }
 
 // HostOS is a simple struct for the test os
@@ -125,6 +127,7 @@ func CreateTempDirInTempDir() (string, error) {
 // PodmanCreate creates a PodmanTest instance for the tests
 func PodmanCreate(tempDir string) PodmanTest {
 
+	host := GetHostDistributionInfo()
 	cwd, _ := os.Getwd()
 
 	podmanBinary := filepath.Join(cwd, "../../bin/podman")
@@ -148,7 +151,19 @@ func PodmanCreate(tempDir string) PodmanTest {
 		cgroupManager = os.Getenv("CGROUP_MANAGER")
 	}
 
-	runCBinary := "/usr/bin/runc"
+	// Ubuntu doesn't use systemd cgroups
+	if host.Distribution == "ubuntu" {
+		cgroupManager = "cgroupfs"
+	}
+
+	runCBinary, err := exec.LookPath("runc")
+	// If we cannot find the runc binary, setting to something static as we have no way
+	// to return an error.  The tests will fail and point out that the runc binary could
+	// not be found nicely.
+	if err != nil {
+		runCBinary = "/usr/bin/runc"
+	}
+
 	CNIConfigDir := "/etc/cni/net.d"
 
 	p := PodmanTest{
@@ -163,6 +178,7 @@ func PodmanCreate(tempDir string) PodmanTest {
 		ArtifactPath:        ARTIFACT_DIR,
 		TempDir:             tempDir,
 		CgroupManager:       cgroupManager,
+		Host:                host,
 	}
 
 	// Setup registries.conf ENV variable

@@ -10,7 +10,6 @@ import (
 	"github.com/mrunalp/fileutils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/opencontainers/selinux/go-selinux"
 )
 
 var _ = Describe("Podman run", func() {
@@ -42,6 +41,28 @@ var _ = Describe("Podman run", func() {
 		Expect(session.ExitCode()).To(Equal(0))
 	})
 
+	It("podman run a container based on a complex local image name", func() {
+		podmanTest.RestoreArtifact(nginx)
+		session := podmanTest.Podman([]string{"run", "baude/alpine_nginx:latest", "ls"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ErrorToString()).ToNot(ContainSubstring("Trying to pull"))
+		Expect(session.ExitCode()).To(Equal(0))
+	})
+
+	It("podman run a container based on on a short name with localhost", func() {
+		podmanTest.RestoreArtifact(nginx)
+		tag := podmanTest.Podman([]string{"tag", nginx, "localhost/baude/alpine_nginx:latest"})
+		tag.WaitWithDefaultTimeout()
+
+		rmi := podmanTest.Podman([]string{"rmi", nginx})
+		rmi.WaitWithDefaultTimeout()
+
+		session := podmanTest.Podman([]string{"run", "baude/alpine_nginx:latest", "ls"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ErrorToString()).ToNot(ContainSubstring("Trying to pull"))
+		Expect(session.ExitCode()).To(Equal(0))
+	})
+
 	It("podman run a container based on local image with short options", func() {
 		session := podmanTest.Podman([]string{"run", "-dt", ALPINE, "ls"})
 		session.WaitWithDefaultTimeout()
@@ -61,59 +82,6 @@ var _ = Describe("Podman run", func() {
 		session := podmanTest.Podman([]string{"run", "-dt", BB_GLIBC, "ls"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
-	})
-
-	It("podman run selinux grep test", func() {
-		if !selinux.GetEnabled() {
-			Skip("SELinux not enabled")
-		}
-		session := podmanTest.Podman([]string{"run", "-it", "--security-opt", "label=level:s0:c1,c2", ALPINE, "cat", "/proc/self/attr/current"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-		match, _ := session.GrepString("s0:c1,c2")
-		Expect(match).Should(BeTrue())
-	})
-
-	It("podman run selinux disable test", func() {
-		if !selinux.GetEnabled() {
-			Skip("SELinux not enabled")
-		}
-		session := podmanTest.Podman([]string{"run", "-it", "--security-opt", "label=disable", ALPINE, "cat", "/proc/self/attr/current"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-		match, _ := session.GrepString("spc_t")
-		Expect(match).Should(BeTrue())
-	})
-
-	It("podman run selinux type check test", func() {
-		if !selinux.GetEnabled() {
-			Skip("SELinux not enabled")
-		}
-		session := podmanTest.Podman([]string{"run", "-it", ALPINE, "cat", "/proc/self/attr/current"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-		match1, _ := session.GrepString("container_t")
-		match2, _ := session.GrepString("svirt_lxc_net_t")
-		Expect(match1 || match2).Should(BeTrue())
-	})
-
-	It("podman run selinux type setup test", func() {
-		if !selinux.GetEnabled() {
-			Skip("SELinux not enabled")
-		}
-		session := podmanTest.Podman([]string{"run", "-it", "--security-opt", "label=type:spc_t", ALPINE, "cat", "/proc/self/attr/current"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-		match, _ := session.GrepString("spc_t")
-		Expect(match).Should(BeTrue())
-	})
-
-	It("podman run seccomp undefine test", func() {
-		session := podmanTest.Podman([]string{"run", "-it", "--security-opt", "seccomp=unconfined", ALPINE, "echo", "hello"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-		match, _ := session.GrepString("hello")
-		Expect(match).Should(BeTrue())
 	})
 
 	It("podman run seccomp test", func() {

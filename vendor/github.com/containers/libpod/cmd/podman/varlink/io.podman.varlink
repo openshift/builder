@@ -124,8 +124,16 @@ type ContainerNameSpace (
     ipc: string
 )
 
+# InfoDistribution describes the the host's distribution
+type InfoDistribution (
+    distribution: string,
+    version: string
+)
+
 # InfoHost describes the host stats portion of PodmanInfo
 type InfoHost (
+    buildah_version: string,
+    distribution: InfoDistribution,
     mem_free: int,
     mem_total: int,
     swap_free: int,
@@ -811,6 +819,10 @@ error PodNotFound (name: string)
 # PodContainerError means a container associated with a pod failed to preform an operation. It contains
 # a container ID of the container that failed.
 error PodContainerError (podname: string, errors: []PodContainerErrorData)
+
+# NoContainersInPod means a pod has no containers on which to perform the operation. It contains
+# the pod ID.
+error NoContainersInPod (name: string)
 
 # ErrorOccurred is a generic error for an error that occurs during the execution.  The actual error message
 # is includes as part of the error's text.

@@ -222,7 +222,7 @@ func (r *Runtime) removePod(ctx context.Context, p *Pod, removeCtrs, force bool)
 	// As we have guaranteed their dependencies are in the pod
 	for _, ctr := range ctrs {
 		// Clean up network namespace, cgroups, mounts
-		if err := ctr.cleanup(); err != nil {
+		if err := ctr.cleanup(ctx); err != nil {
 			return err
 		}
 
@@ -233,7 +233,8 @@ func (r *Runtime) removePod(ctx context.Context, p *Pod, removeCtrs, force bool)
 
 		// Delete the container from runtime (only if we are not
 		// ContainerStateConfigured)
-		if ctr.state.State != ContainerStateConfigured {
+		if ctr.state.State != ContainerStateConfigured &&
+			ctr.state.State != ContainerStateExited {
 			if err := ctr.delete(ctx); err != nil {
 				return err
 			}
@@ -264,7 +265,8 @@ func (r *Runtime) removePod(ctx context.Context, p *Pod, removeCtrs, force bool)
 			}
 		case CgroupfsCgroupsManager:
 			// Delete the cgroupfs cgroup
-			cgroup, err := cgroups.Load(cgroups.V1, cgroups.StaticPath(p.state.CgroupPath))
+			v1CGroups := GetV1CGroups(getExcludedCGroups())
+			cgroup, err := cgroups.Load(v1CGroups, cgroups.StaticPath(p.state.CgroupPath))
 			if err != nil && err != cgroups.ErrCgroupDeleted {
 				return err
 			} else if err == nil {
