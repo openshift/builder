@@ -206,6 +206,15 @@ func createTestingNS(baseName string, c kclientset.Interface, labels map[string]
 		return fn(baseName, c, labels)
 	}
 
+	// if we're running an upstream test, make sure to skip openshift admission.
+	// TODO we may be able to relax this after the openshift apiserver is back in the openshift/installer
+	if isKubernetesE2ETest() && !skipTestNamespaceCustomization() {
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		labels["openshift.io/run-level"] = "0"
+	}
+
 	// Otherwise use the upstream default
 	ns, err := e2e.CreateTestingNS(baseName, c, labels)
 	if err != nil {
@@ -218,21 +227,26 @@ func createTestingNS(baseName string, c kclientset.Interface, labels map[string]
 		if err != nil {
 			return ns, err
 		}
-		securityClient, err := securityclient.NewForConfig(clientConfig)
-		if err != nil {
-			return ns, err
+
+		// TODO we may restore this after the openshift apiserver is back in the openshift/installer.  For now
+		// TODO the SCC isn't needed because of the runlevel
+		if false {
+			securityClient, err := securityclient.NewForConfig(clientConfig)
+			if err != nil {
+				return ns, err
+			}
+			e2e.Logf("About to run a Kube e2e test, ensuring namespace is privileged")
+			// add the "privileged" scc to ensure pods that explicitly
+			// request extra capabilities are not rejected
+			addE2EServiceAccountsToSCC(securityClient, []kapiv1.Namespace{*ns}, "privileged")
+			// add the "anyuid" scc to ensure pods that don't specify a
+			// uid don't get forced into a range (mimics upstream
+			// behavior)
+			addE2EServiceAccountsToSCC(securityClient, []kapiv1.Namespace{*ns}, "anyuid")
+			// add the "hostmount-anyuid" scc to ensure pods using hostPath
+			// can execute tests
+			addE2EServiceAccountsToSCC(securityClient, []kapiv1.Namespace{*ns}, "hostmount-anyuid")
 		}
-		e2e.Logf("About to run a Kube e2e test, ensuring namespace is privileged")
-		// add the "privileged" scc to ensure pods that explicitly
-		// request extra capabilities are not rejected
-		addE2EServiceAccountsToSCC(securityClient, []kapiv1.Namespace{*ns}, "privileged")
-		// add the "anyuid" scc to ensure pods that don't specify a
-		// uid don't get forced into a range (mimics upstream
-		// behavior)
-		addE2EServiceAccountsToSCC(securityClient, []kapiv1.Namespace{*ns}, "anyuid")
-		// add the "hostmount-anyuid" scc to ensure pods using hostPath
-		// can execute tests
-		addE2EServiceAccountsToSCC(securityClient, []kapiv1.Namespace{*ns}, "hostmount-anyuid")
 
 		// The intra-pod test requires that the service account have
 		// permission to retrieve service endpoints.
@@ -354,6 +368,7 @@ var (
 		"[Flaky]": {
 			`Job should run a job to completion when tasks sometimes fail and are not locally restarted`, // seems flaky, also may require too many resources
 			`openshift mongodb replication creating from a template`,                                     // flaking on deployment
+			`should use be able to process many pods and reuse local volumes`,                            // https://bugzilla.redhat.com/show_bug.cgi?id=1635893
 		},
 		// tests that must be run without competition
 		"[Serial]": {

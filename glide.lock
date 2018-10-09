@@ -1,5 +1,5 @@
-hash: 7c7f2d095e0dcc1817feddfaa5e309a9598e7cc13bf2336f448745396a17b0ac
-updated: 2018-10-04T14:36:42.381572789-04:00
+hash: 353fd9f8c50cc2d6f7a0eca6b6ee60c59e8e0153bf60c2da8c6095aa6ecbf405
+updated: 2018-10-09T10:53:10.017766336-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -25,8 +25,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 23f201854100218dba4bbed8ad1602f3252f8462
-  repo: https://github.com/nalind/buildah
+  version: 3062ecb605a99db401882c70bb1b4073ec717c47
   subpackages:
   - bind
   - chroot
@@ -35,7 +34,7 @@ imports:
   - unshare
   - util
 - name: github.com/containers/image
-  version: 2b9799f666246a40936f4ad8592b15c8d77bf09b
+  version: 5f5d852ddf93ce2965960207eb3409d458bf1898
   repo: https://github.com/nalind/image
   subpackages:
   - copy
@@ -69,7 +68,7 @@ imports:
   - types
   - version
 - name: github.com/containers/libpod
-  version: 3c31e176c7dfce3c86a45ff4750f740a5f8f9321
+  version: 71c2681310d1286d6ed465388373a3456944468b
   subpackages:
   - pkg/chrootuser
   - pkg/rootless
@@ -323,7 +322,7 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: c9d033a0b3c3dfca1c70722720c3aea184022496
+  version: fac417a1916188eb39f7c36e279c832ce1c965df
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
@@ -342,7 +341,7 @@ imports:
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: 80f2f78af2af54fd257580a3680cba397b79cc49
+  version: a045d08096d2578cde35812ad53cae0f4918c0ef
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -350,7 +349,7 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: 9b0a97cfabb0e2a82c016d834d6494e67a3b2a75
+  version: a0fc80f4e7cf373bbd24259bc46eef47e6e76463
   subpackages:
   - pkg/api/apihelpers
   - pkg/build/apis/build
@@ -719,7 +718,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 852d32d3b3526363bad501101fc2e73b344b1d9a
+  version: 4387965806cc0814d7e79e40ccc80892ba170131
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events

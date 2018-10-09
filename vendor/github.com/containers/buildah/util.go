@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/containers/image/docker/reference"
+	"github.com/containers/image/pkg/sysregistries"
 	"github.com/containers/image/pkg/sysregistriesv2"
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
@@ -18,6 +19,7 @@ import (
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // InitReexec is a wrapper for reexec.Init().  It should be called at
@@ -93,7 +95,7 @@ func (b *Builder) copyFileWithTar(chownOpts *idtools.IDPair, hasher io.Writer) f
 		archiver.Untar = func(tarArchive io.Reader, dest string, options *archive.TarOptions) error {
 			contentReader, contentWriter, err := os.Pipe()
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "error creating pipe extract data to %q", dest)
 			}
 			defer contentReader.Close()
 			defer contentWriter.Close()
@@ -111,10 +113,12 @@ func (b *Builder) copyFileWithTar(chownOpts *idtools.IDPair, hasher io.Writer) f
 				}
 				hashWorker.Done()
 			}()
-			err = originalUntar(io.TeeReader(tarArchive, contentWriter), dest, options)
+			if err = originalUntar(io.TeeReader(tarArchive, contentWriter), dest, options); err != nil {
+				err = errors.Wrapf(err, "error extracting data to %q while copying", dest)
+			}
 			hashWorker.Wait()
 			if err == nil {
-				err = hashError
+				err = errors.Wrapf(hashError, "error calculating digest of data for %q while copying", dest)
 			}
 			return err
 		}
@@ -184,12 +188,76 @@ func getRegistries(sc *types.SystemContext) ([]string, error) {
 	return searchRegistries, nil
 }
 
+// isRegistryInsecure checks if the named registry is marked as not secure
+func isRegistryInsecure(registry string, sc *types.SystemContext) (bool, error) {
+	registries, err := sysregistriesv2.GetRegistries(sc)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to parse the registries configuration (%s)", sysregistries.RegistriesConfPath(sc))
+	}
+	if reginfo := sysregistriesv2.FindRegistry(registry, registries); reginfo != nil {
+		if reginfo.Insecure {
+			logrus.Debugf("registry %q is marked insecure in registries configuration %q", registry, sysregistries.RegistriesConfPath(sc))
+		} else {
+			logrus.Debugf("registry %q is not marked insecure in registries configuration %q", registry, sysregistries.RegistriesConfPath(sc))
+		}
+		return reginfo.Insecure, nil
+	}
+	logrus.Debugf("registry %q is not listed in registries configuration %q, assuming it's secure", registry, sysregistries.RegistriesConfPath(sc))
+	return false, nil
+}
+
+// isRegistryBlocked checks if the named registry is marked as blocked
+func isRegistryBlocked(registry string, sc *types.SystemContext) (bool, error) {
+	registries, err := sysregistriesv2.GetRegistries(sc)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to parse the registries configuration (%s)", sysregistries.RegistriesConfPath(sc))
+	}
+	if reginfo := sysregistriesv2.FindRegistry(registry, registries); reginfo != nil {
+		if reginfo.Blocked {
+			logrus.Debugf("registry %q is marked as blocked in registries configuration %q", registry, sysregistries.RegistriesConfPath(sc))
+		} else {
+			logrus.Debugf("registry %q is not marked as blocked in registries configuration %q", registry, sysregistries.RegistriesConfPath(sc))
+		}
+		return reginfo.Blocked, nil
+	}
+	logrus.Debugf("registry %q is not listed in registries configuration %q, assuming it's not blocked", registry, sysregistries.RegistriesConfPath(sc))
+	return false, nil
+}
+
+// isReferenceSomething checks if the registry part of a reference is insecure or blocked
+func isReferenceSomething(ref types.ImageReference, sc *types.SystemContext, what func(string, *types.SystemContext) (bool, error)) (bool, error) {
+	if ref != nil && ref.DockerReference() != nil {
+		if named, ok := ref.DockerReference().(reference.Named); ok {
+			if domain := reference.Domain(named); domain != "" {
+				return what(domain, sc)
+			}
+		}
+	}
+	return false, nil
+}
+
+// isReferenceInsecure checks if the registry part of a reference is insecure
+func isReferenceInsecure(ref types.ImageReference, sc *types.SystemContext) (bool, error) {
+	return isReferenceSomething(ref, sc, isRegistryInsecure)
+}
+
+// isReferenceBlocked checks if the registry part of a reference is blocked
+func isReferenceBlocked(ref types.ImageReference, sc *types.SystemContext) (bool, error) {
+	if ref != nil && ref.Transport() != nil {
+		switch ref.Transport().Name() {
+		case "docker":
+			return isReferenceSomething(ref, sc, isRegistryBlocked)
+		}
+	}
+	return false, nil
+}
+
 // hasRegistry returns a bool/err response if the image has a registry in its
 // name
 func hasRegistry(imageName string) (bool, error) {
 	imgRef, err := reference.Parse(imageName)
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "error parsing image name %q", imageName)
 	}
 	registry := reference.Domain(imgRef.(reference.Named))
 	if registry != "" {
@@ -204,7 +272,7 @@ func ReserveSELinuxLabels(store storage.Store, id string) error {
 	if selinux.GetEnabled() {
 		containers, err := store.Containers()
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "error getting list of containers")
 		}
 
 		for _, c := range containers {
@@ -222,7 +290,7 @@ func ReserveSELinuxLabels(store storage.Store, id string) error {
 				}
 				// Prevent different containers from using same MCS label
 				if err := label.ReserveLabel(b.ProcessLabel); err != nil {
-					return err
+					return errors.Wrapf(err, "error reserving SELinux label %q", b.ProcessLabel)
 				}
 			}
 		}

@@ -186,28 +186,42 @@ kind: KubeControllerManagerConfig
 		AssetInputDir:   filepath.Join(configs.assetsDir, "tls"),
 		AssetsOutputDir: configs.assetsDir,
 		ConfigOutputDir: configDir,
-		LockDir:         filepath.Join(configs.kubernetesDir, "lock"),
 		ConfigFileName:  "kube-apiserver-config.yaml",
 		ConfigOverrides: apiserverConfigOverride,
-		AdditionalFlags: []string{fmt.Sprintf("--manifest-etcd-server-urls=https://127.0.0.1:2379")},
+		AdditionalFlags: []string{
+			fmt.Sprintf("--manifest-etcd-server-urls=https://127.0.0.1:2379"),
+			fmt.Sprintf("--manifest-lock-host-path=%s", filepath.Join(configs.kubernetesDir, "lock")),
+		},
 	}
 	if _, err := apiserverConfig.RunRender("kube-apiserver", OpenShiftImages.Get("hypershift").ToPullSpec(c.ImageTemplate).String(), c.DockerClient(), hostIP); err != nil {
 		return nil, err
 	}
 
 	// generate kube-controller-manager manifests using the corresponding operator render command
-	// TODO: This will also render the scheduler and checkpointer manifests. Those should be owned by their operators but for now they are owned
+	// TODO: This will also render checkpointer manifests. Those should be owned by their operators but for now they are owned
 	//       by controller manager operator.
 	controllerConfig := controlplaneoperator.RenderConfig{
 		OperatorImage:   OpenShiftImages.Get("cluster-kube-controller-manager-operator").ToPullSpec(c.ImageTemplate).String(),
 		AssetInputDir:   filepath.Join(configs.assetsDir, "tls"),
 		AssetsOutputDir: configs.assetsDir,
 		ConfigOutputDir: configDir,
-		LockDir:         filepath.Join(configs.kubernetesDir, "lock"),
 		ConfigFileName:  "kube-controller-manager-config.yaml",
 		ConfigOverrides: controllerManagerConfigOverride,
 	}
 	if _, err := controllerConfig.RunRender("kube-controller-manager", OpenShiftImages.Get("hyperkube").ToPullSpec(c.ImageTemplate).String(), c.DockerClient(), hostIP); err != nil {
+		return nil, err
+	}
+
+	// generate kube-scheduler manifests using the corresponding operator render command
+	schedulerConfig := controlplaneoperator.RenderConfig{
+		OperatorImage:   OpenShiftImages.Get("cluster-kube-scheduler-operator").ToPullSpec(c.ImageTemplate).String(),
+		AssetInputDir:   filepath.Join(configs.assetsDir, "tls"),
+		AssetsOutputDir: configs.assetsDir,
+		ConfigOutputDir: configDir,
+		ConfigFileName:  "kube-scheduler-config.yaml",
+		ConfigOverrides: controllerManagerConfigOverride,
+	}
+	if _, err := schedulerConfig.RunRender("kube-scheduler", OpenShiftImages.Get("hyperkube").ToPullSpec(c.ImageTemplate).String(), c.DockerClient(), hostIP); err != nil {
 		return nil, err
 	}
 

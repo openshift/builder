@@ -50,7 +50,7 @@ void _buildah_unshare(void)
 			if (fp != NULL) {
 				memset(buf, 0, sizeof(buf));
 				n_read = fread(buf, 1, sizeof(buf) - 1, fp);
-				if (n_read != 0) {
+				if (n_read > 0) {
 					max_userns = atoi(buf);
 					if (max_userns == 0) {
 						fprintf(stderr, "User namespaces are not enabled in %s.\n", _max_user_namespaces);
