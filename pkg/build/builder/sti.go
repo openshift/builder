@@ -233,8 +233,9 @@ func (s *S2IBuilder) Build() error {
 	config.PullAuthentication = s2iapi.AuthConfig{Username: t.Username, Password: t.Password, Email: t.Email, ServerAddress: t.ServerAddress}
 
 	if s.build.Spec.Strategy.SourceStrategy.ForcePull || !isImagePresent(s.dockerClient, config.BuilderImage) {
-		// TODO why aren't we timing this?
+		startTime := metav1.Now()
 		err = s.pullImage(config.BuilderImage, t)
+		timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullBaseImage, startTime, metav1.Now())
 		if err != nil {
 			return err
 		}
