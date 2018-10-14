@@ -16,7 +16,7 @@ type roLayer struct {
 	size       int64
 	layerStore *layerStore
 	descriptor distribution.Descriptor
-	platform   Platform
+	os         OS
 
 	referenceCount int
 	references     map[Layer]struct{}
@@ -143,11 +143,7 @@ func storeLayer(tx MetadataTransaction, layer *roLayer) error {
 			return err
 		}
 	}
-	if err := tx.SetPlatform(layer.platform); err != nil {
-		return err
-	}
-
-	return nil
+	return tx.SetOS(layer.os)
 }
 
 func newVerifiedReadCloser(rc io.ReadCloser, dgst digest.Digest) (io.ReadCloser, error) {

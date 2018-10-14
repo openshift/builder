@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 
+	"github.com/containers/storage/pkg/reexec"
 	"github.com/spf13/cobra"
 
 	"k8s.io/apiserver/pkg/util/logs"
@@ -18,6 +20,10 @@ import (
 )
 
 func main() {
+	if reexec.Init() {
+		return
+	}
+
 	logs.InitLogs()
 	defer logs.FlushLogs()
 	defer serviceability.BehaviorOnPanic(os.Getenv("OPENSHIFT_ON_PANIC"), version.Get())()
@@ -28,11 +34,50 @@ func main() {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
+	_, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	if !os.IsNotExist(err) {
+		err := Copy("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "/etc/pki/tls/certs/cluster.crt")
+		if err != nil {
+			fmt.Printf("Error setting up cluster CA cert: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	_, err = os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt")
+	if !os.IsNotExist(err) {
+		err = Copy("/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt", "/etc/pki/tls/certs/service.crt")
+		if err != nil {
+			fmt.Printf("Error setting up service CA cert: %v", err)
+			os.Exit(1)
+		}
+	}
 	basename := filepath.Base(os.Args[0])
 	command := CommandFor(basename)
 	if err := command.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// Copy the src file to dst. Any existing file will be overwritten and will not
+// copy file attributes.
+func Copy(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 // CommandFor returns the appropriate command for this base name,

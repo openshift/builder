@@ -7,10 +7,21 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fsouza/go-dockerclient"
+	istorage "github.com/containers/image/storage"
+	"github.com/containers/image/types"
+	"github.com/containers/storage"
+	realglog "github.com/golang/glog"
 
+	s2iapi "github.com/openshift/source-to-image/pkg/api"
+	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
+
+	"github.com/openshift/library-go/pkg/git"
+	"github.com/openshift/library-go/pkg/serviceability"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+
+	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
+	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	restclient "k8s.io/client-go/rest"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
@@ -19,11 +30,6 @@ import (
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
-	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
-	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
-	"github.com/openshift/library-go/pkg/git"
-	s2iapi "github.com/openshift/source-to-image/pkg/api"
-	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 )
 
 var (
@@ -46,9 +52,11 @@ type builderConfig struct {
 	out             io.Writer
 	build           *buildapiv1.Build
 	sourceSecretDir string
-	dockerClient    *docker.Client
+	dockerClient    bld.DockerClient
 	dockerEndpoint  string
 	buildsClient    buildclientv1.BuildInterface
+	cleanup         func()
+	store           storage.Store
 }
 
 func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderConfig, error) {
@@ -84,11 +92,59 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 	cfg.sourceSecretDir = os.Getenv("SOURCE_SECRET_PATH")
 
 	if needsDocker {
-		// dockerClient and dockerEndpoint (DOCKER_HOST)
-		// usually not set, defaults to docker socket
-		cfg.dockerClient, cfg.dockerEndpoint, err = bld.GetDockerClient()
-		if err != nil {
-			return nil, fmt.Errorf("no Docker configuration defined: %v", err)
+		if _, ok := os.LookupEnv("DOCKER_HOST"); ok {
+			// dockerClient and dockerEndpoint (DOCKER_HOST)
+			// usually not set, defaults to docker socket
+			cfg.dockerClient, cfg.dockerEndpoint, err = bld.GetDockerClient()
+			if err != nil {
+				return nil, fmt.Errorf("no Docker configuration defined: %v", err)
+			}
+		} else {
+			var systemContext types.SystemContext
+			if registriesConfPath, ok := os.LookupEnv("BUILD_REGISTRIES_CONF_PATH"); ok && len(registriesConfPath) > 0 {
+				if _, err := os.Stat(registriesConfPath); err == nil {
+					systemContext.SystemRegistriesConfPath = registriesConfPath
+				}
+			}
+			if registriesDirPath, ok := os.LookupEnv("BUILD_REGISTRIES_DIR_PATH"); ok && len(registriesDirPath) > 0 {
+				if _, err := os.Stat(registriesDirPath); err == nil {
+					systemContext.RegistriesDirPath = registriesDirPath
+				}
+			}
+			if signaturePolicyPath, ok := os.LookupEnv("BUILD_SIGNATURE_POLICY_PATH"); ok && len(signaturePolicyPath) > 0 {
+				if _, err := os.Stat(signaturePolicyPath); err == nil {
+					systemContext.SignaturePolicyPath = signaturePolicyPath
+				}
+			}
+
+			storeOptions := storage.DefaultStoreOptions
+			if driver, ok := os.LookupEnv("BUILD_STORAGE_DRIVER"); ok {
+				storeOptions.GraphDriverName = driver
+			}
+			if storageConfPath, ok := os.LookupEnv("BUILD_STORAGE_CONF_PATH"); ok && len(storageConfPath) > 0 {
+				if _, err := os.Stat(storageConfPath); err == nil {
+					storage.ReloadConfigurationFile(storageConfPath, &storeOptions)
+				}
+			}
+
+			store, err := storage.GetStore(storeOptions)
+			cfg.store = store
+			if err != nil {
+				return nil, err
+			}
+			cfg.cleanup = func() {
+				if _, err := store.Shutdown(false); err != nil {
+					glog.V(0).Infof("Error shutting down storage: %v", err)
+				}
+			}
+			istorage.Transport.SetStore(store)
+
+			dockerClient, err := bld.GetDaemonlessClient(systemContext, store, os.Getenv("BUILD_ISOLATION"))
+			if err != nil {
+				return nil, fmt.Errorf("no daemonless store: %v", err)
+			}
+			cfg.dockerClient = dockerClient
+			cfg.dockerEndpoint = "n/a"
 		}
 	}
 
@@ -208,7 +264,7 @@ func (c *builderConfig) extractImageContent() error {
 	}()
 
 	buildDir := bld.InputContentPath
-	return bld.ExtractImageContent(ctx, c.dockerClient, buildDir, c.build)
+	return bld.ExtractImageContent(ctx, c.dockerClient, c.store, buildDir, c.build)
 }
 
 // execute is responsible for running a build
@@ -249,24 +305,65 @@ func runBuild(out io.Writer, builder builder) error {
 	if err != nil {
 		return err
 	}
+	if cfg.cleanup != nil {
+		defer cfg.cleanup()
+	}
 	return cfg.execute(builder)
 }
 
 // RunDockerBuild creates a docker builder and runs its build
 func RunDockerBuild(out io.Writer) error {
+	realglog.V(5)
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 	return runBuild(out, dockerBuilder{})
 }
 
 // RunS2IBuild creates a S2I builder and runs its build
 func RunS2IBuild(out io.Writer) error {
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 	return runBuild(out, s2iBuilder{})
 }
 
 // RunGitClone performs a git clone using the build defined in the environment
 func RunGitClone(out io.Writer) error {
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
+
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
 		return err
+	}
+	if cfg.cleanup != nil {
+		defer cfg.cleanup()
 	}
 	return cfg.clone()
 }
@@ -279,9 +376,24 @@ func RunGitClone(out io.Writer) error {
 // and also adds some env and label values to the dockerfile based on
 // the build information.
 func RunManageDockerfile(out io.Writer) error {
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
+
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
 		return err
+	}
+	if cfg.cleanup != nil {
+		defer cfg.cleanup()
 	}
 	return bld.ManageDockerfile(bld.InputContentPath, cfg.build)
 }
@@ -289,9 +401,23 @@ func RunManageDockerfile(out io.Writer) error {
 // RunExtractImageContent extracts files from existing images
 // into the build working directory.
 func RunExtractImageContent(out io.Writer) error {
+	serviceability.InitLogrus("DEBUG")
+	/*
+		switch {
+		case glog.Is(4):
+			serviceability.InitLogrus("DEBUG")
+		case glog.Is(2):
+			serviceability.InitLogrus("INFO")
+		case glog.Is(0):
+			serviceability.InitLogrus("WARN")
+		}
+	*/
 	cfg, err := newBuilderConfigFromEnvironment(out, true)
 	if err != nil {
 		return err
+	}
+	if cfg.cleanup != nil {
+		defer cfg.cleanup()
 	}
 	return cfg.extractImageContent()
 }

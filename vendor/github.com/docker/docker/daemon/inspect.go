@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/versions/v1p20"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/daemon/network"
+	"github.com/docker/docker/errdefs"
 	volumestore "github.com/docker/docker/volume/store"
 	"github.com/docker/go-connections/nat"
 )
@@ -139,7 +140,7 @@ func (daemon *Daemon) getInspectData(container *container.Container) (*types.Con
 	var containerHealth *types.Health
 	if container.State.Health != nil {
 		containerHealth = &types.Health{
-			Status:        container.State.Health.Status,
+			Status:        container.State.Health.Status(),
 			FailingStreak: container.State.Health.FailingStreak,
 			Log:           append([]*types.HealthcheckResult{}, container.State.Health.Log...),
 		}
@@ -171,7 +172,7 @@ func (daemon *Daemon) getInspectData(container *container.Container) (*types.Con
 		Name:         container.Name,
 		RestartCount: container.RestartCount,
 		Driver:       container.Driver,
-		Platform:     container.Platform,
+		Platform:     container.OS,
 		MountLabel:   container.MountLabel,
 		ProcessLabel: container.ProcessLabel,
 		ExecIDs:      container.GetExecIDs(),
@@ -188,7 +189,7 @@ func (daemon *Daemon) getInspectData(container *container.Container) (*types.Con
 	// could have been removed, it will cause error if we try to get the metadata,
 	// we can ignore the error if the container is dead.
 	if err != nil && !container.Dead {
-		return nil, systemError{err}
+		return nil, errdefs.System(err)
 	}
 	contJSONBase.GraphDriver.Data = graphDriverData
 
@@ -232,7 +233,7 @@ func (daemon *Daemon) VolumeInspect(name string) (*types.Volume, error) {
 		if volumestore.IsNotExist(err) {
 			return nil, volumeNotFound(name)
 		}
-		return nil, systemError{err}
+		return nil, errdefs.System(err)
 	}
 	apiV := volumeToAPIType(v)
 	apiV.Mountpoint = v.Path()

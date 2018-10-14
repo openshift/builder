@@ -40,8 +40,8 @@ type controller struct {
 var _ exec.Controller = &controller{}
 
 // NewController returns a docker exec runner for the provided task.
-func newController(b executorpkg.Backend, task *api.Task, dependencies exec.DependencyGetter) (*controller, error) {
-	adapter, err := newContainerAdapter(b, task, dependencies)
+func newController(b executorpkg.Backend, task *api.Task, node *api.NodeDescription, dependencies exec.DependencyGetter) (*controller, error) {
+	adapter, err := newContainerAdapter(b, task, node, dependencies)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func (r *controller) Start(ctx context.Context) error {
 
 	for {
 		if err := r.adapter.start(ctx); err != nil {
-			if _, ok := err.(libnetwork.ErrNoSuchNetwork); ok {
+			if _, ok := errors.Cause(err).(libnetwork.ErrNoSuchNetwork); ok {
 				// Retry network creation again if we
 				// failed because some of the networks
 				// were not found.
@@ -659,7 +659,7 @@ func (e *exitError) Error() string {
 }
 
 func (e *exitError) ExitCode() int {
-	return int(e.code)
+	return e.code
 }
 
 func (e *exitError) Cause() error {

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/docker/docker/api"
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/events"
@@ -65,7 +64,6 @@ func (s *systemRouter) getInfo(ctx context.Context, w http.ResponseWriter, r *ht
 
 func (s *systemRouter) getVersion(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	info := s.backend.SystemVersion()
-	info.APIVersion = api.DefaultVersion
 
 	return httputils.WriteJSON(w, http.StatusOK, info)
 }
@@ -123,11 +121,11 @@ func (s *systemRouter) getEvents(ctx context.Context, w http.ResponseWriter, r *
 
 		if !onlyPastEvents {
 			dur := until.Sub(now)
-			timeout = time.NewTimer(dur).C
+			timeout = time.After(dur)
 		}
 	}
 
-	ef, err := filters.FromParam(r.Form.Get("filters"))
+	ef, err := filters.FromJSON(r.Form.Get("filters"))
 	if err != nil {
 		return err
 	}

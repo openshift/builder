@@ -13,7 +13,7 @@
 FROM openshift/origin-release:golang-1.10
 COPY . /go/src/github.com/openshift/builder
 RUN cd /go/src/github.com/openshift/builder && \
-    go build -o openshift-builder ./cmd
+    hack/build.sh
 
 FROM docker.io/library/centos:7
 LABEL io.k8s.display-name="OpenShift Origin Builder" \
@@ -28,6 +28,10 @@ RUN INSTALL_PKGS=" \
     yum install -y ${INSTALL_PKGS} && \
     rpm -V ${INSTALL_PKGS} && \
     yum clean all
+
+COPY imagecontent/policy.json /etc/containers/
+COPY imagecontent/registries.conf /etc/containers/
+COPY imagecontent/storage.conf /etc/containers/
 
 COPY --from=0 /go/src/github.com/openshift/builder/openshift-builder /usr/bin
 RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \

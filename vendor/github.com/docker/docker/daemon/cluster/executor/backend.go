@@ -15,6 +15,7 @@ import (
 	swarmtypes "github.com/docker/docker/api/types/swarm"
 	containerpkg "github.com/docker/docker/container"
 	clustertypes "github.com/docker/docker/daemon/cluster/provider"
+	networkSettings "github.com/docker/docker/daemon/network"
 	"github.com/docker/docker/plugin"
 	"github.com/docker/libnetwork"
 	"github.com/docker/libnetwork/cluster"
@@ -26,7 +27,7 @@ import (
 // Backend defines the executor component for a swarm agent.
 type Backend interface {
 	CreateManagedNetwork(clustertypes.NetworkCreateRequest) error
-	DeleteManagedNetwork(name string) error
+	DeleteManagedNetwork(networkID string) error
 	FindNetwork(idName string) (libnetwork.Network, error)
 	SetupIngress(clustertypes.NetworkCreateRequest, string) (<-chan struct{}, error)
 	ReleaseIngress() (<-chan struct{}, error)
@@ -61,4 +62,5 @@ type Backend interface {
 	LookupImage(name string) (*types.ImageInspect, error)
 	PluginManager() *plugin.Manager
 	PluginGetter() *plugin.Store
+	GetAttachmentStore() *networkSettings.AttachmentStore
 }

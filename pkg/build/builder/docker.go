@@ -111,7 +111,7 @@ func (d *DockerBuilder) Build() error {
 			)
 			glog.V(0).Infof("\nPulling image %s ...", imageName)
 			startTime := metav1.Now()
-			err = pullImage(d.dockerClient, imageName, pullAuthConfig)
+			err = d.pullImage(imageName, pullAuthConfig)
 
 			timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullBaseImage, startTime, metav1.Now())
 
@@ -135,7 +135,7 @@ func (d *DockerBuilder) Build() error {
 	}
 
 	startTime := metav1.Now()
-	err = d.dockerBuild(buildDir, buildTag)
+	err = d.dockerBuild(ctx, buildDir, buildTag)
 
 	timing.RecordNewStep(ctx, buildapiv1.StageBuild, buildapiv1.StepDockerBuild, startTime, metav1.Now())
 
@@ -143,18 +143,6 @@ func (d *DockerBuilder) Build() error {
 		d.build.Status.Phase = buildapiv1.BuildPhaseFailed
 		d.build.Status.Reason = buildapiv1.StatusReasonDockerBuildFailed
 		d.build.Status.Message = builderutil.StatusMessageDockerBuildFailed
-		HandleBuildStatusUpdate(d.build, d.client, nil)
-		return err
-	}
-
-	cname := containerName("docker", d.build.Name, d.build.Namespace, "post-commit")
-
-	err = execPostCommitHook(ctx, d.dockerClient, d.build.Spec.PostCommit, buildTag, cname)
-
-	if err != nil {
-		d.build.Status.Phase = buildapiv1.BuildPhaseFailed
-		d.build.Status.Reason = buildapiv1.StatusReasonPostCommitHookFailed
-		d.build.Status.Message = builderutil.StatusMessagePostCommitHookFailed
 		HandleBuildStatusUpdate(d.build, d.client, nil)
 		return err
 	}
@@ -169,7 +157,7 @@ func (d *DockerBuilder) Build() error {
 		glog.V(0).Infof("warning: Failed to remove temporary build tag %v: %v", buildTag, err)
 	}
 
-	if push {
+	if push && pushTag != "" {
 		// Get the Docker push authentication
 		pushAuthConfig, authPresent := dockercfg.NewHelper().GetDockerAuth(
 			pushTag,
@@ -180,7 +168,7 @@ func (d *DockerBuilder) Build() error {
 		}
 		glog.V(0).Infof("\nPushing image %s ...", pushTag)
 		startTime = metav1.Now()
-		digest, err := pushImage(d.dockerClient, pushTag, pushAuthConfig)
+		digest, err := d.pushImage(pushTag, pushAuthConfig)
 
 		timing.RecordNewStep(ctx, buildapiv1.StagePushImage, buildapiv1.StepPushDockerImage, startTime, metav1.Now())
 
@@ -201,6 +189,30 @@ func (d *DockerBuilder) Build() error {
 		glog.V(0).Infof("Push successful")
 	}
 	return nil
+}
+
+func (d *DockerBuilder) pullImage(name string, authConfig docker.AuthConfiguration) error {
+	repository, tag := docker.ParseRepositoryTag(name)
+	options := docker.PullImageOptions{
+		Repository: repository,
+		Tag:        tag,
+	}
+
+	if options.Tag == "" && strings.Contains(name, "@") {
+		options.Repository = name
+	}
+
+	return d.dockerClient.PullImage(options, authConfig)
+}
+
+func (d *DockerBuilder) pushImage(name string, authConfig docker.AuthConfiguration) (string, error) {
+	repository, tag := docker.ParseRepositoryTag(name)
+	options := docker.PushImageOptions{
+		Name: repository,
+		Tag:  tag,
+	}
+	err := d.dockerClient.PushImage(options, authConfig)
+	return "", err
 }
 
 // copyConfigMaps copies all files from the directory where the configMap is
@@ -283,27 +295,8 @@ func (d *DockerBuilder) copyLocalObject(s localObjectBuildSource, sourceDir, tar
 	return nil
 }
 
-// setupPullSecret provides a Docker authentication configuration when the
-// PullSecret is specified.
-func (d *DockerBuilder) setupPullSecret() (*docker.AuthConfigurations, error) {
-	if len(os.Getenv(dockercfg.PullAuthType)) == 0 {
-		return nil, nil
-	}
-	glog.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, os.Getenv(dockercfg.PullAuthType))
-	dockercfgPath := dockercfg.GetDockercfgFile(os.Getenv(dockercfg.PullAuthType))
-	if len(dockercfgPath) == 0 {
-		return nil, fmt.Errorf("no docker config file found in '%s'", os.Getenv(dockercfg.PullAuthType))
-	}
-	glog.V(2).Infof("Using Docker config file %s", dockercfgPath)
-	r, err := os.Open(dockercfgPath)
-	if err != nil {
-		return nil, fmt.Errorf("'%s': %s", dockercfgPath, err)
-	}
-	return docker.NewAuthConfigurations(r)
-}
-
 // dockerBuild performs a docker build on the source that has been retrieved
-func (d *DockerBuilder) dockerBuild(dir string, tag string) error {
+func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string) error {
 	var noCache bool
 	var forcePull bool
 	var buildArgs []docker.BuildArg
@@ -321,11 +314,18 @@ func (d *DockerBuilder) dockerBuild(dir string, tag string) error {
 		noCache = d.build.Spec.Strategy.DockerStrategy.NoCache
 		forcePull = d.build.Spec.Strategy.DockerStrategy.ForcePull
 	}
-	auth, err := d.setupPullSecret()
-	if err != nil {
-		return err
+
+	var auth *docker.AuthConfigurations
+	var err error
+	path := os.Getenv(dockercfg.PullAuthType)
+	if len(path) != 0 {
+		auth, err = GetDockerAuthConfiguration(path)
+		if err != nil {
+			return err
+		}
 	}
-	if err := d.copySecrets(d.build.Spec.Source.Secrets, dir); err != nil {
+
+	if err = d.copySecrets(d.build.Spec.Source.Secrets, dir); err != nil {
 		return err
 	}
 	if err = d.copyConfigMaps(d.build.Spec.Source.ConfigMaps, dir); err != nil {
@@ -333,6 +333,7 @@ func (d *DockerBuilder) dockerBuild(dir string, tag string) error {
 	}
 
 	opts := docker.BuildImageOptions{
+		Context:             ctx,
 		Name:                tag,
 		RmTmpContainer:      true,
 		ForceRmTmpContainer: true,
@@ -369,18 +370,17 @@ func (d *DockerBuilder) dockerBuild(dir string, tag string) error {
 		opts.AuthConfigs = *auth
 	}
 
+	imageOptimizationPolicy := buildapiv1.ImageOptimizationNone
 	if s := d.build.Spec.Strategy.DockerStrategy; s != nil {
 		if policy := s.ImageOptimizationPolicy; policy != nil {
-			switch *policy {
-			case buildapiv1.ImageOptimizationSkipLayers:
-				return buildDirectImage(dir, false, &opts)
-			case buildapiv1.ImageOptimizationSkipLayersAndWarn:
-				return buildDirectImage(dir, true, &opts)
-			}
+			imageOptimizationPolicy = *policy
 		}
 	}
 
-	return buildImage(d.dockerClient, dir, d.tar, &opts)
+	if dc, ok := d.dockerClient.(*DaemonlessClient); ok {
+		return buildDaemonlessImage(dc.SystemContext, dc.Store, dc.Isolation, dir, imageOptimizationPolicy, &opts)
+	}
+	return dockerBuildImage(d.dockerClient, dir, d.tar, &opts)
 }
 
 func getDockerfilePath(dir string, build *buildapiv1.Build) string {
@@ -401,8 +401,8 @@ func getDockerfilePath(dir string, build *buildapiv1.Build) string {
 }
 
 // replaceLastFrom changes the last FROM instruction of node to point to the
-// base image.
-func replaceLastFrom(node *parser.Node, image string) error {
+// given image with an optional alias.
+func replaceLastFrom(node *parser.Node, image string, alias string) error {
 	if node == nil {
 		return nil
 	}
@@ -412,12 +412,47 @@ func replaceLastFrom(node *parser.Node, image string) error {
 			if child.Next == nil {
 				child.Next = &parser.Node{}
 			}
+
 			glog.Infof("Replaced Dockerfile FROM image %s", child.Next.Value)
 			child.Next.Value = image
+			if len(alias) != 0 {
+				if child.Next.Next == nil {
+					child.Next.Next = &parser.Node{}
+				}
+				child.Next.Next.Value = "as"
+				if child.Next.Next.Next == nil {
+					child.Next.Next.Next = &parser.Node{}
+				}
+				child.Next.Next.Next.Value = alias
+			}
 			return nil
 		}
 	}
 	return nil
+}
+
+// getLastFrom gets the image name of the last FROM instruction
+// in the dockerfile
+func getLastFrom(node *parser.Node) (string, string) {
+	if node == nil {
+		return "", ""
+	}
+	var image, alias string
+	for i := len(node.Children) - 1; i >= 0; i-- {
+		child := node.Children[i]
+		if child != nil && child.Value == dockercmd.From {
+			if child.Next != nil {
+				image = child.Next.Value
+				if child.Next.Next != nil && strings.ToUpper(child.Next.Next.Value) == "AS" {
+					if child.Next.Next.Next != nil {
+						alias = child.Next.Next.Next.Value
+					}
+				}
+				break
+			}
+		}
+	}
+	return image, alias
 }
 
 // appendEnv appends an ENV Dockerfile instruction as the last child of node
@@ -433,6 +468,50 @@ func appendLabel(node *parser.Node, m []dockerfile.KeyValue) error {
 		return nil
 	}
 	return appendKeyValueInstruction(dockerfile.Label, node, m)
+}
+
+// appendPostCommit appends a RUN <cmd> Dockerfile instruction as the last child of node
+func appendPostCommit(node *parser.Node, cmd string) error {
+	if len(cmd) == 0 {
+		return nil
+	}
+
+	image, alias := getLastFrom(node)
+	if len(alias) == 0 {
+		alias = postCommitAlias
+		if err := replaceLastFrom(node, image, alias); err != nil {
+			return err
+		}
+	}
+
+	if err := appendStringInstruction(dockerfile.From, node, alias); err != nil {
+		return err
+	}
+
+	if err := appendStringInstruction(dockerfile.Run, node, cmd); err != nil {
+		return err
+	}
+
+	if err := appendStringInstruction(dockerfile.From, node, alias); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// appendStringInstruction is a primitive used to avoid code duplication.
+// Callers should use a derivative of this such as appendPostCommit.
+// appendStringInstruction appends a Dockerfile instruction with string
+// syntax created by f as the last child of node with the string from cmd.
+func appendStringInstruction(f func(string) (string, error), node *parser.Node, cmd string) error {
+	if node == nil {
+		return nil
+	}
+	instruction, err := f(cmd)
+	if err != nil {
+		return err
+	}
+	return dockerfile.InsertInstructions(node, len(node.Children), instruction)
 }
 
 // appendKeyValueInstruction is a primitive used to avoid code duplication.

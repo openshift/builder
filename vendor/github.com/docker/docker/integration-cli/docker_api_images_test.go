@@ -80,7 +80,7 @@ func (s *DockerSuite) TestAPIImagesDelete(c *check.C) {
 	c.Assert(err, checker.IsNil)
 	defer cli.Close()
 
-	if testEnv.DaemonPlatform() != "windows" {
+	if testEnv.OSType != "windows" {
 		testRequires(c, Network)
 	}
 	name := "test-api-images-delete"
@@ -104,7 +104,7 @@ func (s *DockerSuite) TestAPIImagesHistory(c *check.C) {
 	c.Assert(err, checker.IsNil)
 	defer cli.Close()
 
-	if testEnv.DaemonPlatform() != "windows" {
+	if testEnv.OSType != "windows" {
 		testRequires(c, Network)
 	}
 	name := "test-api-images-history"
@@ -119,7 +119,7 @@ func (s *DockerSuite) TestAPIImagesHistory(c *check.C) {
 }
 
 func (s *DockerSuite) TestAPIImagesImportBadSrc(c *check.C) {
-	testRequires(c, Network)
+	testRequires(c, Network, SameHostDaemon)
 
 	server := httptest.NewServer(http.NewServeMux())
 	defer server.Close()
@@ -179,8 +179,7 @@ func (s *DockerSuite) TestAPIImagesSizeCompatibility(c *check.C) {
 		Labels      map[string]string
 	}
 
-	var httpClient *http.Client
-	cli, err = client.NewClient(daemonHost(), "v1.24", httpClient, nil)
+	cli, err = request.NewEnvClientWithVersion("v1.24")
 	c.Assert(err, checker.IsNil)
 	defer cli.Close()
 
