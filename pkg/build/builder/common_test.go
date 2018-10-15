@@ -513,9 +513,8 @@ func Test_addBuildParameters(t *testing.T) {
 
 func Test_findReferencedImages(t *testing.T) {
 	type want struct {
-		Images     []string
-		Multistage bool
-		Err        bool
+		Images []string
+		Err    bool
 	}
 	tests := []struct {
 		original string
@@ -544,8 +543,7 @@ func Test_findReferencedImages(t *testing.T) {
 				RUN echo "hello world"
 				`),
 			want: want{
-				Images:     []string{"busybox", "scratch"},
-				Multistage: true,
+				Images: []string{"busybox", "scratch"},
 			},
 		},
 		{
@@ -555,8 +553,7 @@ func Test_findReferencedImages(t *testing.T) {
 				RUN echo "hello world"
 				`),
 			want: want{
-				Images:     []string{"busybox", "scratch"},
-				Multistage: true,
+				Images: []string{"busybox", "scratch"},
 			},
 		},
 		{
@@ -569,8 +566,7 @@ func Test_findReferencedImages(t *testing.T) {
 				RUN echo "hello world"
 				`),
 			want: want{
-				Images:     []string{"busybox", "nginx", "nginx:latest", "scratch"},
-				Multistage: true,
+				Images: []string{"busybox", "nginx", "nginx:latest", "scratch"},
 			},
 		},
 		{
@@ -589,8 +585,7 @@ func Test_findReferencedImages(t *testing.T) {
 				COPY --from=test /a /b
 				`),
 			want: want{
-				Images:     []string{"other", "scratch"},
-				Multistage: true,
+				Images: []string{"other", "scratch"},
 			},
 		},
 		{
@@ -601,8 +596,7 @@ func Test_findReferencedImages(t *testing.T) {
 				COPY --from=test /a /b
 				`),
 			want: want{
-				Images:     []string{"other", "scratch", "test"},
-				Multistage: true,
+				Images: []string{"other", "scratch", "test"},
 			},
 		},
 	}
@@ -621,11 +615,10 @@ func Test_findReferencedImages(t *testing.T) {
 			if _, err := dockerfile.Parse(strings.NewReader(test.original)); err != nil {
 				t.Fatal(err)
 			}
-			images, multistage, err := findReferencedImages(f.Name())
+			images, err := findReferencedImages(f.Name())
 			got := want{
-				Images:     images,
-				Multistage: multistage,
-				Err:        err != nil,
+				Images: images,
+				Err:    err != nil,
 			}
 			if !reflect.DeepEqual(test.want, got) {
 				t.Errorf("unexpected: %s", diff.ObjectReflectDiff(test.want, got))

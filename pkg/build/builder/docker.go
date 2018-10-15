@@ -83,7 +83,7 @@ func (d *DockerBuilder) Build() error {
 	buildTag := randomBuildTag(d.build.Namespace, d.build.Name)
 	dockerfilePath := getDockerfilePath(buildDir, d.build)
 
-	imageNames, multiStage, err := findReferencedImages(dockerfilePath)
+	imageNames, err := findReferencedImages(dockerfilePath)
 	if err != nil {
 		return err
 	}
@@ -123,14 +123,6 @@ func (d *DockerBuilder) Build() error {
 				return fmt.Errorf("failed to pull image: %v", err)
 			}
 
-		}
-	}
-
-	if s := d.build.Spec.Strategy.DockerStrategy; s != nil && multiStage {
-		if s.ImageOptimizationPolicy == nil {
-			policy := buildapiv1.ImageOptimizationSkipLayers
-			s.ImageOptimizationPolicy = &policy
-			glog.V(2).Infof("Detected multi-stage Dockerfile, image will be built with imageOptimizationPolicy set to SkipLayers")
 		}
 	}
 
