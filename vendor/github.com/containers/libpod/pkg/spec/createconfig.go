@@ -2,6 +2,7 @@ package createconfig
 
 import (
 	"encoding/json"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -133,6 +134,7 @@ type CreateConfig struct {
 	SecurityOpts       []string
 	Rootfs             string
 	LocalVolumes       []string //Keeps track of the built-in volumes of container used in the --volumes-from flag
+	Syslog             bool     // Whether to enable syslog on exit commands
 }
 
 func u32Ptr(i int64) *uint32     { u := uint32(i); return &u }
@@ -287,8 +289,8 @@ func (c *CreateConfig) GetTmpfsMounts() []spec.Mount {
 	return m
 }
 
-func createExitCommand(runtime *libpod.Runtime) []string {
-	config := runtime.GetConfig()
+func (c *CreateConfig) createExitCommand() []string {
+	config := c.Runtime.GetConfig()
 
 	cmd, _ := os.Executable()
 	command := []string{cmd,
@@ -301,6 +303,9 @@ func createExitCommand(runtime *libpod.Runtime) []string {
 	if config.StorageConfig.GraphDriverName != "" {
 		command = append(command, []string{"--storage-driver", config.StorageConfig.GraphDriverName}...)
 	}
+	if c.Syslog {
+		command = append(command, "--syslog")
+	}
 	return append(command, []string{"container", "cleanup"}...)
 }
 
@@ -310,9 +315,6 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 	var portBindings []ocicni.PortMapping
 	var pod *libpod.Pod
 	var err error
-
-	// Uncomment after talking to mheon about unimplemented funcs
-	// options = append(options, libpod.WithLabels(c.labels))
 
 	if c.Interactive {
 		options = append(options, libpod.WithStdin())
@@ -442,6 +444,15 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 	if logPath != "" {
 		options = append(options, libpod.WithLogPath(logPath))
 	}
+	if c.IPAddress != "" {
+		ip := net.ParseIP(c.IPAddress)
+		if ip == nil {
+			return nil, errors.Wrapf(libpod.ErrInvalidArg, "cannot parse %s as IP address", c.IPAddress)
+		} else if ip.To4() == nil {
+			return nil, errors.Wrapf(libpod.ErrInvalidArg, "%s is not an IPv4 address", c.IPAddress)
+		}
+		options = append(options, libpod.WithStaticIP(ip))
+	}
 
 	options = append(options, libpod.WithPrivileged(c.Privileged))
 
@@ -474,7 +485,7 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 		options = append(options, libpod.WithCgroupParent(c.CgroupParent))
 	}
 	if c.Detach {
-		options = append(options, libpod.WithExitCommand(createExitCommand(runtime)))
+		options = append(options, libpod.WithExitCommand(c.createExitCommand()))
 	}
 
 	return options, nil

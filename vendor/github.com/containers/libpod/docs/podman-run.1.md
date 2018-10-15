@@ -297,7 +297,9 @@ Not implemented
 
 **--ip**=""
 
-Not implemented
+Specify a static IP address for the container, for example '10.88.64.128'.
+Can only be used if no additional CNI networks to join were specified via '--network=<network-name>', and if the container is not joining another container's network namespace via '--network=container:<name|id>'.
+The address must be within the default CNI network's pool (default 10.88.0.0/16).
 
 **--ipc**=""
 
@@ -401,7 +403,7 @@ to the container with **--name** then the daemon will also generate a random
 string name. The name is useful any place you need to identify a container.
 This works for both background and foreground containers.
 
-**--network**="*bridge*"
+**--net**, **--network**="*bridge*"
 
 Set the Network mode for the container:
 - `bridge`: create a network stack on the default bridge

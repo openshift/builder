@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/containers/buildah"
@@ -249,6 +250,10 @@ var createFlags = []cli.Flag{
 		Usage: "Keep STDIN open even if not attached",
 	},
 	cli.StringFlag{
+		Name:  "ip",
+		Usage: "Specify a static IPv4 address for the container",
+	},
+	cli.StringFlag{
 		Name:  "ipc",
 		Usage: "IPC namespace to use",
 	},
@@ -445,4 +450,18 @@ func getFormat(c *cli.Context) (string, error) {
 		return buildah.Dockerv2ImageManifest, nil
 	}
 	return "", errors.Errorf("unrecognized image type %q", format)
+}
+
+func sortFlags(flags []cli.Flag) []cli.Flag {
+	sort.Slice(flags, func(i, j int) bool {
+		return strings.Compare(flags[i].GetName(), flags[j].GetName()) < 0
+	})
+	return flags
+}
+
+func getAuthFile(authfile string) string {
+	if authfile != "" {
+		return authfile
+	}
+	return os.Getenv("REGISTRY_AUTH_FILE")
 }

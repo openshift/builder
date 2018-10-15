@@ -1,6 +1,8 @@
 package configdefault
 
 import (
+	"time"
+
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	"github.com/openshift/library-go/pkg/config/configdefaults"
 	leaderelectionconverter "github.com/openshift/library-go/pkg/config/leaderelection"
@@ -27,4 +29,29 @@ func SetRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolpla
 	if config.SecurityAllocator.MCSLabelsPerProject == 0 {
 		config.SecurityAllocator.MCSLabelsPerProject = 5
 	}
+
+	if config.ResourceQuota.MinResyncPeriod.Duration == 0 {
+		config.ResourceQuota.MinResyncPeriod.Duration = 5 * time.Minute
+	}
+	if config.ResourceQuota.SyncPeriod.Duration == 0 {
+		config.ResourceQuota.SyncPeriod.Duration = 12 * time.Hour
+	}
+	if config.ResourceQuota.ConcurrentSyncs == 0 {
+		config.ResourceQuota.ConcurrentSyncs = 5
+	}
+
+	if config.ImageImport.MaxScheduledImageImportsPerMinute == 0 {
+		config.ImageImport.MaxScheduledImageImportsPerMinute = 60
+	}
+	if config.ImageImport.ScheduledImageImportMinimumIntervalSeconds == 0 {
+		config.ImageImport.ScheduledImageImportMinimumIntervalSeconds = 15 * 60 // 15 minutes
+	}
+
+	configdefaults.DefaultStringSlice(&config.ServiceAccount.ManagedNames, []string{"builder", "deployer"})
+
+	// TODO this default is WRONG, but it appears to work
+	configdefaults.DefaultString(&config.Deployer.ImageTemplateFormat.Format, "quay.io/openshift/origin-${component}:${version}")
+
+	// TODO this default is WRONG, but it appears to work
+	configdefaults.DefaultString(&config.Build.ImageTemplateFormat.Format, "quay.io/openshift/origin-${component}:${version}")
 }

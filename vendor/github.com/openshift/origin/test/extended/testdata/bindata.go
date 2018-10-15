@@ -7,6 +7,9 @@
 // test/extended/testdata/aggregator/sample-apiserver-rc.yaml
 // test/extended/testdata/aggregator/sample-apiserver-sa.yaml
 // test/extended/testdata/aggregator/sample-apiserver-service.yaml
+// test/extended/testdata/builds/build-postcommit/docker.yaml
+// test/extended/testdata/builds/build-postcommit/imagestreams.yaml
+// test/extended/testdata/builds/build-postcommit/sti.yaml
 // test/extended/testdata/builds/build-pruning/default-group-build-config.yaml
 // test/extended/testdata/builds/build-pruning/default-legacy-build-config.yaml
 // test/extended/testdata/builds/build-pruning/errored-build-config.yaml
@@ -58,7 +61,6 @@
 // test/extended/testdata/builds/test-build-app/Gemfile
 // test/extended/testdata/builds/test-build-app/config.ru
 // test/extended/testdata/builds/test-build-podsvc.json
-// test/extended/testdata/builds/test-build-postcommit.json
 // test/extended/testdata/builds/test-build-proxy.yaml
 // test/extended/testdata/builds/test-build-revision.json
 // test/extended/testdata/builds/test-build.yaml
@@ -261,7 +263,6 @@
 // examples/jenkins/jenkins-ephemeral-template.json
 // examples/jenkins/jenkins-persistent-template.json
 // examples/jenkins/pipeline/bluegreen-pipeline.yaml
-// examples/jenkins/pipeline/mapsapp-pipeline.yaml
 // examples/jenkins/pipeline/maven-pipeline.yaml
 // examples/jenkins/pipeline/nodejs-sample-pipeline.yaml
 // examples/jenkins/pipeline/openshift-client-plugin-pipeline.yaml
@@ -520,6 +521,213 @@ func testExtendedTestdataAggregatorSampleApiserverServiceYaml() (*asset, error) 
 	}
 
 	info := bindataFileInfo{name: "test/extended/testdata/aggregator/sample-apiserver-service.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataBuildsBuildPostcommitDockerYaml = []byte(`apiVersion: v1
+kind: List
+metadata: {}
+items:
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: mydockertest
+    labels:
+      name: test
+  spec:
+    triggers: []
+    runPolicy: Serial
+    source:
+      dockerfile: |
+        FROM busybox:latest
+    strategy:
+      type: Docker
+      dockerStrategy:
+        env:
+          - name: BUILD_LOGLEVEL
+            value: "5"
+    resources: {}
+    postCommit:
+      command: ["touch"]
+      args: ["/tmp/postCommit"]
+    nodeSelector: null
+  status:
+    lastVersion: 0
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    name: mydockertest
+  spec:
+    replicas: 1
+    selector:
+      app: mydockertest
+      deploymentconfig: mydockertest
+    strategy:
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          app: mydockertest
+          deploymentconfig: mydockertest
+      spec:
+        containers:
+        - image:
+          imagePullPolicy: Always
+          readinessProbe:
+            httpGet:
+              port: 8080
+          name: mydockertest
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          - containerPort: 8888
+            protocol: TCP
+          terminationMessagePath: /dev/termination-log
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - mydockertest
+        from:
+          kind: ImageStreamTag
+          name: mydockertest:latest
+      type: ImageChange
+    - type: ConfigChange
+`)
+
+func testExtendedTestdataBuildsBuildPostcommitDockerYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataBuildsBuildPostcommitDockerYaml, nil
+}
+
+func testExtendedTestdataBuildsBuildPostcommitDockerYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataBuildsBuildPostcommitDockerYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/builds/build-postcommit/docker.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataBuildsBuildPostcommitImagestreamsYaml = []byte(`apiVersion: v1
+kind: List
+metadata: {}
+items:
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    name: mydockertest
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    name: mys2itest
+`)
+
+func testExtendedTestdataBuildsBuildPostcommitImagestreamsYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataBuildsBuildPostcommitImagestreamsYaml, nil
+}
+
+func testExtendedTestdataBuildsBuildPostcommitImagestreamsYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataBuildsBuildPostcommitImagestreamsYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/builds/build-postcommit/imagestreams.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataBuildsBuildPostcommitStiYaml = []byte(`apiVersion: v1
+kind: List
+metadata: {}
+items:
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: mys2itest
+    labels:
+      name: test
+  spec:
+    triggers: []
+    runPolicy: Serial
+    source:
+      type: Git
+      git:
+        uri: 'https://github.com/sclorg/s2i-php-container'
+      contextDir: 7.0/test/test-app
+    strategy:
+      type: Source
+      sourceStrategy:
+        from:
+          kind: DockerImage
+          name: centos/php-70-centos7
+    resources: {}
+    postCommit: {}
+    nodeSelector: null
+  status:
+    lastVersion: 0
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    name: mys2itest
+  spec:
+    replicas: 1
+    selector:
+      app: mys2itest
+      deploymentconfig: mys2itest
+    strategy:
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          app: mys2itest
+          deploymentconfig: mys2itest
+      spec:
+        containers:
+        - image:
+          imagePullPolicy: Always
+          readinessProbe:
+            httpGet:
+              port: 8080
+          name: mys2itest
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          - containerPort: 8888
+            protocol: TCP
+          terminationMessagePath: /dev/termination-log
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - mys2itest
+        from:
+          kind: ImageStreamTag
+          name: mys2itest:latest
+      type: ImageChange
+    - type: ConfigChange
+`)
+
+func testExtendedTestdataBuildsBuildPostcommitStiYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataBuildsBuildPostcommitStiYaml, nil
+}
+
+func testExtendedTestdataBuildsBuildPostcommitStiYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataBuildsBuildPostcommitStiYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/builds/build-postcommit/sti.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -2388,84 +2596,6 @@ func testExtendedTestdataBuildsTestBuildPodsvcJson() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "test/extended/testdata/builds/test-build-podsvc.json", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _testExtendedTestdataBuildsTestBuildPostcommitJson = []byte(`{
-    "kind": "List",
-    "apiVersion": "v1",
-    "metadata": {},
-    "items": [
-        {
-            "kind": "ImageStream",
-            "apiVersion": "v1",
-            "metadata": {
-                "name": "busybox",
-                "creationTimestamp": null,
-                "labels": {
-                    "build": "busybox"
-                }
-            },
-            "spec": {
-                "tags": [
-                    {
-                        "name": "1",
-                        "annotations": {
-                            "openshift.io/imported-from": "busybox:1"
-                        },
-                        "from": {
-                            "kind": "DockerImage",
-                            "name": "busybox:1"
-                        },
-                        "importPolicy": {}
-                    }
-                ]
-            }
-        },
-        {
-            "kind": "BuildConfig",
-            "apiVersion": "v1",
-            "metadata": {
-                "name": "busybox",
-                "creationTimestamp": null,
-                "labels": {
-                    "build": "busybox"
-                }
-            },
-            "spec": {
-                "source": {
-                    "type": "Dockerfile",
-                    "dockerfile": "FROM busybox:1"
-                },
-                "strategy": {
-                    "type": "Docker",
-                    "dockerStrategy": {
-                        "from": {
-                            "kind": "ImageStreamTag",
-                            "name": "busybox:1"
-                        }
-                    }
-                }, 
-                "resources": {},
-                "postCommit": {}
-            }
-        }
-    ]
-}
-`)
-
-func testExtendedTestdataBuildsTestBuildPostcommitJsonBytes() ([]byte, error) {
-	return _testExtendedTestdataBuildsTestBuildPostcommitJson, nil
-}
-
-func testExtendedTestdataBuildsTestBuildPostcommitJson() (*asset, error) {
-	bytes, err := testExtendedTestdataBuildsTestBuildPostcommitJsonBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "test/extended/testdata/builds/test-build-postcommit.json", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -30819,173 +30949,6 @@ func examplesJenkinsPipelineBluegreenPipelineYaml() (*asset, error) {
 	return a, nil
 }
 
-var _examplesJenkinsPipelineMapsappPipelineYaml = []byte(`apiVersion: v1
-kind: Template
-labels:
-  application: mapsapp-pipeline
-metadata:
-  name: mapsapp-pipeline
-parameters:
-- description: NationalParks application source URI
-  displayName: NationalParks Source URI
-  name: NATIONALPARKS_GIT_URI
-  required: true
-  value: https://github.com/openshift-roadshow/nationalparks.git
-- description: NationalParks application source reference
-  displayName: NationalParks Source Ref
-  name: NATIONALPARKS_GIT_REF
-  required: true
-  value: master
-- description: MLBParks application source URI
-  displayName: MLBParks Source URI
-  name: MLBPARKS_GIT_URI
-  required: true
-  value: https://github.com/openshift-roadshow/mlbparks.git
-- description: MLBParks application source reference
-  displayName: MLBParks Source Ref
-  name: MLBPARKS_GIT_REF
-  required: true
-  value: master
-- description: ParksMap application source URI
-  displayName: ParksMap Source URI
-  name: PARKSMAP_GIT_URI
-  required: true
-  value: https://github.com/openshift-roadshow/parksmap-web.git
-- description: ParksMap application source reference
-  displayName: ParksMap Source Ref
-  name: PARKSMAP_GIT_REF
-  required: true
-  value: master
-- name: GITHUB_WEBHOOK_SECRET
-  displayName: GitHub Webhook Secret
-  description: Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.
-  generate: expression
-  from: "[a-zA-Z0-9]{40}"
-- name: GENERIC_WEBHOOK_SECRET
-  displayName: Generic Webhook Secret,
-  description: A secret string used to configure the Generic webhook.
-  generate: expression
-  from: "[a-zA-Z0-9]{40}"
-objects:
-- apiVersion: v1
-  kind: BuildConfig
-  metadata:
-    labels:
-      build: mapsapp-pipeline
-    name: mapsapp-pipeline
-  spec:
-    runPolicy: Serial
-    source: {}
-    strategy:
-      type: JenkinsPipeline
-      jenkinsPipelineStrategy:
-        jenkinsfile: |-
-          try {
-             timeout(time: 20, unit: 'MINUTES') {
-                def project = ""
-                node {
-                  project = "${env.PROJECT_NAME}"
-        
-                  stage('Create NationalParks back-end') {
-                    def nationalParksURL = "${NATIONALPARKS_GIT_URI}"
-                    def nationalParksBranch = "${NATIONALPARKS_GIT_REF}"
-                    checkout([$class: "GitSCM", branches: [[name: "*/${nationalParksBranch}"]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: "RelativeTargetDirectory", relativeTargetDir: "nationalparks"]], submoduleCfg: [], userRemoteConfigs: [[url: "${nationalParksURL}"]]])
-                    sh "oc new-app -f nationalparks/ose3/pipeline-buildconfig-template.json -p GIT_URI=${nationalParksURL} -p GIT_REF=${nationalParksBranch} -n ${project} --dry-run -o yaml | oc apply -f - -n ${project}"
-                  }
-        
-                  stage('Create MLBParks back-end') {
-                    def mlbParksURL = "${MLBPARKS_GIT_URI}"
-                    def mlbParksBranch = "${MLBPARKS_GIT_REF}"
-                    checkout([$class: "GitSCM", branches: [[name: "*/${mlbParksBranch}"]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: "RelativeTargetDirectory", relativeTargetDir: "mlbparks"]], submoduleCfg: [], userRemoteConfigs: [[url: "${mlbParksURL}"]]])
-                    sh "oc new-app -f mlbparks/ose3/pipeline-buildconfig-template.json -p GIT_URI=${mlbParksURL} -p GIT_REF=${mlbParksBranch} -n ${project} --dry-run -o yaml | oc apply -f - -n ${project}"
-                  }
-        
-                  stage('Create ParksMap front-end') {
-                    def parksMapURL = "${PARKSMAP_GIT_URI}"
-                    def parksMapBranch = "${PARKSMAP_GIT_REF}"
-                    checkout([$class: "GitSCM", branches: [[name: "*/${parksMapBranch}"]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: "RelativeTargetDirectory", relativeTargetDir: "parksmap"]], submoduleCfg: [], userRemoteConfigs: [[url: "${parksMapURL}"]]])
-                    sh "oc new-app -f parksmap/ose3/pipeline-buildconfig-template.json -p GIT_URI=${parksMapURL} -p GIT_REF=${parksMapBranch} -n ${project} --dry-run -o yaml | oc apply -f - -n ${project}"
-                  }
-                }
-        
-                stage('Build Back-ends') {
-                  parallel (
-                    "nationalparks": {
-                      node {
-                        openshift.withCluster() {
-                          openshift.withProject("${project}") {
-                            def bld = openshift.startBuild("nationalparks-pipeline")
-                            echo "Waiting on the nationalparks-pipeline build to complete..."
-                            bld.untilEach {
-                              return it.object().status.phase == "Complete"
-                            }
-                            echo "The nationalparks-pipeline build has completed."
-                          }
-                        }
-                      }
-                    },
-                    "mlbparks": {
-                      node {
-                        openshift.withCluster() {
-                          openshift.withProject("${project}") {
-                            def bld = openshift.startBuild("mlbparks-pipeline")
-                            echo "Waiting on the mlbparks-pipeline build to complete..."
-                            bld.untilEach {
-                              return it.object().status.phase == "Complete"
-                            }
-                            echo "The mlbparks-pipeline build has completed."
-                          }
-                        }
-                      }
-                    }
-                  )
-                }
-        
-                node {
-                  stage('Build Front-end') {
-                    openshift.withCluster() {
-                      openshift.withProject("${project}") {
-                        def bld = openshift.startBuild("parksmap-pipeline")
-                        echo "Waiting on the parksmap-pipeline build to complete..."
-                        bld.untilEach {
-                          return it.object().status.phase == "Complete"
-                        }
-                        echo "The parksmap-pipeline build has completed."
-                      }
-                    }
-                  }
-                }
-             }
-          } catch (err) {
-             echo "in catch block"
-             echo "Caught: ${err}"
-             currentBuild.result = 'FAILURE'
-             throw err
-          }          
-    triggers:
-    - github:
-        secret: ${GITHUB_TRIGGER_SECRET}
-      type: GitHub
-    - generic:
-        secret: ${GENERIC_TRIGGER_SECRET}
-      type: Generic
-`)
-
-func examplesJenkinsPipelineMapsappPipelineYamlBytes() ([]byte, error) {
-	return _examplesJenkinsPipelineMapsappPipelineYaml, nil
-}
-
-func examplesJenkinsPipelineMapsappPipelineYaml() (*asset, error) {
-	bytes, err := examplesJenkinsPipelineMapsappPipelineYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "examples/jenkins/pipeline/mapsapp-pipeline.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
 var _examplesJenkinsPipelineMavenPipelineYaml = []byte(`apiVersion: v1
 kind: Template
 metadata:
@@ -32494,6 +32457,9 @@ var _bindata = map[string]func() (*asset, error){
 	"test/extended/testdata/aggregator/sample-apiserver-rc.yaml": testExtendedTestdataAggregatorSampleApiserverRcYaml,
 	"test/extended/testdata/aggregator/sample-apiserver-sa.yaml": testExtendedTestdataAggregatorSampleApiserverSaYaml,
 	"test/extended/testdata/aggregator/sample-apiserver-service.yaml": testExtendedTestdataAggregatorSampleApiserverServiceYaml,
+	"test/extended/testdata/builds/build-postcommit/docker.yaml": testExtendedTestdataBuildsBuildPostcommitDockerYaml,
+	"test/extended/testdata/builds/build-postcommit/imagestreams.yaml": testExtendedTestdataBuildsBuildPostcommitImagestreamsYaml,
+	"test/extended/testdata/builds/build-postcommit/sti.yaml": testExtendedTestdataBuildsBuildPostcommitStiYaml,
 	"test/extended/testdata/builds/build-pruning/default-group-build-config.yaml": testExtendedTestdataBuildsBuildPruningDefaultGroupBuildConfigYaml,
 	"test/extended/testdata/builds/build-pruning/default-legacy-build-config.yaml": testExtendedTestdataBuildsBuildPruningDefaultLegacyBuildConfigYaml,
 	"test/extended/testdata/builds/build-pruning/errored-build-config.yaml": testExtendedTestdataBuildsBuildPruningErroredBuildConfigYaml,
@@ -32545,7 +32511,6 @@ var _bindata = map[string]func() (*asset, error){
 	"test/extended/testdata/builds/test-build-app/Gemfile": testExtendedTestdataBuildsTestBuildAppGemfile,
 	"test/extended/testdata/builds/test-build-app/config.ru": testExtendedTestdataBuildsTestBuildAppConfigRu,
 	"test/extended/testdata/builds/test-build-podsvc.json": testExtendedTestdataBuildsTestBuildPodsvcJson,
-	"test/extended/testdata/builds/test-build-postcommit.json": testExtendedTestdataBuildsTestBuildPostcommitJson,
 	"test/extended/testdata/builds/test-build-proxy.yaml": testExtendedTestdataBuildsTestBuildProxyYaml,
 	"test/extended/testdata/builds/test-build-revision.json": testExtendedTestdataBuildsTestBuildRevisionJson,
 	"test/extended/testdata/builds/test-build.yaml": testExtendedTestdataBuildsTestBuildYaml,
@@ -32748,7 +32713,6 @@ var _bindata = map[string]func() (*asset, error){
 	"examples/jenkins/jenkins-ephemeral-template.json": examplesJenkinsJenkinsEphemeralTemplateJson,
 	"examples/jenkins/jenkins-persistent-template.json": examplesJenkinsJenkinsPersistentTemplateJson,
 	"examples/jenkins/pipeline/bluegreen-pipeline.yaml": examplesJenkinsPipelineBluegreenPipelineYaml,
-	"examples/jenkins/pipeline/mapsapp-pipeline.yaml": examplesJenkinsPipelineMapsappPipelineYaml,
 	"examples/jenkins/pipeline/maven-pipeline.yaml": examplesJenkinsPipelineMavenPipelineYaml,
 	"examples/jenkins/pipeline/nodejs-sample-pipeline.yaml": examplesJenkinsPipelineNodejsSamplePipelineYaml,
 	"examples/jenkins/pipeline/openshift-client-plugin-pipeline.yaml": examplesJenkinsPipelineOpenshiftClientPluginPipelineYaml,
@@ -32825,7 +32789,6 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			"jenkins-persistent-template.json": &bintree{examplesJenkinsJenkinsPersistentTemplateJson, map[string]*bintree{}},
 			"pipeline": &bintree{nil, map[string]*bintree{
 				"bluegreen-pipeline.yaml": &bintree{examplesJenkinsPipelineBluegreenPipelineYaml, map[string]*bintree{}},
-				"mapsapp-pipeline.yaml": &bintree{examplesJenkinsPipelineMapsappPipelineYaml, map[string]*bintree{}},
 				"maven-pipeline.yaml": &bintree{examplesJenkinsPipelineMavenPipelineYaml, map[string]*bintree{}},
 				"nodejs-sample-pipeline.yaml": &bintree{examplesJenkinsPipelineNodejsSamplePipelineYaml, map[string]*bintree{}},
 				"openshift-client-plugin-pipeline.yaml": &bintree{examplesJenkinsPipelineOpenshiftClientPluginPipelineYaml, map[string]*bintree{}},
@@ -32881,6 +32844,11 @@ var _bintree = &bintree{nil, map[string]*bintree{
 					"sample-apiserver-service.yaml": &bintree{testExtendedTestdataAggregatorSampleApiserverServiceYaml, map[string]*bintree{}},
 				}},
 				"builds": &bintree{nil, map[string]*bintree{
+					"build-postcommit": &bintree{nil, map[string]*bintree{
+						"docker.yaml": &bintree{testExtendedTestdataBuildsBuildPostcommitDockerYaml, map[string]*bintree{}},
+						"imagestreams.yaml": &bintree{testExtendedTestdataBuildsBuildPostcommitImagestreamsYaml, map[string]*bintree{}},
+						"sti.yaml": &bintree{testExtendedTestdataBuildsBuildPostcommitStiYaml, map[string]*bintree{}},
+					}},
 					"build-pruning": &bintree{nil, map[string]*bintree{
 						"default-group-build-config.yaml": &bintree{testExtendedTestdataBuildsBuildPruningDefaultGroupBuildConfigYaml, map[string]*bintree{}},
 						"default-legacy-build-config.yaml": &bintree{testExtendedTestdataBuildsBuildPruningDefaultLegacyBuildConfigYaml, map[string]*bintree{}},
@@ -32968,7 +32936,6 @@ var _bintree = &bintree{nil, map[string]*bintree{
 						"config.ru": &bintree{testExtendedTestdataBuildsTestBuildAppConfigRu, map[string]*bintree{}},
 					}},
 					"test-build-podsvc.json": &bintree{testExtendedTestdataBuildsTestBuildPodsvcJson, map[string]*bintree{}},
-					"test-build-postcommit.json": &bintree{testExtendedTestdataBuildsTestBuildPostcommitJson, map[string]*bintree{}},
 					"test-build-proxy.yaml": &bintree{testExtendedTestdataBuildsTestBuildProxyYaml, map[string]*bintree{}},
 					"test-build-revision.json": &bintree{testExtendedTestdataBuildsTestBuildRevisionJson, map[string]*bintree{}},
 					"test-build.yaml": &bintree{testExtendedTestdataBuildsTestBuildYaml, map[string]*bintree{}},
