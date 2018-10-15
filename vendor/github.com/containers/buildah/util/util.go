@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/containers/image/directory"
 	dockerarchive "github.com/containers/image/docker/archive"
@@ -62,10 +63,13 @@ var (
 
 // ResolveName checks if name is a valid image name, and if that name doesn't
 // include a domain portion, returns a list of the names which it might
-// correspond to in the set of configured registries.
-func ResolveName(name string, firstRegistry string, sc *types.SystemContext, store storage.Store) ([]string, error) {
+// correspond to in the set of configured registries,
+// and a boolean which is true iff 1) the list of search registries was used, and 2) it was empty.
+// NOTE: The "list of search registries is empty" check does not count blocked registries,
+// and neither the implied "localhost" nor a possible firstRegistry are counted
+func ResolveName(name string, firstRegistry string, sc *types.SystemContext, store storage.Store) ([]string, bool, error) {
 	if name == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	// Maybe it's a truncated image ID.  Don't prepend a registry name, then.
@@ -73,7 +77,7 @@ func ResolveName(name string, firstRegistry string, sc *types.SystemContext, sto
 		if img, err := store.Image(name); err == nil && img != nil && strings.HasPrefix(img.ID, name) {
 			// It's a truncated version of the ID of an image that's present in local storage;
 			// we need only expand the ID.
-			return []string{img.ID}, nil
+			return []string{img.ID}, false, nil
 		}
 	}
 
@@ -81,18 +85,18 @@ func ResolveName(name string, firstRegistry string, sc *types.SystemContext, sto
 	split := strings.SplitN(name, ":", 2)
 	if len(split) == 2 {
 		if _, ok := Transports[split[0]]; ok {
-			return []string{split[1]}, nil
+			return []string{split[1]}, false, nil
 		}
 	}
 
 	// If the image name already included a domain component, we're done.
 	named, err := reference.ParseNormalizedNamed(name)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error parsing image name %q", name)
+		return nil, false, errors.Wrapf(err, "error parsing image name %q", name)
 	}
 	if named.String() == name {
 		// Parsing produced the same result, so there was a domain name in there to begin with.
-		return []string{name}, nil
+		return []string{name}, false, nil
 	}
 	if reference.Domain(named) != "" && RegistryDefaultPathPrefix[reference.Domain(named)] != "" {
 		// If this domain can cause us to insert something in the middle, check if that happened.
@@ -109,7 +113,7 @@ func ResolveName(name string, firstRegistry string, sc *types.SystemContext, sto
 		defaultPrefix := RegistryDefaultPathPrefix[reference.Domain(named)] + "/"
 		if strings.HasPrefix(repoPath, defaultPrefix) && path.Join(domain, repoPath[len(defaultPrefix):])+tag+digest == name {
 			// Yup, parsing just inserted a bit in the middle, so there was a domain name there to begin with.
-			return []string{name}, nil
+			return []string{name}, false, nil
 		}
 	}
 
@@ -125,6 +129,7 @@ func ResolveName(name string, firstRegistry string, sc *types.SystemContext, sto
 			registries = append(registries, registry.URL)
 		}
 	}
+	searchRegistriesAreEmpty := len(registries) == 0
 
 	// Create all of the combinations.  Some registries need an additional component added, so
 	// use our lookaside map to keep track of them.  If there are no configured registries, we'll
@@ -145,7 +150,7 @@ func ResolveName(name string, firstRegistry string, sc *types.SystemContext, sto
 		candidate := path.Join(registry, middle, name)
 		candidates = append(candidates, candidate)
 	}
-	return candidates, nil
+	return candidates, searchRegistriesAreEmpty, nil
 }
 
 // ExpandNames takes unqualified names, parses them as image names, and returns
@@ -156,7 +161,7 @@ func ExpandNames(names []string, firstRegistry string, systemContext *types.Syst
 	expanded := make([]string, 0, len(names))
 	for _, n := range names {
 		var name reference.Named
-		nameList, err := ResolveName(n, firstRegistry, systemContext, store)
+		nameList, _, err := ResolveName(n, firstRegistry, systemContext, store)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error parsing name %q", n)
 		}
@@ -192,7 +197,7 @@ func FindImage(store storage.Store, firstRegistry string, systemContext *types.S
 	var ref types.ImageReference
 	var img *storage.Image
 	var err error
-	names, err := ResolveName(image, firstRegistry, systemContext, store)
+	names, _, err := ResolveName(image, firstRegistry, systemContext, store)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "error parsing name %q", image)
 	}
@@ -472,11 +477,31 @@ func UnsharedRunrootPath(uid string) (string, error) {
 	if envRuntimeDir, haveRuntimeDir := os.LookupEnv("XDG_RUNTIME_DIR"); haveRuntimeDir {
 		return filepath.Join(envRuntimeDir, "run"), nil
 	}
+	var runtimeDir string
 	// If $XDG_RUNTIME_DIR is not defined, but we know our UID...
 	if uid != "" {
-		return filepath.Join("/var/run/user", uid, "run"), nil
+		tmpDir := filepath.Join("/var/run/user", uid)
+		os.MkdirAll(tmpDir, 0700)
+		st, err := os.Stat(tmpDir)
+		if err == nil && int(st.Sys().(*syscall.Stat_t).Uid) == os.Getuid() && st.Mode().Perm() == 0700 {
+			runtimeDir = tmpDir
+		}
 	}
-	return "", errors.New("unable to determine a --runroot location: $XDG_RUNTIME_DIR is not set, and we don't know our UID")
+	if runtimeDir == "" {
+		home := os.Getenv("HOME")
+		if home == "" {
+			return "", errors.New("neither XDG_RUNTIME_DIR nor HOME was set non-empty")
+		}
+		resolvedHome, err := filepath.EvalSymlinks(home)
+		if err != nil {
+			return "", errors.Wrapf(err, "cannot resolve %s", home)
+		}
+		runtimeDir = filepath.Join(resolvedHome, "rundir")
+	}
+	if err := os.Setenv("XDG_RUNTIME_DIR", runtimeDir); err != nil {
+		return "", errors.New("could not set XDG_RUNTIME_DIR")
+	}
+	return runtimeDir, nil
 }
 
 // GetPolicyContext sets up, initializes and returns a new context for the specified policy

@@ -25,7 +25,7 @@ var (
 	searchFlags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "authfile",
-			Usage: "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json",
+			Usage: "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override. ",
 		},
 		cli.StringSliceFlag{
 			Name:  "filter, f",
@@ -55,7 +55,7 @@ var (
 		Name:         "search",
 		Usage:        "Search registry for image",
 		Description:  searchDescription,
-		Flags:        searchFlags,
+		Flags:        sortFlags(searchFlags),
 		Action:       searchCmd,
 		ArgsUsage:    "TERM",
 		OnUsageError: usageErrorHandler,
@@ -114,7 +114,7 @@ func searchCmd(c *cli.Context) error {
 		noTrunc:  c.Bool("no-trunc"),
 		limit:    c.Int("limit"),
 		filter:   c.StringSlice("filter"),
-		authfile: c.String("authfile"),
+		authfile: getAuthFile(c.String("authfile")),
 	}
 	regAndSkipTLS, err := getRegistriesAndSkipTLS(c, registry)
 	if err != nil {

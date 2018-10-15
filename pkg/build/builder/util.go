@@ -18,8 +18,8 @@ import (
 	s2iutil "github.com/openshift/source-to-image/pkg/util"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
-	"github.com/openshift/origin/pkg/build/builder/cmd/dockercfg"
 )
 
 var (

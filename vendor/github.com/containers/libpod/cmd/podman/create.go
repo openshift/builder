@@ -48,7 +48,7 @@ var createCommand = cli.Command{
 	Name:                   "create",
 	Usage:                  "Create but do not start a container",
 	Description:            createDescription,
-	Flags:                  createFlags,
+	Flags:                  sortFlags(createFlags),
 	Action:                 createCmd,
 	ArgsUsage:              "IMAGE [COMMAND [ARG...]]",
 	HideHelp:               true,
@@ -782,6 +782,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		WorkDir:     workDir,
 		Rootfs:      rootfs,
 		VolumesFrom: c.StringSlice("volumes-from"),
+		Syslog:      c.GlobalBool("syslog"),
 	}
 
 	if config.Privileged {
