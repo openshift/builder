@@ -541,15 +541,14 @@ func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageS
 	}
 }
 
-// findReferencedImages returns all qualified images referenced by the Dockerfile, whether the
-// build is a multi-stage build, or returns an error.
-func findReferencedImages(dockerfilePath string) ([]string, bool, error) {
+// findReferencedImages returns all qualified images referenced by the Dockerfile, or returns an error.
+func findReferencedImages(dockerfilePath string) ([]string, error) {
 	if len(dockerfilePath) == 0 {
-		return nil, false, nil
+		return nil, nil
 	}
 	node, err := imagebuilder.ParseFile(dockerfilePath)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	names := make(map[string]string)
 	images := sets.NewString()
@@ -574,7 +573,7 @@ func findReferencedImages(dockerfilePath string) ([]string, bool, error) {
 			}
 		}
 	}
-	return images.List(), len(stages) > 1, nil
+	return images.List(), nil
 }
 
 func overwriteFile(name string, out []byte) error {
