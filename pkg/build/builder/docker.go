@@ -184,27 +184,11 @@ func (d *DockerBuilder) Build() error {
 }
 
 func (d *DockerBuilder) pullImage(name string, authConfig docker.AuthConfiguration) error {
-	repository, tag := docker.ParseRepositoryTag(name)
-	options := docker.PullImageOptions{
-		Repository: repository,
-		Tag:        tag,
-	}
-
-	if options.Tag == "" && strings.Contains(name, "@") {
-		options.Repository = name
-	}
-
-	return d.dockerClient.PullImage(options, authConfig)
+	return dockerPullImage(d.dockerClient, name, authConfig)
 }
 
 func (d *DockerBuilder) pushImage(name string, authConfig docker.AuthConfiguration) (string, error) {
-	repository, tag := docker.ParseRepositoryTag(name)
-	options := docker.PushImageOptions{
-		Name: repository,
-		Tag:  tag,
-	}
-	err := d.dockerClient.PushImage(options, authConfig)
-	return "", err
+	return dockerPushImage(d.dockerClient, name, authConfig)
 }
 
 // copyConfigMaps copies all files from the directory where the configMap is

@@ -22,6 +22,7 @@ import (
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/idtools"
 	docker "github.com/fsouza/go-dockerclient"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
@@ -488,7 +489,11 @@ func (d *DaemonlessClient) BuildImage(opts docker.BuildImageOptions) error {
 func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) error {
 	imageName := opts.Name
 	if opts.Tag != "" {
-		imageName = imageName + ":" + opts.Tag
+		if _, err := digest.Parse(opts.Tag); err == nil {
+			imageName = imageName + "@" + opts.Tag
+		} else {
+			imageName = imageName + ":" + opts.Tag
+		}
 	}
 	return pushDaemonlessImage(d.SystemContext, d.Store, imageName, auth)
 }
@@ -551,7 +556,11 @@ func (d *DaemonlessClient) RemoveContainer(opts docker.RemoveContainerOptions) e
 func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
 	imageName := opts.Repository
 	if opts.Tag != "" {
-		imageName = imageName + ":" + opts.Tag
+		if _, err := digest.Parse(opts.Tag); err == nil {
+			imageName = imageName + "@" + opts.Tag
+		} else {
+			imageName = imageName + ":" + opts.Tag
+		}
 	}
 	return pullDaemonlessImage(d.SystemContext, d.Store, imageName, auth)
 }
@@ -559,7 +568,11 @@ func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, auth docker.A
 func (d *DaemonlessClient) TagImage(name string, opts docker.TagImageOptions) error {
 	imageName := opts.Repo
 	if opts.Tag != "" {
-		imageName = imageName + ":" + opts.Tag
+		if _, err := digest.Parse(opts.Tag); err == nil {
+			imageName = imageName + "@" + opts.Tag
+		} else {
+			imageName = imageName + ":" + opts.Tag
+		}
 	}
 	return tagDaemonlessImage(d.SystemContext, d.Store, name, imageName)
 }

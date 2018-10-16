@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	dockerclient "github.com/fsouza/go-dockerclient"
@@ -445,17 +444,7 @@ func (s *S2IBuilder) setupPullSecret() (*dockerclient.AuthConfigurations, error)
 
 func (s *S2IBuilder) pullImage(name string, authConfig dockerclient.AuthConfiguration) error {
 	glog.V(2).Infof("Explicitly pulling image %s", name)
-	repository, tag := dockerclient.ParseRepositoryTag(name)
-	options := dockerclient.PullImageOptions{
-		Repository: repository,
-		Tag:        tag,
-	}
-
-	if options.Tag == "" && strings.Contains(name, "@") {
-		options.Repository = name
-	}
-
-	return s.dockerClient.PullImage(options, authConfig)
+	return dockerPullImage(s.dockerClient, name, authConfig)
 }
 
 func (s *S2IBuilder) buildImage(contextdir string, optimization buildapiv1.ImageOptimizationPolicy, opts *dockerclient.BuildImageOptions) error {
@@ -472,13 +461,7 @@ func (s *S2IBuilder) buildImage(contextdir string, optimization buildapiv1.Image
 }
 
 func (s *S2IBuilder) pushImage(name string, authConfig dockerclient.AuthConfiguration) (string, error) {
-	repository, tag := dockerclient.ParseRepositoryTag(name)
-	options := dockerclient.PushImageOptions{
-		Name: repository,
-		Tag:  tag,
-	}
-	err := s.dockerClient.PushImage(options, authConfig)
-	return "", err
+	return dockerPushImage(s.dockerClient, name, authConfig)
 }
 
 // buildEnvVars returns a map with build metadata to be inserted into Docker
