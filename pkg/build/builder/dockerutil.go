@@ -142,7 +142,21 @@ func dockerPullImage(client DockerClient, name string, authConfig docker.AuthCon
 // Returns the digest of the docker image in the registry, or empty string in
 // case registry didn't send it or we failed to extract it.
 func dockerPushImage(client DockerClient, name string, authConfig docker.AuthConfiguration) (string, error) {
-	repository, tag := docker.ParseRepositoryTag(name)
+	ref, err := reference.Parse(name)
+	if err != nil {
+		return "", err
+	}
+	tag := ref.ID
+	if len(ref.ID) == 0 {
+		tag = "latest"
+		if len(ref.Tag) != 0 {
+			tag = ref.Tag
+		}
+	}
+	// clear the ref.Tag and ref.ID so they do not appear in the Repository field we produce
+	// from ref.Exact(), we pass the Tag or ID (if any) explicitly in the Tag field.
+	ref.Tag = ""
+	ref.ID = ""
 
 	var digestWriter *digestWriter
 	if err := retryImageAction("Push", func() (pushErr error) {
@@ -165,7 +179,7 @@ func dockerPushImage(client DockerClient, name string, authConfig docker.AuthCon
 		digestWriter = newDigestWriter()
 
 		opts := docker.PushImageOptions{
-			Name:          repository,
+			Name:          ref.Exact(),
 			Tag:           tag,
 			OutputStream:  io.MultiWriter(progressWriter, digestWriter),
 			RawJSONStream: true,
@@ -311,9 +325,24 @@ func buildDirectImage(dir string, ignoreFailures bool, opts *docker.BuildImageOp
 // helper to facilitate the usage of dockerClient.TagImage, because the former
 // requires the name to be split into more explicit parts.
 func tagImage(dockerClient DockerClient, image, name string) error {
-	repo, tag := docker.ParseRepositoryTag(name)
+	ref, err := reference.Parse(name)
+	if err != nil {
+		return err
+	}
+	tag := ref.ID
+	if len(ref.ID) == 0 {
+		tag = "latest"
+		if len(ref.Tag) != 0 {
+			tag = ref.Tag
+		}
+	}
+	// clear the ref.Tag and ref.ID so they do not appear in the Repository field we produce
+	// from ref.Exact(), we pass the Tag or ID (if any) explicitly in the Tag field.
+	ref.Tag = ""
+	ref.ID = ""
+
 	return dockerClient.TagImage(image, docker.TagImageOptions{
-		Repo: repo,
+		Repo: ref.Exact(),
 		Tag:  tag,
 		// We need to set Force to true to update the tag even if it
 		// already exists. This is the same behavior as `docker build -t
