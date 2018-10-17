@@ -194,7 +194,9 @@ func (d *DockerBuilder) pullImage(name string, authConfig docker.AuthConfigurati
 		options.Repository = name
 	}
 
-	return d.dockerClient.PullImage(options, authConfig)
+	return retryImageAction("Pull", func() (pullErr error) {
+		return d.dockerClient.PullImage(options, authConfig)
+	})
 }
 
 func (d *DockerBuilder) pushImage(name string, authConfig docker.AuthConfiguration) (string, error) {
@@ -203,7 +205,9 @@ func (d *DockerBuilder) pushImage(name string, authConfig docker.AuthConfigurati
 		Name: repository,
 		Tag:  tag,
 	}
-	err := d.dockerClient.PushImage(options, authConfig)
+	err := retryImageAction("Push", func() (pushErr error) {
+		return d.dockerClient.PushImage(options, authConfig)
+	})
 	return "", err
 }
 
