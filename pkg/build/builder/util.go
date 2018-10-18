@@ -22,6 +22,12 @@ import (
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 )
 
+// Mount paths for certificate authorities
+const (
+	ConfigMapCertsMountPath = "/var/run/configs/openshift.io/certs"
+	SecretCertsMountPath    = "/var/run/secrets/kubernetes.io/serviceaccount"
+)
+
 var (
 	// procCGroupPattern is a regular expression that parses the entries in /proc/self/cgroup
 	procCGroupPattern = regexp.MustCompile(`\d+:([a-z_,]+):/.*/(\w+-|)([a-z0-9]+).*`)
