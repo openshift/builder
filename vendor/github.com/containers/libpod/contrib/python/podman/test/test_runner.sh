@@ -27,6 +27,7 @@ done
 shift $((OPTIND -1))
 
 function cleanup {
+  set +xeuo pipefail
   # aggressive cleanup as tests may crash leaving crap around
   umount '^(shm|nsfs)'
   umount '\/run\/netns'
@@ -141,6 +142,18 @@ else
   python3 -m unittest $1 $VERBOSE
   RETURNCODE=$?
 fi
+
+if [[ "$RETURNCODE" -ne 0 ]] && [[ -n "$FLAKE_DEBUG_DELAY" ]]
+then
+    cat << EOF > /dev/stderr
+*****
+***** WARNING: \$FLAKE_DEBUG_DELAY IS SET AND PYTHON-PODMAN TESTS EXITED: $RETURNCODE
+***** WARNING: Sleeping for 30 minutes for test-VM preservation oportunity.
+*****
+EOF
+    sleep 30m
+fi
+
 
 pkill -9 podman
 pkill -9 conmon

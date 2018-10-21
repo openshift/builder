@@ -1,5 +1,5 @@
 hash: 353fd9f8c50cc2d6f7a0eca6b6ee60c59e8e0153bf60c2da8c6095aa6ecbf405
-updated: 2018-10-14T22:02:45.893989488-04:00
+updated: 2018-10-21T19:53:44.198711724-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -25,7 +25,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: fd2a215948bd20f3629dfe86c6a2ec8902e77dea
+  version: 1e4d1eb31e3d4515c6f6a4be15c5eb42735950ef
   subpackages:
   - bind
   - chroot
@@ -34,7 +34,7 @@ imports:
   - unshare
   - util
 - name: github.com/containers/image
-  version: 57ade1d29cc059646492bf56c2eb229c68b3c934
+  version: 811145622be308acf5b5a60c51a3ac04f19b3b11
   repo: https://github.com/nalind/image
   subpackages:
   - copy
@@ -68,7 +68,7 @@ imports:
   - types
   - version
 - name: github.com/containers/libpod
-  version: 2c4f3d6dad524ce9886b044ea7a22df05043264c
+  version: 0fefe3b191444cba8694119b5c30f484d146e162
   subpackages:
   - pkg/chrootuser
   - pkg/rootless
@@ -257,8 +257,6 @@ imports:
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/json-iterator/go
   version: f2b4162afba35581b6d4a50d3b8f34e33c144682
-- name: github.com/konsorten/go-windows-terminal-sequences
-  version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
 - name: github.com/mailru/easyjson
   version: 2f5df55504ebc322e4d52d34df6a1f5b503bf26d
   subpackages:
@@ -324,11 +322,11 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: 8c94a0d082abb4111a0e8981b7f463dd578878d3
+  version: a46029836bdc207f9949fc5f4907f0bfd3cf7763
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
-  version: 431ec9a26e5021f35fa41ee9a89842db9bfdb370
+  version: 1fa528d3be060e4c7178eb69e76d37cf7e699e3c
   subpackages:
   - build/clientset/versioned
   - build/clientset/versioned/fake
@@ -343,7 +341,7 @@ imports:
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: c01b3a0b77b43b7de296d5a0df884da60a16d907
+  version: dd6554843a719fcb151deb612e2116371adedcb6
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -351,12 +349,12 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: d6507c9d6e772488096ded4b01738ad5662c0eed
+  version: 70dbb9140fdc7a4bdf4a7e2e3ec8ba8d9c87a12f
   subpackages:
   - pkg/api/apihelpers
   - pkg/build/apis/build
 - name: github.com/openshift/source-to-image
-  version: 2a783420bb648df7bdd7e1fbf99b8e53bbe4e415
+  version: 9eb30303fd748ffa930371615635f1a3cddc97f0
   subpackages:
   - pkg/api
   - pkg/api/constants
@@ -396,7 +394,7 @@ imports:
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: 2233dee583dcf88f3c8b22cb7a33f05a499800d8
+  version: d58f94251046e7f70ac45aceea6cf6f61415ccca
 - name: github.com/pkg/profile
   version: 057bc52a47ec3c79498dda63f4a6f8298725e976
 - name: github.com/pquerna/ffjson
@@ -405,7 +403,7 @@ imports:
   - fflib/v1
   - fflib/v1/internal
 - name: github.com/prometheus/client_golang
-  version: 7866eead363ec334628dbc56e32df590a05f4696
+  version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
   - prometheus
 - name: github.com/PuerkitoBio/purell
@@ -421,9 +419,9 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 10ef21a441db47d8b13ebcc5fd2310f636973c77
 - name: github.com/sirupsen/logrus
-  version: 458213699411cdceb6fd839a3178be49c01fba54
+  version: 3e01752db0189b9157070a0e1668a620f9a85da2
 - name: github.com/spf13/cobra
-  version: 8d114be902bc9f08717804830a55c48378108a28
+  version: fe5e611709b0c57fa4a89136deaa8e1d4004d053
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: github.com/syndtr/gocapability
@@ -512,7 +510,7 @@ imports:
   subpackages:
   - rate
 - name: gopkg.in/cheggaaa/pb.v1
-  version: 2af8bbdea9e99e83b3ac400d8f6b6d1b8cbbf338
+  version: 007b75a044e968336a69a6c0c617251ab62ac14c
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/square/go-jose.v2
@@ -718,7 +716,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 10e908aab32fc64c28d5a7f687527b1ea0d432cc
+  version: 56832dccd93f724d0a54388bcd0e84e2e93d99ea
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events
