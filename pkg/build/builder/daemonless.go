@@ -169,7 +169,8 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		ForceRmIntermediateCtrs: true,
 	}
 
-	return imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
+	_, _, err := imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
+	return err
 }
 
 func tagDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag, pushTag string) error {
@@ -278,7 +279,9 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		SystemContext: &systemContext,
 	}
 
-	return buildah.Push(context.TODO(), imageName, dest, options)
+	// TODO - do something with the digest
+	_, _, err = buildah.Push(context.TODO(), imageName, dest, options)
+	return err
 }
 
 func inspectDaemonlessImage(sc types.SystemContext, store storage.Store, name string) (*docker.Image, error) {
