@@ -1,7 +1,6 @@
 package logrus
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -10,6 +9,13 @@ type fieldKey string
 
 // FieldMap allows customization of the key names for default fields.
 type FieldMap map[fieldKey]string
+
+// Default key names for the default fields
+const (
+	FieldKeyMsg   = "msg"
+	FieldKeyLevel = "level"
+	FieldKeyTime  = "time"
+)
 
 func (f FieldMap) resolve(key fieldKey) string {
 	if k, ok := f[key]; ok {
@@ -40,9 +46,6 @@ type JSONFormatter struct {
 	//    },
 	// }
 	FieldMap FieldMap
-
-	// PrettyPrint will indent all json logs
-	PrettyPrint bool
 }
 
 // Format renders a single log entry
@@ -72,29 +75,15 @@ func (f *JSONFormatter) Format(entry *Entry) ([]byte, error) {
 		timestampFormat = defaultTimestampFormat
 	}
 
-	if entry.err != "" {
-		data[f.FieldMap.resolve(FieldKeyLogrusError)] = entry.err
-	}
 	if !f.DisableTimestamp {
 		data[f.FieldMap.resolve(FieldKeyTime)] = entry.Time.Format(timestampFormat)
 	}
 	data[f.FieldMap.resolve(FieldKeyMsg)] = entry.Message
 	data[f.FieldMap.resolve(FieldKeyLevel)] = entry.Level.String()
 
-	var b *bytes.Buffer
-	if entry.Buffer != nil {
-		b = entry.Buffer
-	} else {
-		b = &bytes.Buffer{}
-	}
-
-	encoder := json.NewEncoder(b)
-	if f.PrettyPrint {
-		encoder.SetIndent("", "  ")
-	}
-	if err := encoder.Encode(data); err != nil {
+	serialized, err := json.Marshal(data)
+	if err != nil {
 		return nil, fmt.Errorf("Failed to marshal fields to JSON, %v", err)
 	}
-
-	return b.Bytes(), nil
+	return append(serialized, '\n'), nil
 }

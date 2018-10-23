@@ -218,7 +218,11 @@ var _ = Describe("Podman run", func() {
 		session = podmanTest.Podman([]string{"run", "--rm", "--mount", fmt.Sprintf("type=bind,src=%s,target=/run/test,shared", mountPath), ALPINE, "grep", "/run/test", "/proc/self/mountinfo"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
-		Expect(session.OutputToString()).To(ContainSubstring("/run/test rw,relatime shared"))
+		found, matches := session.GrepString("/run/test")
+		Expect(found).Should(BeTrue())
+		Expect(matches[0]).To(ContainSubstring("rw"))
+		Expect(matches[0]).To(ContainSubstring("relatime"))
+		Expect(matches[0]).To(ContainSubstring("shared"))
 
 		mountPath = filepath.Join(podmanTest.TempDir, "scratchpad")
 		os.Mkdir(mountPath, 0755)
@@ -279,7 +283,7 @@ var _ = Describe("Podman run", func() {
 	})
 
 	It("podman run notify_socket", func() {
-		sock := "/run/sock"
+		sock := "/run/notify"
 		os.Setenv("NOTIFY_SOCKET", sock)
 		session := podmanTest.Podman([]string{"run", "--rm", ALPINE, "printenv", "NOTIFY_SOCKET"})
 		session.WaitWithDefaultTimeout()

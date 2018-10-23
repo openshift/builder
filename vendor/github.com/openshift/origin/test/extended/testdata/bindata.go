@@ -69,8 +69,6 @@
 // test/extended/testdata/builds/test-cds-sourcebuild.json
 // test/extended/testdata/builds/test-context-build.json
 // test/extended/testdata/builds/test-docker-build-pullsecret.json
-// test/extended/testdata/builds/test-docker-build-quota-optimized.json
-// test/extended/testdata/builds/test-docker-build-quota.json
 // test/extended/testdata/builds/test-docker-build.json
 // test/extended/testdata/builds/test-docker-no-outputname.json
 // test/extended/testdata/builds/test-env-build.json
@@ -1169,13 +1167,8 @@ configMaps=(foo this red)
 function checkSecret() {
     dir=$1
     file=$2
-    if [[ -a "${dir}/${file}" ]]; then
-        if [[ -s "${dir}/${file}" ]]; then
-            echo "Found secret file which should have been truncated: ${dir}/${file}"
-            exit 1
-        fi
-    else
-        echo "Secret file ${file} is missing from ${dir}."
+    if [[ -e "${dir}/${file}" ]]; then
+        echo "Found secret file which should have been deleted: ${dir}/${file}"
         exit 1
     fi
 }
@@ -3466,107 +3459,6 @@ func testExtendedTestdataBuildsTestDockerBuildPullsecretJson() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "test/extended/testdata/builds/test-docker-build-pullsecret.json", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _testExtendedTestdataBuildsTestDockerBuildQuotaOptimizedJson = []byte(`{
-  "kind": "BuildConfig",
-  "apiVersion": "v1",
-  "metadata": {
-    "name": "docker-build-quota",
-    "creationTimestamp": null,
-    "labels": {
-      "name": "docker-build-quota"
-    }
-  },
-  "spec": {
-    "resources": {
-      "limits": {
-        "memory": "200Mi"
-      }
-    },
-    "source": {
-      "binary": {
-        "asFile": ""
-      }          
-    },
-    "strategy": {
-      "type": "Docker",
-      "dockerStrategy": {
-        "from": {
-          "kind": "DockerImage",
-          "name": "centos:7"
-        },
-        "noCache": true,
-        "imageOptimizationPolicy": "SkipLayers"
-      }
-    }
-  }
-}
-    `)
-
-func testExtendedTestdataBuildsTestDockerBuildQuotaOptimizedJsonBytes() ([]byte, error) {
-	return _testExtendedTestdataBuildsTestDockerBuildQuotaOptimizedJson, nil
-}
-
-func testExtendedTestdataBuildsTestDockerBuildQuotaOptimizedJson() (*asset, error) {
-	bytes, err := testExtendedTestdataBuildsTestDockerBuildQuotaOptimizedJsonBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "test/extended/testdata/builds/test-docker-build-quota-optimized.json", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _testExtendedTestdataBuildsTestDockerBuildQuotaJson = []byte(`{
-  "kind": "BuildConfig",
-  "apiVersion": "v1",
-  "metadata": {
-    "name": "docker-build-quota",
-    "creationTimestamp": null,
-    "labels": {
-      "name": "docker-build-quota"
-    }
-  },
-  "spec": {
-    "resources": {
-      "limits": {
-        "memory": "200Mi"
-      }
-    },
-    "source": {
-      "binary": {
-        "asFile": ""
-      }          
-    },
-    "strategy": {
-      "type": "Docker",
-      "dockerStrategy": {
-        "from": {
-          "kind": "DockerImage",
-          "name": "centos:7"
-        },
-        "noCache": true
-      }
-    }
-  }
-}
-    `)
-
-func testExtendedTestdataBuildsTestDockerBuildQuotaJsonBytes() ([]byte, error) {
-	return _testExtendedTestdataBuildsTestDockerBuildQuotaJson, nil
-}
-
-func testExtendedTestdataBuildsTestDockerBuildQuotaJson() (*asset, error) {
-	bytes, err := testExtendedTestdataBuildsTestDockerBuildQuotaJsonBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "test/extended/testdata/builds/test-docker-build-quota.json", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -32519,8 +32411,6 @@ var _bindata = map[string]func() (*asset, error){
 	"test/extended/testdata/builds/test-cds-sourcebuild.json": testExtendedTestdataBuildsTestCdsSourcebuildJson,
 	"test/extended/testdata/builds/test-context-build.json": testExtendedTestdataBuildsTestContextBuildJson,
 	"test/extended/testdata/builds/test-docker-build-pullsecret.json": testExtendedTestdataBuildsTestDockerBuildPullsecretJson,
-	"test/extended/testdata/builds/test-docker-build-quota-optimized.json": testExtendedTestdataBuildsTestDockerBuildQuotaOptimizedJson,
-	"test/extended/testdata/builds/test-docker-build-quota.json": testExtendedTestdataBuildsTestDockerBuildQuotaJson,
 	"test/extended/testdata/builds/test-docker-build.json": testExtendedTestdataBuildsTestDockerBuildJson,
 	"test/extended/testdata/builds/test-docker-no-outputname.json": testExtendedTestdataBuildsTestDockerNoOutputnameJson,
 	"test/extended/testdata/builds/test-env-build.json": testExtendedTestdataBuildsTestEnvBuildJson,
@@ -32944,8 +32834,6 @@ var _bintree = &bintree{nil, map[string]*bintree{
 					"test-cds-sourcebuild.json": &bintree{testExtendedTestdataBuildsTestCdsSourcebuildJson, map[string]*bintree{}},
 					"test-context-build.json": &bintree{testExtendedTestdataBuildsTestContextBuildJson, map[string]*bintree{}},
 					"test-docker-build-pullsecret.json": &bintree{testExtendedTestdataBuildsTestDockerBuildPullsecretJson, map[string]*bintree{}},
-					"test-docker-build-quota-optimized.json": &bintree{testExtendedTestdataBuildsTestDockerBuildQuotaOptimizedJson, map[string]*bintree{}},
-					"test-docker-build-quota.json": &bintree{testExtendedTestdataBuildsTestDockerBuildQuotaJson, map[string]*bintree{}},
 					"test-docker-build.json": &bintree{testExtendedTestdataBuildsTestDockerBuildJson, map[string]*bintree{}},
 					"test-docker-no-outputname.json": &bintree{testExtendedTestdataBuildsTestDockerNoOutputnameJson, map[string]*bintree{}},
 					"test-env-build.json": &bintree{testExtendedTestdataBuildsTestEnvBuildJson, map[string]*bintree{}},

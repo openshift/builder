@@ -87,7 +87,7 @@ func (o *OpenShiftControllerManager) Validate() error {
 	return nil
 }
 
-// StartAPIServer calls RunAPIServer and then waits forever
+// StartControllerManager calls RunControllerManager and then waits forever
 func (o *OpenShiftControllerManager) StartControllerManager() error {
 	if err := o.RunControllerManager(); err != nil {
 		return err
@@ -97,7 +97,7 @@ func (o *OpenShiftControllerManager) StartControllerManager() error {
 	select {}
 }
 
-// RunAPIServer takes the options and starts the etcd server
+// RunControllerManager takes the options and starts the controllers
 func (o *OpenShiftControllerManager) RunControllerManager() error {
 	// try to decode into our new types first.  right now there is no validation, no file path resolution.  this unsticks the operator to start.
 	// TODO add those things

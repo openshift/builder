@@ -50,8 +50,8 @@ var (
 
 	// openshiftAdmissionControlPlugins gives the in-order default admission chain for openshift resources.
 	openshiftAdmissionControlPlugins = []string{
+		lifecycle.PluginName,
 		"ProjectRequestLimit",
-		"openshift.io/RestrictSubjectBindings",
 		"openshift.io/JenkinsBootstrapper",
 		"openshift.io/BuildConfigSecretInjector",
 		"BuildByStrategy",
@@ -62,6 +62,7 @@ var (
 		"MutatingAdmissionWebhook",
 		"ValidatingAdmissionWebhook",
 		"ResourceQuota",
+		"openshift.io/ClusterResourceQuota",
 	}
 
 	// KubeAdmissionPlugins gives the in-order default admission chain for kube resources.
@@ -71,6 +72,7 @@ var (
 		"NamespaceExists",
 		lifecycle.PluginName,
 		"EventRateLimit",
+		"openshift.io/RestrictSubjectBindings",
 		"RunOnceDuration",
 		"PodNodeConstraints",
 		"OriginPodNodeEnvironment",
