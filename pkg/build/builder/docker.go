@@ -339,19 +339,7 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 		Pull:                forcePull,
 		BuildArgs:           buildArgs,
 	}
-	network, resolvConfHostPath, err := getContainerNetworkConfig()
-	if err != nil {
-		return err
-	}
-	opts.NetworkMode = network
-	if len(resolvConfHostPath) != 0 {
-		cmd := exec.Command("chcon", "system_u:object_r:svirt_sandbox_file_t:s0", "/etc/resolv.conf")
-		err := cmd.Run()
-		if err != nil {
-			return fmt.Errorf("unable to set permissions on /etc/resolv.conf: %v", err)
-		}
-		opts.BuildBinds = fmt.Sprintf("[\"%s:/etc/resolv.conf\"]", resolvConfHostPath)
-	}
+
 	// Though we are capped on memory and cpu at the cgroup parent level,
 	// some build containers care what their memory limit is so they can
 	// adapt, thus we need to set the memory limit at the container level
