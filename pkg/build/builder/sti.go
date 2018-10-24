@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,10 +25,13 @@ import (
 	s2iutil "github.com/openshift/source-to-image/pkg/util"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
+	"github.com/openshift/imagebuilder"
 	"github.com/openshift/library-go/pkg/git"
 	"github.com/openshift/origin/pkg/build/apis/build"
 
@@ -355,7 +359,23 @@ func (s *S2IBuilder) Build() error {
 	}
 
 	startTime := metav1.Now()
-
+	if _, err := os.Stat(config.AsDockerfile); !os.IsNotExist(err) {
+		in, err := ioutil.ReadFile(config.AsDockerfile)
+		if err != nil {
+			return err
+		}
+		node, err := imagebuilder.ParseDockerfile(bytes.NewBuffer(in))
+		if err != nil {
+			return err
+		}
+		// Append post commit
+		if err := appendPostCommit(node, buildPostCommit(s.build.Spec.PostCommit)); err != nil {
+			return err
+		}
+		out := dockerfile.Write(node)
+		glog.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
+		overwriteFile(config.AsDockerfile, out)
+	}
 	err = s.buildImage("/tmp/dockercontext", buildapiv1.ImageOptimizationNone, &opts)
 	timing.RecordNewStep(ctx, buildapiv1.StageBuild, buildapiv1.StepDockerBuild, startTime, metav1.Now())
 	if err != nil {
@@ -365,30 +385,10 @@ func (s *S2IBuilder) Build() error {
 		s.build.Status.Message = builderutil.StatusMessageGenericBuildFailed
 		return err
 	}
-
-	// TODO: Use cdaley's post-commit hook change
-	cName := containerName("s2i", s.build.Name, s.build.Namespace, "post-commit")
-	err = execPostCommitHook(ctx, s.dockerClient, s.build.Spec.PostCommit, buildTag, cName)
-
-	if err != nil {
-		s.build.Status.Phase = buildapiv1.BuildPhaseFailed
-		s.build.Status.Reason = buildapiv1.StatusReasonPostCommitHookFailed
-		s.build.Status.Message = builderutil.StatusMessagePostCommitHookFailed
-		HandleBuildStatusUpdate(s.build, s.client, nil)
-		return err
-	}
-
 	if push {
 		if err = tagImage(s.dockerClient, buildTag, pushTag); err != nil {
 			return err
 		}
-	}
-
-	if err = removeImage(s.dockerClient, buildTag); err != nil {
-		glog.V(0).Infof("warning: Failed to remove temporary build tag %v: %v", buildTag, err)
-	}
-
-	if push {
 		// Get the Docker push authentication
 		pushAuthConfig, authPresent := dockercfg.NewHelper().GetDockerAuth(
 			pushTag,

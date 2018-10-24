@@ -2,7 +2,6 @@ package builder
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"github.com/docker/distribution/reference"
 	dockercmd "github.com/docker/docker/builder/dockerfile/command"
 	"github.com/docker/docker/builder/dockerfile/parser"
-	"github.com/fsouza/go-dockerclient"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -183,80 +181,6 @@ func containerName(strategyName, buildName, namespace, containerPurpose string) 
 		namespace,
 		containerPurpose,
 		uid)
-}
-
-// execPostCommitHook uses the client to execute a command based on the
-// postCommitSpec in a new ephemeral Docker container running the given image.
-// It returns an error if the hook cannot be run or returns a non-zero exit
-// code.
-func execPostCommitHook(ctx context.Context, client DockerClient, postCommitSpec buildapiv1.BuildPostCommitSpec, image, containerName string) error {
-	command := postCommitSpec.Command
-	args := postCommitSpec.Args
-	script := postCommitSpec.Script
-	if script == "" && len(command) == 0 && len(args) == 0 {
-		// Post commit hook is not set, return early.
-		return nil
-	}
-	glog.V(0).Infof("Running post commit hook ...")
-	glog.V(4).Infof("Post commit hook spec: %+v", postCommitSpec)
-
-	if script != "" {
-		// The `-i` flag is needed to support CentOS and RHEL images
-		// that use Software Collections (SCL), in order to have the
-		// appropriate collections enabled in the shell. E.g., in the
-		// Ruby image, this is necessary to make `ruby`, `bundle` and
-		// other binaries available in the PATH.
-		command = []string{"/bin/sh", "-ic"}
-		args = append([]string{script, command[0]}, args...)
-	}
-
-	limits, err := GetCGroupLimits()
-	if err != nil {
-		return fmt.Errorf("read cgroup limits: %v", err)
-	}
-	parent, err := getCgroupParent()
-	if err != nil {
-		return fmt.Errorf("read cgroup parent: %v", err)
-	}
-	startTime := metav1.Now()
-
-	createOptions := docker.CreateContainerOptions{
-		Name: containerName,
-		Config: &docker.Config{
-			Image:      image,
-			Entrypoint: command,
-			Cmd:        args,
-		},
-		HostConfig: &docker.HostConfig{
-			// Limit container's resource allocation.
-			// Though we are capped on memory and cpu at the cgroup parent level,
-			// some build containers care what their memory limit is so they can
-			// adapt, thus we need to set the memory limit at the container level
-			// too, so that information is available to them.
-			Memory:       limits.MemoryLimitBytes,
-			MemorySwap:   limits.MemorySwap,
-			CgroupParent: parent,
-		},
-	}
-	attachOptions := docker.AttachToContainerOptions{
-		// Stream logs to stdout and stderr.
-		OutputStream: os.Stdout,
-		ErrorStream:  os.Stderr,
-		Stream:       true,
-		Stdout:       true,
-		Stderr:       true,
-	}
-	if dc, ok := client.(*docker.Client); ok {
-		err = dockerRun(dc, createOptions, attachOptions)
-	} else if dc, ok := client.(*DaemonlessClient); ok {
-		err = daemonlessRun(ctx, dc.Store, dc.Isolation, createOptions, attachOptions)
-	} else {
-		err = ClientTypeUnknown
-	}
-
-	timing.RecordNewStep(ctx, buildapiv1.StagePostCommit, buildapiv1.StepExecPostCommitHook, startTime, metav1.Now())
-
-	return err
 }
 
 // buildPostCommit transforms the supplied BuildPostCommitSpec into dockerfile commands.
