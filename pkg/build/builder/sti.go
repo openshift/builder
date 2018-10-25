@@ -59,12 +59,6 @@ type runtimeBuilderFactory struct {
 func (r runtimeBuilderFactory) Builder(config *s2iapi.Config, overrides s2ibuild.Overrides) (s2ibuild.Builder, s2iapi.BuildInfo, error) {
 	var client docker.Client
 	var err error
-	if _, ok := r.dockerClient.(*dockerclient.Client); ok {
-		client, err = docker.NewEngineAPIClient(config.DockerConfig)
-		if err != nil {
-			return nil, s2iapi.BuildInfo{}, err
-		}
-	}
 	builder, buildInfo, err := s2i.Strategy(client, config, overrides)
 	return builder, buildInfo, err
 }
@@ -336,6 +330,7 @@ func (s *S2IBuilder) Build() error {
 		Dockerfile:          defaultDockerfilePath,
 		NoCache:             false,
 		Pull:                s.build.Spec.Strategy.SourceStrategy.ForcePull,
+		ContextDir:          "/tmp/dockercontext",
 	}
 
 	if s.cgLimits != nil {
@@ -376,7 +371,8 @@ func (s *S2IBuilder) Build() error {
 		glog.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
 		overwriteFile(config.AsDockerfile, out)
 	}
-	err = s.buildImage("/tmp/dockercontext", buildapiv1.ImageOptimizationNone, &opts)
+	// TODO pass ImageOptimization policy to the build?
+	err = s.dockerClient.BuildImage(opts)
 	timing.RecordNewStep(ctx, buildapiv1.StageBuild, buildapiv1.StepDockerBuild, startTime, metav1.Now())
 	if err != nil {
 		// TODO: Create new error states
@@ -458,17 +454,8 @@ func (s *S2IBuilder) pullImage(name string, authConfig dockerclient.AuthConfigur
 	return s.dockerClient.PullImage(options, authConfig)
 }
 
-func (s *S2IBuilder) buildImage(contextdir string, optimization buildapiv1.ImageOptimizationPolicy, opts *dockerclient.BuildImageOptions) error {
-	if _, ok := s.dockerClient.(*dockerclient.Client); ok {
-		glog.Infof("Using imagebuilder to create image %s", opts.Name)
-		return buildDirectImage(contextdir, false, opts)
-		// return buildImage(s.dockerClient, "/tmp/dockercontext", tar.New(s2ifs.NewFileSystem()), &opts)
-	}
-	if dc, ok := s.dockerClient.(*DaemonlessClient); ok {
-		glog.Infof("Using buildah to create image %s", opts.Name)
-		return buildDaemonlessImage(dc.SystemContext, dc.Store, dc.Isolation, contextdir, optimization, opts)
-	}
-	return s.dockerClient.BuildImage(*opts)
+func (s *S2IBuilder) buildImage(optimization buildapiv1.ImageOptimizationPolicy, opts dockerclient.BuildImageOptions) error {
+	return s.dockerClient.BuildImage(opts)
 }
 
 func (s *S2IBuilder) pushImage(name string, authConfig dockerclient.AuthConfiguration) (string, error) {
@@ -477,8 +464,8 @@ func (s *S2IBuilder) pushImage(name string, authConfig dockerclient.AuthConfigur
 		Name: repository,
 		Tag:  tag,
 	}
-	err := s.dockerClient.PushImage(options, authConfig)
-	return "", err
+	sha, err := s.dockerClient.PushImage(options, authConfig)
+	return sha, err
 }
 
 // buildEnvVars returns a map with build metadata to be inserted into Docker

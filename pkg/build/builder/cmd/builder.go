@@ -92,60 +92,56 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 	cfg.sourceSecretDir = os.Getenv("SOURCE_SECRET_PATH")
 
 	if needsDocker {
-		if _, ok := os.LookupEnv("DOCKER_HOST"); ok {
-			// dockerClient and dockerEndpoint (DOCKER_HOST)
-			// usually not set, defaults to docker socket
-			cfg.dockerClient, cfg.dockerEndpoint, err = bld.GetDockerClient()
-			if err != nil {
-				return nil, fmt.Errorf("no Docker configuration defined: %v", err)
+		var systemContext types.SystemContext
+		if registriesConfPath, ok := os.LookupEnv("BUILD_REGISTRIES_CONF_PATH"); ok && len(registriesConfPath) > 0 {
+			if _, err := os.Stat(registriesConfPath); err == nil {
+				systemContext.SystemRegistriesConfPath = registriesConfPath
 			}
-		} else {
-			var systemContext types.SystemContext
-			if registriesConfPath, ok := os.LookupEnv("BUILD_REGISTRIES_CONF_PATH"); ok && len(registriesConfPath) > 0 {
-				if _, err := os.Stat(registriesConfPath); err == nil {
-					systemContext.SystemRegistriesConfPath = registriesConfPath
-				}
-			}
-			if registriesDirPath, ok := os.LookupEnv("BUILD_REGISTRIES_DIR_PATH"); ok && len(registriesDirPath) > 0 {
-				if _, err := os.Stat(registriesDirPath); err == nil {
-					systemContext.RegistriesDirPath = registriesDirPath
-				}
-			}
-			if signaturePolicyPath, ok := os.LookupEnv("BUILD_SIGNATURE_POLICY_PATH"); ok && len(signaturePolicyPath) > 0 {
-				if _, err := os.Stat(signaturePolicyPath); err == nil {
-					systemContext.SignaturePolicyPath = signaturePolicyPath
-				}
-			}
-
-			storeOptions := storage.DefaultStoreOptions
-			if driver, ok := os.LookupEnv("BUILD_STORAGE_DRIVER"); ok {
-				storeOptions.GraphDriverName = driver
-			}
-			if storageConfPath, ok := os.LookupEnv("BUILD_STORAGE_CONF_PATH"); ok && len(storageConfPath) > 0 {
-				if _, err := os.Stat(storageConfPath); err == nil {
-					storage.ReloadConfigurationFile(storageConfPath, &storeOptions)
-				}
-			}
-
-			store, err := storage.GetStore(storeOptions)
-			cfg.store = store
-			if err != nil {
-				return nil, err
-			}
-			cfg.cleanup = func() {
-				if _, err := store.Shutdown(false); err != nil {
-					glog.V(0).Infof("Error shutting down storage: %v", err)
-				}
-			}
-			istorage.Transport.SetStore(store)
-
-			dockerClient, err := bld.GetDaemonlessClient(systemContext, store, os.Getenv("BUILD_ISOLATION"))
-			if err != nil {
-				return nil, fmt.Errorf("no daemonless store: %v", err)
-			}
-			cfg.dockerClient = dockerClient
-			cfg.dockerEndpoint = "n/a"
 		}
+		if registriesDirPath, ok := os.LookupEnv("BUILD_REGISTRIES_DIR_PATH"); ok && len(registriesDirPath) > 0 {
+			if _, err := os.Stat(registriesDirPath); err == nil {
+				systemContext.RegistriesDirPath = registriesDirPath
+			}
+		}
+		if signaturePolicyPath, ok := os.LookupEnv("BUILD_SIGNATURE_POLICY_PATH"); ok && len(signaturePolicyPath) > 0 {
+			if _, err := os.Stat(signaturePolicyPath); err == nil {
+				systemContext.SignaturePolicyPath = signaturePolicyPath
+			}
+		}
+
+		storeOptions := storage.DefaultStoreOptions
+		if driver, ok := os.LookupEnv("BUILD_STORAGE_DRIVER"); ok {
+			storeOptions.GraphDriverName = driver
+		}
+		if storageConfPath, ok := os.LookupEnv("BUILD_STORAGE_CONF_PATH"); ok && len(storageConfPath) > 0 {
+			if _, err := os.Stat(storageConfPath); err == nil {
+				storage.ReloadConfigurationFile(storageConfPath, &storeOptions)
+			}
+		}
+
+		store, err := storage.GetStore(storeOptions)
+		cfg.store = store
+		if err != nil {
+			return nil, err
+		}
+		cfg.cleanup = func() {
+			if _, err := store.Shutdown(false); err != nil {
+				glog.V(0).Infof("Error shutting down storage: %v", err)
+			}
+		}
+		istorage.Transport.SetStore(store)
+
+		dockerClient, err := bld.GetDaemonlessClient(systemContext, store, os.Getenv("BUILD_ISOLATION"))
+		if err != nil {
+			return nil, fmt.Errorf("no daemonless store: %v", err)
+		}
+		cfg.dockerClient = dockerClient
+
+		// S2I requires this to be set, even though we aren't going to use
+		// docker because we're just generating a dockerfile.
+		// TODO: update the validation in s2i to be smarter and then
+		// remove this.
+		cfg.dockerEndpoint = "n/a"
 	}
 
 	// buildsClient (KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT)

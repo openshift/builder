@@ -1,52 +1,12 @@
 package builder
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
-
-	"github.com/openshift/builder/pkg/build/builder/crioclient"
 )
-
-// getContainerNetworkConfig determines whether the builder is running as a container
-// by examining /proc/self/cgroup. This context is then passed to source-to-image.
-// It returns a suitable argument for NetworkMode.  If the container platform is
-// CRI-O, it also returns a path for /etc/resolv.conf, suitable for bindmounting.
-func getContainerNetworkConfig() (string, string, error) {
-	file, err := os.Open("/proc/self/cgroup")
-	if err != nil {
-		return "", "", err
-	}
-	defer file.Close()
-
-	if id, containerType := readNetClsCGroup(file); id != "" {
-		glog.V(5).Infof("container type=%s", containerType)
-		if containerType != "crio" {
-			return s2iapi.DockerNetworkModeContainerPrefix + id, "", nil
-		}
-
-		crioClient, err := crioclient.New("/var/run/crio/crio.sock")
-		if err != nil {
-			return "", "", err
-		}
-		info, err := crioClient.ContainerInfo(id)
-		if err != nil {
-			return "", "", err
-		}
-		pid := strconv.Itoa(info.Pid)
-		resolvConfHostPath := info.CrioAnnotations[crioclient.ResolvPath]
-		if len(resolvConfHostPath) == 0 {
-			return "", "", errors.New("/etc/resolv.conf hostpath is empty")
-		}
-
-		return fmt.Sprintf("netns:/proc/%s/ns/net", pid), resolvConfHostPath, nil
-	}
-	return "", "", nil
-}
 
 // GetCGroupLimits returns a struct populated with cgroup limit values gathered
 // from the local /sys/fs/cgroup filesystem.  Overflow values are set to

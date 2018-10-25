@@ -229,16 +229,16 @@ func removeDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag
 	return nil
 }
 
-func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration) error {
+func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration) (string, error) {
 	glog.V(2).Infof("Pushing image %q from local storage.", imageName)
 
 	if imageName == "" {
-		return fmt.Errorf("unable to push using empty destination image name")
+		return "", fmt.Errorf("unable to push using empty destination image name")
 	}
 
 	dest, err := alltransports.ParseImageName("docker://" + imageName)
 	if err != nil {
-		return fmt.Errorf("error parsing destination image name %s: %v", "docker://"+imageName, err)
+		return "", fmt.Errorf("error parsing destination image name %s: %v", "docker://"+imageName, err)
 	}
 
 	systemContext := sc
@@ -259,7 +259,7 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 
 	registries, err := sysregistriesv2.GetRegistries(&systemContext)
 	if err != nil {
-		return fmt.Errorf("error reading system registries configuration: %v", err)
+		return "", fmt.Errorf("error reading system registries configuration: %v", err)
 	}
 	if registry := sysregistriesv2.FindRegistry(imageName, registries); registry != nil {
 		if registry.Insecure {
@@ -280,8 +280,8 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	}
 
 	// TODO - do something with the digest
-	_, _, err = buildah.Push(context.TODO(), imageName, dest, options)
-	return err
+	_, digest, err := buildah.Push(context.TODO(), imageName, dest, options)
+	return string(digest), err
 }
 
 func inspectDaemonlessImage(sc types.SystemContext, store storage.Store, name string) (*docker.Image, error) {
@@ -488,7 +488,7 @@ func (d *DaemonlessClient) BuildImage(opts docker.BuildImageOptions) error {
 	return buildDaemonlessImage(d.SystemContext, d.Store, d.Isolation, opts.ContextDir, buildapiv1.ImageOptimizationNone, &opts)
 }
 
-func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) error {
+func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error) {
 	imageName := opts.Name
 	if opts.Tag != "" {
 		imageName = imageName + ":" + opts.Tag

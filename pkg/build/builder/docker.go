@@ -205,10 +205,13 @@ func (d *DockerBuilder) pushImage(name string, authConfig docker.AuthConfigurati
 		Name: repository,
 		Tag:  tag,
 	}
-	err := retryImageAction("Push", func() (pushErr error) {
-		return d.dockerClient.PushImage(options, authConfig)
+	var err error
+	sha := ""
+	retryImageAction("Push", func() (pushErr error) {
+		sha, err = d.dockerClient.PushImage(options, authConfig)
+		return err
 	})
-	return "", err
+	return sha, err
 }
 
 // copyConfigMaps copies all files from the directory where the configMap is
@@ -338,6 +341,7 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 		NoCache:             noCache,
 		Pull:                forcePull,
 		BuildArgs:           buildArgs,
+		ContextDir:          dir,
 	}
 
 	// Though we are capped on memory and cpu at the cgroup parent level,
@@ -354,17 +358,17 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 		opts.AuthConfigs = *auth
 	}
 
-	imageOptimizationPolicy := buildapiv1.ImageOptimizationNone
-	if s := d.build.Spec.Strategy.DockerStrategy; s != nil {
-		if policy := s.ImageOptimizationPolicy; policy != nil {
-			imageOptimizationPolicy = *policy
-		}
-	}
+	/*
+		// TODO: pass this to buildah
+			imageOptimizationPolicy := buildapiv1.ImageOptimizationNone
+			if s := d.build.Spec.Strategy.DockerStrategy; s != nil {
+				if policy := s.ImageOptimizationPolicy; policy != nil {
+					imageOptimizationPolicy = *policy
+				}
+			}
+	*/
 
-	if dc, ok := d.dockerClient.(*DaemonlessClient); ok {
-		return buildDaemonlessImage(dc.SystemContext, dc.Store, dc.Isolation, dir, imageOptimizationPolicy, &opts)
-	}
-	return dockerBuildImage(d.dockerClient, dir, d.tar, &opts)
+	return d.dockerClient.BuildImage(opts)
 }
 
 func getDockerfilePath(dir string, build *buildapiv1.Build) string {
