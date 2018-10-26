@@ -1,6 +1,7 @@
 package libpod
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/containers/libpod/pkg/ctime"
 	"github.com/containers/libpod/pkg/rootless"
+	"github.com/containers/libpod/pkg/util"
 	"github.com/coreos/go-systemd/activation"
 	"github.com/cri-o/ocicni/pkg/ocicni"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
@@ -230,7 +232,7 @@ func bindPorts(ports []ocicni.PortMapping) ([]*os.File, error) {
 func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, restoreContainer bool) (err error) {
 	var stderrBuf bytes.Buffer
 
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
@@ -377,6 +379,7 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 		childPipe.Close()
 		return err
 	}
+	defer cmd.Wait()
 
 	// We don't need childPipe on the parent side
 	childPipe.Close()
@@ -416,7 +419,12 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 	ch := make(chan syncStruct)
 	go func() {
 		var si *syncInfo
-		if err = json.NewDecoder(parentPipe).Decode(&si); err != nil {
+		rdr := bufio.NewReader(parentPipe)
+		b, err := rdr.ReadBytes('\n')
+		if err != nil {
+			ch <- syncStruct{err: err}
+		}
+		if err := json.Unmarshal(b, &si); err != nil {
 			ch <- syncStruct{err: err}
 			return
 		}
@@ -446,7 +454,7 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 func (r *OCIRuntime) updateContainerStatus(ctr *Container) error {
 	state := new(spec.State)
 
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
@@ -477,6 +485,7 @@ func (r *OCIRuntime) updateContainerStatus(ctr *Container) error {
 		}
 		return errors.Wrapf(err, "error getting container %s state. stderr/out: %s", ctr.ID(), out)
 	}
+	defer cmd.Wait()
 
 	errPipe.Close()
 	out, err := ioutil.ReadAll(outPipe)
@@ -556,7 +565,7 @@ func (r *OCIRuntime) updateContainerStatus(ctr *Container) error {
 // Sets time the container was started, but does not save it.
 func (r *OCIRuntime) startContainer(ctr *Container) error {
 	// TODO: streams should probably *not* be our STDIN/OUT/ERR - redirect to buffers?
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
@@ -573,7 +582,7 @@ func (r *OCIRuntime) startContainer(ctr *Container) error {
 // killContainer sends the given signal to the given container
 func (r *OCIRuntime) killContainer(ctr *Container, signal uint) error {
 	logrus.Debugf("Sending signal %d to container %s", signal, ctr.ID())
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
@@ -636,7 +645,7 @@ func (r *OCIRuntime) stopContainer(ctr *Container, timeout uint) error {
 		args = []string{"kill", "--all", ctr.ID(), "KILL"}
 	}
 
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
@@ -667,7 +676,7 @@ func (r *OCIRuntime) deleteContainer(ctr *Container) error {
 
 // pauseContainer pauses the given container
 func (r *OCIRuntime) pauseContainer(ctr *Container) error {
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
@@ -677,7 +686,7 @@ func (r *OCIRuntime) pauseContainer(ctr *Container) error {
 
 // unpauseContainer unpauses the given container
 func (r *OCIRuntime) unpauseContainer(ctr *Container) error {
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
@@ -698,7 +707,7 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 		return nil, errors.Wrapf(ErrEmptyID, "must provide a session ID for exec")
 	}
 
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return nil, err
 	}
@@ -780,7 +789,7 @@ func (r *OCIRuntime) execStopContainer(ctr *Container, timeout uint) error {
 	if len(execSessions) == 0 {
 		return nil
 	}
-	runtimeDir, err := GetRootlessRuntimeDir()
+	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}

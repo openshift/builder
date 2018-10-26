@@ -11,6 +11,7 @@ import (
 	"github.com/containers/buildah/util"
 	is "github.com/containers/image/storage"
 	"github.com/containers/image/types"
+	lu "github.com/containers/libpod/pkg/util"
 	"github.com/containers/storage"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -20,11 +21,18 @@ import (
 var needToShutdownStore = false
 
 func getStore(c *cli.Context) (storage.Store, error) {
-	options := storage.DefaultStoreOptions
+	options, err := lu.GetDefaultStoreOptions()
+	if err != nil {
+		return nil, err
+	}
 	if c.GlobalIsSet("root") || c.GlobalIsSet("runroot") {
 		options.GraphRoot = c.GlobalString("root")
 		options.RunRoot = c.GlobalString("runroot")
 	}
+	if err := os.Setenv("XDG_RUNTIME_DIR", options.RunRoot); err != nil {
+		return nil, errors.New("could not set XDG_RUNTIME_DIR")
+	}
+
 	if c.GlobalIsSet("storage-driver") {
 		options.GraphDriverName = c.GlobalString("storage-driver")
 		// If any options setup in config, these should be dropped if user overrode the driver

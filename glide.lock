@@ -1,5 +1,5 @@
-hash: 353fd9f8c50cc2d6f7a0eca6b6ee60c59e8e0153bf60c2da8c6095aa6ecbf405
-updated: 2018-10-21T19:53:44.198711724-04:00
+hash: 178ee381d8a978c1bb95cc7591706fb2a3de2b55642c9fb62d7f03f83b87b2f8
+updated: 2018-10-25T17:48:05.989770907-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -12,7 +12,7 @@ imports:
 - name: github.com/certifi/gocertifi
   version: ee1a9a0726d2ae45f54118cac878c990d4016ded
 - name: github.com/containerd/continuity
-  version: be9bd761db19d4fc551d40be908f02e00487511d
+  version: c220ac4f01b8a301edcb9c9c05d7600249138cfa
   subpackages:
   - pathdriver
 - name: github.com/containernetworking/cni
@@ -25,7 +25,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 1e4d1eb31e3d4515c6f6a4be15c5eb42735950ef
+  version: 87cb532ab33f1f242a56e362e799f95549519d3b
   subpackages:
   - bind
   - chroot
@@ -34,7 +34,7 @@ imports:
   - unshare
   - util
 - name: github.com/containers/image
-  version: 811145622be308acf5b5a60c51a3ac04f19b3b11
+  version: e65c0148134fc6ccb5ab4c09b5ed6162348683e4
   repo: https://github.com/nalind/image
   subpackages:
   - copy
@@ -68,13 +68,13 @@ imports:
   - types
   - version
 - name: github.com/containers/libpod
-  version: 0fefe3b191444cba8694119b5c30f484d146e162
+  version: f6e7807fa5970f328c1221c2e0c0aafe5f1c4b34
   subpackages:
   - pkg/chrootuser
   - pkg/rootless
   - pkg/secrets
 - name: github.com/containers/storage
-  version: 02db7cbb0bb082681f9855131fec8c8e1a3f4cb6
+  version: bd5818eda84012cf1db4dafbddd4b7509bb77142
   subpackages:
   - drivers
   - drivers/aufs
@@ -154,7 +154,6 @@ imports:
   - cli/config
   - client
   - opts
-  - pkg/archive
   - pkg/fileutils
   - pkg/homedir
   - pkg/idtools
@@ -194,8 +193,12 @@ imports:
 - name: github.com/fatih/camelcase
   version: f6a740d52f961c60348ebb109adde9f4635d7540
 - name: github.com/fsouza/go-dockerclient
-  version: 7511300f03c521cfc8e07e88ea8c915add790f50
+  version: ff9568be22191ade194515ed895fad125f89085e
   repo: https://github.com/openshift/go-dockerclient.git
+  subpackages:
+  - internal/archive
+  - internal/jsonmessage
+  - internal/term
 - name: github.com/getsentry/raven-go
   version: 32a13797442ccb601b11761d74232773c1402d14
 - name: github.com/ghodss/yaml
@@ -238,7 +241,7 @@ imports:
   - compiler
   - extensions
 - name: github.com/gorilla/mux
-  version: deb579d6e030503f430978ee229008b9bc912d40
+  version: 521ea7b17d02faf8d3afea6737573942ceac59c5
 - name: github.com/gregjones/httpcache
   version: 787624de3eb7bd915c329cba748687a3b22666a6
   subpackages:
@@ -257,6 +260,8 @@ imports:
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/json-iterator/go
   version: f2b4162afba35581b6d4a50d3b8f34e33c144682
+- name: github.com/konsorten/go-windows-terminal-sequences
+  version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
 - name: github.com/mailru/easyjson
   version: 2f5df55504ebc322e4d52d34df6a1f5b503bf26d
   subpackages:
@@ -266,7 +271,7 @@ imports:
 - name: github.com/MakeNowJust/heredoc
   version: bb23615498cded5e105af4ce27de75b089cbe851
 - name: github.com/mattn/go-runewidth
-  version: ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb
+  version: b20a3daf6a39840c202fd42cc23d53607162b045
 - name: github.com/mattn/go-shellwords
   version: f8471b0a71ded0ab910825ee2cf230f25de000f1
 - name: github.com/Microsoft/go-winio
@@ -308,7 +313,7 @@ imports:
   subpackages:
   - specs-go
 - name: github.com/opencontainers/runtime-tools
-  version: 1d69bd0f9c39677d0630e50664fbc3154ae61b88
+  version: b2f910b78637511a166d4c9358c56718df40a590
   subpackages:
   - error
   - filepath
@@ -317,16 +322,16 @@ imports:
   - specerror
   - validate
 - name: github.com/opencontainers/selinux
-  version: b6fa367ed7f534f9ba25391cc2d467085dbb445a
+  version: 077c8b6d1c18456fb7c792bc0de52295a0d1900e
   subpackages:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: a46029836bdc207f9949fc5f4907f0bfd3cf7763
+  version: ab94c17d53098bd73dcfbbc26c6ce078959b361f
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
-  version: 1fa528d3be060e4c7178eb69e76d37cf7e699e3c
+  version: 20de51e05a11c297b27b03396fb7d0cb598468f5
   subpackages:
   - build/clientset/versioned
   - build/clientset/versioned/fake
@@ -334,14 +339,14 @@ imports:
   - build/clientset/versioned/typed/build/v1
   - build/clientset/versioned/typed/build/v1/fake
 - name: github.com/openshift/imagebuilder
-  version: fbd4f31c568b767447302e08fb3531b33bcbf837
+  version: 3936998f7ae9647f81a970260d46921a7ca8ceef
   subpackages:
   - dockerclient
   - imageprogress
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: dd6554843a719fcb151deb612e2116371adedcb6
+  version: e24afd5d98a7d0b323b67f0707ef4f064743c93b
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -349,12 +354,12 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: 70dbb9140fdc7a4bdf4a7e2e3ec8ba8d9c87a12f
+  version: 96895a8c545e51b8cf4a8cb7ad38d1fd5f5f2f29
   subpackages:
   - pkg/api/apihelpers
   - pkg/build/apis/build
 - name: github.com/openshift/source-to-image
-  version: 9eb30303fd748ffa930371615635f1a3cddc97f0
+  version: 3c34ff83e47ae6947b157f053fd119bc378635ba
   subpackages:
   - pkg/api
   - pkg/api/constants
@@ -394,7 +399,7 @@ imports:
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: d58f94251046e7f70ac45aceea6cf6f61415ccca
+  version: 059132a15dd08d6704c67711dae0cf35ab991756
 - name: github.com/pkg/profile
   version: 057bc52a47ec3c79498dda63f4a6f8298725e976
 - name: github.com/pquerna/ffjson
@@ -403,7 +408,7 @@ imports:
   - fflib/v1
   - fflib/v1/internal
 - name: github.com/prometheus/client_golang
-  version: c5b7fccd204277076155f10851dad72b76a49317
+  version: f30f428035633da15d00d3dfefb0128c5e569ef4
   subpackages:
   - prometheus
 - name: github.com/PuerkitoBio/purell
@@ -419,7 +424,7 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 10ef21a441db47d8b13ebcc5fd2310f636973c77
 - name: github.com/sirupsen/logrus
-  version: 3e01752db0189b9157070a0e1668a620f9a85da2
+  version: 4fabf2fffcecfd47f802869b7b92d75e43c5a095
 - name: github.com/spf13/cobra
   version: fe5e611709b0c57fa4a89136deaa8e1d4004d053
 - name: github.com/spf13/pflag
@@ -439,7 +444,7 @@ imports:
   - internal/xlog
   - lzma
 - name: github.com/vbatts/tar-split
-  version: 61b49a82bb343c846b8dd388c20187c7b3f3c7b5
+  version: 620714a4c508c880ac1bdda9c8370a2b19af1a55
   subpackages:
   - archive/tar
   - tar/asm

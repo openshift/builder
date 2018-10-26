@@ -12,14 +12,19 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	cnitypes "github.com/containernetworking/cni/pkg/types/current"
+	"github.com/containernetworking/plugins/pkg/ns"
 	crioAnnotations "github.com/containers/libpod/pkg/annotations"
 	"github.com/containers/libpod/pkg/chrootuser"
+	"github.com/containers/libpod/pkg/criu"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/storage/pkg/idtools"
+	"github.com/cyphar/filepath-securejoin"
+	"github.com/opencontainers/runc/libcontainer/user"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/opencontainers/selinux/go-selinux/label"
@@ -48,24 +53,61 @@ func (c *Container) unmountSHM(mount string) error {
 // prepare mounts the container and sets up other required resources like net
 // namespaces
 func (c *Container) prepare() (err error) {
-	// Mount storage if not mounted
-	if err := c.mountStorage(); err != nil {
-		return err
-	}
+	var (
+		wg                              sync.WaitGroup
+		netNS                           ns.NetNS
+		networkStatus                   []*cnitypes.Result
+		createNetNSErr, mountStorageErr error
+		mountPoint                      string
+		saveNetworkStatus               bool
+	)
 
-	// Set up network namespace if not already set up
-	if c.config.CreateNetNS && c.state.NetNS == nil && !c.config.PostConfigureNetNS {
-		if err := c.runtime.createNetNS(c); err != nil {
-			// Tear down storage before exiting to make sure we
-			// don't leak mounts
-			if err2 := c.cleanupStorage(); err2 != nil {
-				logrus.Errorf("Error cleaning up storage for container %s: %v", c.ID(), err2)
-			}
-			return err
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		// Set up network namespace if not already set up
+		if c.config.CreateNetNS && c.state.NetNS == nil && !c.config.PostConfigureNetNS {
+			saveNetworkStatus = true
+			netNS, networkStatus, createNetNSErr = c.runtime.createNetNS(c)
 		}
+	}()
+	// Mount storage if not mounted
+	go func() {
+		defer wg.Done()
+		mountPoint, mountStorageErr = c.mountStorage()
+	}()
+
+	wg.Wait()
+	if createNetNSErr != nil {
+		if mountStorageErr != nil {
+			logrus.Error(createNetNSErr)
+			return mountStorageErr
+		}
+		return createNetNSErr
+	}
+	if mountStorageErr != nil {
+		return mountStorageErr
 	}
 
-	return nil
+	// Assign NetNS attributes to container
+	if saveNetworkStatus {
+		c.state.NetNS = netNS
+		c.state.NetworkStatus = networkStatus
+	}
+
+	// Finish up mountStorage
+	c.state.Mounted = true
+	c.state.Mountpoint = mountPoint
+	if c.state.UserNSRoot == "" {
+		c.state.RealMountpoint = c.state.Mountpoint
+	} else {
+		c.state.RealMountpoint = filepath.Join(c.state.UserNSRoot, "mountpoint")
+	}
+
+	logrus.Debugf("Created root filesystem for container %s at %s", c.ID(), c.state.Mountpoint)
+	// Save the container
+	return c.save()
 }
 
 // cleanupNetwork unmounts and cleans up the container's network
@@ -103,7 +145,6 @@ func (c *Container) generateSpec(ctx context.Context) (*spec.Spec, error) {
 			g.AddOrReplaceLinuxNamespace(spec.NetworkNamespace, c.state.NetNS.Path())
 		}
 	}
-
 	// Check if the spec file mounts contain the label Relabel flags z or Z.
 	// If they do, relabel the source directory and then remove the option.
 	for _, m := range g.Mounts() {
@@ -196,12 +237,28 @@ func (c *Container) generateSpec(ctx context.Context) (*spec.Spec, error) {
 
 	// Look up and add groups the user belongs to, if a group wasn't directly specified
 	if !rootless.IsRootless() && !strings.Contains(c.config.User, ":") {
-		groups, err := chrootuser.GetAdditionalGroupsForUser(c.state.Mountpoint, uint64(g.Config.Process.User.UID))
-		if err != nil && errors.Cause(err) != chrootuser.ErrNoSuchUser {
+		var groupDest, passwdDest string
+		defaultExecUser := user.ExecUser{
+			Uid:  0,
+			Gid:  0,
+			Home: "/",
+		}
+
+		// Make sure the /etc/group  and /etc/passwd destinations are not a symlink to something naughty
+		if groupDest, err = securejoin.SecureJoin(c.state.Mountpoint, "/etc/group"); err != nil {
+			logrus.Debug(err)
 			return nil, err
 		}
-		for _, gid := range groups {
-			g.AddProcessAdditionalGid(gid)
+		if passwdDest, err = securejoin.SecureJoin(c.state.Mountpoint, "/etc/passwd"); err != nil {
+			logrus.Debug(err)
+			return nil, err
+		}
+		execUser, err := user.GetExecUserPath(c.config.User, &defaultExecUser, passwdDest, groupDest)
+		if err != nil {
+			return nil, err
+		}
+		for _, gid := range execUser.Sgids {
+			g.AddProcessAdditionalGid(uint32(gid))
 		}
 	}
 
@@ -368,6 +425,10 @@ func (c *Container) addNamespaceContainer(g *generate.Generator, ns LinuxNS, ctr
 
 func (c *Container) checkpoint(ctx context.Context, keep bool) (err error) {
 
+	if !criu.CheckForCriu() {
+		return errors.Errorf("checkpointing a container requires at least CRIU %d", criu.MinCriuVersion)
+	}
+
 	if c.state.State != ContainerStateRunning {
 		return errors.Wrapf(ErrCtrStateInvalid, "%q is not running, cannot checkpoint", c.state.State)
 	}
@@ -406,6 +467,10 @@ func (c *Container) checkpoint(ctx context.Context, keep bool) (err error) {
 }
 
 func (c *Container) restore(ctx context.Context, keep bool) (err error) {
+
+	if !criu.CheckForCriu() {
+		return errors.Errorf("restoring a container requires at least CRIU %d", criu.MinCriuVersion)
+	}
 
 	if (c.state.State != ContainerStateConfigured) && (c.state.State != ContainerStateExited) {
 		return errors.Wrapf(ErrCtrStateInvalid, "container %s is running or paused, cannot restore", c.ID())

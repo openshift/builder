@@ -194,12 +194,18 @@ func (c *Container) setupStorage(ctx context.Context) error {
 		return errors.Wrapf(ErrInvalidArg, "must provide image ID and image name to use an image")
 	}
 
-	var options *storage.ContainerOptions
-	if c.config.Rootfs == "" {
-		options = &storage.ContainerOptions{c.config.IDMappings}
-
+	options := storage.ContainerOptions{
+		IDMappingOptions: storage.IDMappingOptions{
+			HostUIDMapping: true,
+			HostGIDMapping: true,
+		},
+		LabelOpts: c.config.LabelOpts,
 	}
-	containerInfo, err := c.runtime.storageService.CreateContainerStorage(ctx, c.runtime.imageContext, c.config.RootfsImageName, c.config.RootfsImageID, c.config.Name, c.config.ID, c.config.MountLabel, options)
+
+	if c.config.Rootfs == "" {
+		options.IDMappingOptions = c.config.IDMappings
+	}
+	containerInfo, err := c.runtime.storageService.CreateContainerStorage(ctx, c.runtime.imageContext, c.config.RootfsImageName, c.config.RootfsImageID, c.config.Name, c.config.ID, options)
 	if err != nil {
 		return errors.Wrapf(err, "error creating container storage")
 	}
@@ -225,6 +231,8 @@ func (c *Container) setupStorage(ctx context.Context) error {
 		}
 	}
 
+	c.config.ProcessLabel = containerInfo.ProcessLabel
+	c.config.MountLabel = containerInfo.MountLabel
 	c.config.StaticDir = containerInfo.Dir
 	c.state.RunDir = containerInfo.RunDir
 	c.state.DestinationRunDir = c.state.RunDir
@@ -742,30 +750,31 @@ func (c *Container) restartWithTimeout(ctx context.Context, timeout uint) (err e
 // TODO: Add ability to override mount label so we can use this for Mount() too
 // TODO: Can we use this for export? Copying SHM into the export might not be
 // good
-func (c *Container) mountStorage() (err error) {
+func (c *Container) mountStorage() (string, error) {
+	var err error
 	// Container already mounted, nothing to do
 	if c.state.Mounted {
-		return nil
+		return c.state.Mountpoint, nil
 	}
 
 	if !rootless.IsRootless() {
 		// TODO: generalize this mount code so it will mount every mount in ctr.config.Mounts
 		mounted, err := mount.Mounted(c.config.ShmDir)
 		if err != nil {
-			return errors.Wrapf(err, "unable to determine if %q is mounted", c.config.ShmDir)
+			return "", errors.Wrapf(err, "unable to determine if %q is mounted", c.config.ShmDir)
 		}
 
 		if err := os.Chown(c.config.ShmDir, c.RootUID(), c.RootGID()); err != nil {
-			return errors.Wrapf(err, "failed to chown %s", c.config.ShmDir)
+			return "", errors.Wrapf(err, "failed to chown %s", c.config.ShmDir)
 		}
 
 		if !mounted {
 			shmOptions := fmt.Sprintf("mode=1777,size=%d", c.config.ShmSize)
 			if err := c.mountSHM(shmOptions); err != nil {
-				return err
+				return "", err
 			}
 			if err := os.Chown(c.config.ShmDir, c.RootUID(), c.RootGID()); err != nil {
-				return errors.Wrapf(err, "failed to chown %s", c.config.ShmDir)
+				return "", errors.Wrapf(err, "failed to chown %s", c.config.ShmDir)
 			}
 		}
 	}
@@ -774,28 +783,11 @@ func (c *Container) mountStorage() (err error) {
 	if mountPoint == "" {
 		mountPoint, err = c.mount()
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
-	c.state.Mounted = true
-	c.state.Mountpoint = mountPoint
-	if c.state.UserNSRoot == "" {
-		c.state.RealMountpoint = c.state.Mountpoint
-	} else {
-		c.state.RealMountpoint = filepath.Join(c.state.UserNSRoot, "mountpoint")
-	}
 
-	logrus.Debugf("Created root filesystem for container %s at %s", c.ID(), c.state.Mountpoint)
-
-	defer func() {
-		if err != nil {
-			if err2 := c.cleanupStorage(); err2 != nil {
-				logrus.Errorf("Error unmounting storage for container %s: %v", c.ID(), err)
-			}
-		}
-	}()
-
-	return c.save()
+	return mountPoint, nil
 }
 
 // cleanupStorage unmounts and cleans up the container's root filesystem

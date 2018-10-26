@@ -48,8 +48,8 @@ var (
 		"SCCExecRestrictions",
 	)
 
-	// openshiftAdmissionControlPlugins gives the in-order default admission chain for openshift resources.
-	openshiftAdmissionControlPlugins = []string{
+	// OpenShiftAdmissionPlugins gives the in-order default admission chain for openshift resources.
+	OpenShiftAdmissionPlugins = []string{
 		lifecycle.PluginName,
 		"ProjectRequestLimit",
 		"openshift.io/JenkinsBootstrapper",
@@ -180,6 +180,7 @@ func fixupAdmissionPlugins(plugins []string) []string {
 
 func NewAdmissionChains(
 	admissionConfigFiles []string,
+	explicitOn, explicitOff []string,
 	pluginConfig map[string]configv1.AdmissionPluginConfig,
 	admissionInitializer admission.PluginInitializer,
 	admissionDecorator admission.Decorator,
@@ -210,11 +211,17 @@ func NewAdmissionChains(
 		admissionPluginConfigFilename = tempFile.Name()
 	}
 
-	admissionPluginNames := openshiftAdmissionControlPlugins
-	admissionPluginNames = fixupAdmissionPlugins(admissionPluginNames)
-
-	admissionChain, err := newAdmissionChainFunc(admissionPluginNames, admissionPluginConfigFilename, admissionInitializer, admissionDecorator)
-
+	allOffPlugins := append(DefaultOffPlugins.List(), explicitOff...)
+	disabledPlugins := sets.NewString(allOffPlugins...)
+	enabledPlugins := sets.NewString(explicitOn...)
+	disabledPlugins = disabledPlugins.Difference(enabledPlugins)
+	orderedPlugins := []string{}
+	for _, plugin := range OpenShiftAdmissionPlugins {
+		if !disabledPlugins.Has(plugin) {
+			orderedPlugins = append(orderedPlugins, plugin)
+		}
+	}
+	admissionChain, err := newAdmissionChainFunc(fixupAdmissionPlugins(orderedPlugins), admissionPluginConfigFilename, admissionInitializer, admissionDecorator)
 	if err != nil {
 		return nil, err
 	}

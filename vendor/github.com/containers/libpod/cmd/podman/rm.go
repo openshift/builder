@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
+	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/libpod"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
@@ -45,60 +45,53 @@ Running containers will not be removed without the -f option.
 
 // saveCmd saves the image to either docker-archive or oci
 func rmCmd(c *cli.Context) error {
+	var (
+		delContainers []*libpod.Container
+		lastError     error
+		deleteFuncs   []shared.ParallelWorkerInput
+	)
+
 	ctx := getContext()
 	if err := validateFlags(c, rmFlags); err != nil {
 		return err
 	}
-
 	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	args := c.Args()
-	if c.Bool("latest") && c.Bool("all") {
-		return errors.Errorf("--all and --latest cannot be used together")
+	if err := checkAllAndLatest(c); err != nil {
+		return err
 	}
 
-	if len(args) == 0 && !c.Bool("all") && !c.Bool("latest") {
-		return errors.Errorf("specify one or more containers to remove")
-	}
+	delContainers, lastError = getAllOrLatestContainers(c, runtime, -1, "all")
 
-	var delContainers []*libpod.Container
-	var lastError error
-	if c.Bool("all") {
-		delContainers, err = runtime.GetContainers()
-		if err != nil {
-			return errors.Wrapf(err, "unable to get container list")
-		}
-	} else if c.Bool("latest") {
-		lastCtr, err := runtime.GetLatestContainer()
-		if err != nil {
-			return errors.Wrapf(err, "unable to get latest container")
-		}
-		delContainers = append(delContainers, lastCtr)
-	} else {
-		for _, i := range args {
-			container, err := runtime.LookupContainer(i)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				lastError = errors.Wrapf(err, "unable to find container %s", i)
-				continue
-			}
-			delContainers = append(delContainers, container)
-		}
-	}
 	for _, container := range delContainers {
-		err = runtime.RemoveContainer(ctx, container, c.Bool("force"))
-		if err != nil {
-			if lastError != nil {
-				fmt.Fprintln(os.Stderr, lastError)
-			}
-			lastError = errors.Wrapf(err, "failed to delete container %v", container.ID())
-		} else {
-			fmt.Println(container.ID())
+		con := container
+		f := func() error {
+			return runtime.RemoveContainer(ctx, con, c.Bool("force"))
 		}
+
+		deleteFuncs = append(deleteFuncs, shared.ParallelWorkerInput{
+			ContainerID:  con.ID(),
+			ParallelFunc: f,
+		})
+	}
+	maxWorkers := shared.Parallelize("rm")
+	if c.GlobalIsSet("max-workers") {
+		maxWorkers = c.GlobalInt("max-workers")
+	}
+	logrus.Debugf("Setting maximum workers to %d", maxWorkers)
+
+	deleteErrors := shared.ParallelExecuteWorkerPool(maxWorkers, deleteFuncs)
+	for cid, result := range deleteErrors {
+		if result != nil {
+			fmt.Println(result.Error())
+			lastError = result
+			continue
+		}
+		fmt.Println(cid)
 	}
 	return lastError
 }
