@@ -13,7 +13,7 @@ import:
   - builder/dockerfile/parser
 - package: github.com/fsouza/go-dockerclient
   repo:    https://github.com/openshift/go-dockerclient.git
-  version: openshift-3.9
+  version: openshift-4.0
 - package: github.com/golang/glog
 - package: github.com/opencontainers/runc
   subpackages:
@@ -88,7 +88,7 @@ import:
 - package: golang.org/x/sys
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
 - package: github.com/containers/storage
-  version: 02db7cbb0bb082681f9855131fec8c8e1a3f4cb6
+  version: master
 # builds
 - package: github.com/containers/buildah
   version: master
@@ -97,7 +97,7 @@ import:
   version: ip-registry
 # new enough to know how to disable itself when cross-compiling
 - package: github.com/opencontainers/selinux
-  version: b6fa367ed7f534f9ba25391cc2d467085dbb445a
+  version: master
 - package: github.com/opencontainers/runtime-tools
   version: master
 - package: github.com/opencontainers/runtime-spec

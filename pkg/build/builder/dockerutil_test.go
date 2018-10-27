@@ -1,22 +1,15 @@
 package builder
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"reflect"
-	"regexp"
-	"strings"
 	"testing"
 
 	docker "github.com/fsouza/go-dockerclient"
 )
 
 type FakeDocker struct {
-	pushImageFunc   func(opts docker.PushImageOptions, auth docker.AuthConfiguration) error
+	pushImageFunc   func(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error)
 	pullImageFunc   func(opts docker.PullImageOptions, auth docker.AuthConfiguration) error
 	buildImageFunc  func(opts docker.BuildImageOptions) error
 	removeImageFunc func(name string) error
@@ -42,20 +35,20 @@ func NewFakeDockerClient() *FakeDocker {
 
 var fooBarRunTimes = 0
 
-func fakePushImageFunc(opts docker.PushImageOptions, auth docker.AuthConfiguration) error {
+func fakePushImageFunc(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error) {
 	switch opts.Tag {
 	case "tag_test_succ_foo_bar":
-		return nil
+		return "", nil
 	case "tag_test_err_exist_foo_bar":
 		fooBarRunTimes++
-		return errors.New(RetriableErrors[0])
+		return "", errors.New(RetriableErrors[0])
 	case "tag_test_err_no_exist_foo_bar":
-		return errors.New("no_exist_err_foo_bar")
+		return "", errors.New("no_exist_err_foo_bar")
 	case "tag_test_err_no_exist_progress_only":
 		_, _ = opts.OutputStream.Write([]byte(`{"error":"no_exist_progress_only"}`)) // Ignore error even if returned from the progressWriter, test that progressWriter.Close is used.
-		return nil                                                                   // Don't fail the PushImage either, we want to ensure the progres parser detects this
+		return "", nil                                                               // Don't fail the PushImage either, we want to ensure the progres parser detects this
 	}
-	return nil
+	return "", nil
 }
 
 func fakePullImageFunc(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
@@ -80,12 +73,12 @@ func (d *FakeDocker) BuildImage(opts docker.BuildImageOptions) error {
 	}
 	return nil
 }
-func (d *FakeDocker) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) error {
+func (d *FakeDocker) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error) {
 	d.pushImageCalled = true
 	if d.pushImageFunc != nil {
 		return d.pushImageFunc(opts, auth)
 	}
-	return d.errPushImage
+	return "", d.errPushImage
 }
 func (d *FakeDocker) RemoveImage(name string) error {
 	if d.removeImageFunc != nil {
@@ -125,17 +118,6 @@ func (d *FakeDocker) TagImage(name string, opts docker.TagImageOptions) error {
 	return nil
 }
 
-func TestDockerPush(t *testing.T) {
-	verifyFunc := func(opts docker.PushImageOptions, auth docker.AuthConfiguration) error {
-		if opts.Name != "test/image" {
-			t.Errorf("Unexpected image name: %s", opts.Name)
-		}
-		return nil
-	}
-	fd := &FakeDocker{pushImageFunc: verifyFunc}
-	dockerPushImage(fd, "test/image", docker.AuthConfiguration{})
-}
-
 func TestTagImage(t *testing.T) {
 	tests := []struct {
 		old, new, newRepo, newTag string
@@ -161,422 +143,106 @@ func TestTagImage(t *testing.T) {
 	}
 }
 
-func TestPushImage(t *testing.T) {
-	var testImageName string
-
-	bakRetryCount := DefaultPushOrPullRetryCount
-	bakRetryDelay := DefaultPushOrPullRetryDelay
-
-	fakeDocker := NewFakeDockerClient()
-	fakeDocker.pushImageFunc = fakePushImageFunc
-	testAuth := docker.AuthConfiguration{
-		Username:      "username_foo_bar",
-		Password:      "password_foo_bar",
-		Email:         "email_foo_bar",
-		ServerAddress: "serveraddress_foo_bar",
-	}
-
-	//make test quickly, and recover the value after testing
-	DefaultPushOrPullRetryCount = 2
-	defer func() { DefaultPushOrPullRetryCount = bakRetryCount }()
-	DefaultPushOrPullRetryDelay = 1
-	defer func() { DefaultPushOrPullRetryDelay = bakRetryDelay }()
-
-	//expect succ
-	testImageName = "repo_foo_bar:tag_test_succ_foo_bar"
-	if _, err := dockerPushImage(fakeDocker, testImageName, testAuth); err != nil {
-		t.Errorf("Unexpect push image : %v, want succ", err)
-	}
-
-	//expect fail
-	testImageName = "repo_foo_bar:tag_test_err_exist_foo_bar"
-	_, err := dockerPushImage(fakeDocker, testImageName, testAuth)
-	if err == nil {
-		t.Errorf("Unexpect push image : %v, want error", err)
-	}
-	//expect run 3 times
-	if fooBarRunTimes != (DefaultPushOrPullRetryCount + 1) {
-		t.Errorf("Unexpect run times : %d, we expect run three times", fooBarRunTimes)
-	}
-
-	//expect fail
-	testImageName = "repo_foo_bar:tag_test_err_no_exist_foo_bar"
-	if _, err := dockerPushImage(fakeDocker, testImageName, testAuth); err == nil {
-		t.Errorf("Unexpect push image : %v, want error", err)
-	}
-	defer func() { fooBarRunTimes = 0 }()
-
-	//expect fail
-	testImageName = "repo_foo_bar:tag_test_err_no_exist_progress_only"
-	if _, err := dockerPushImage(fakeDocker, testImageName, testAuth); err == nil {
-		t.Errorf("Unexpect push image : %v, want error", err)
-	}
+type testcase struct {
+	name   string
+	input  map[string]string
+	expect string
+	fail   bool
 }
 
-func TestPullImage(t *testing.T) {
-	var testImageName string
-
-	bakRetryCount := DefaultPushOrPullRetryCount
-	bakRetryDelay := DefaultPushOrPullRetryDelay
-
-	fakeDocker := NewFakeDockerClient()
-	fakeDocker.pullImageFunc = fakePullImageFunc
-	testAuth := docker.AuthConfiguration{
-		Username:      "username_foo_bar",
-		Password:      "password_foo_bar",
-		Email:         "email_foo_bar",
-		ServerAddress: "serveraddress_foo_bar",
-	}
-
-	//make test quickly, and recover the value after testing
-	DefaultPushOrPullRetryCount = 2
-	defer func() { DefaultPushOrPullRetryCount = bakRetryCount }()
-	DefaultPushOrPullRetryDelay = 1
-	defer func() { DefaultPushOrPullRetryDelay = bakRetryDelay }()
-
-	//expect succ
-	testImageName = "repo_test_succ_foo_bar"
-	if err := dockerPullImage(fakeDocker, testImageName, testAuth); err != nil {
-		t.Errorf("Unexpect pull image : %v, want succ", err)
-	}
-
-	//expect fail
-	testImageName = "repo_test_err_exist_foo_bar"
-	err := dockerPullImage(fakeDocker, testImageName, testAuth)
-	if err == nil {
-		t.Errorf("Unexpect pull image : %v, want error", err)
-	}
-	//expect run 3 times
-	if fooBarRunTimes != (DefaultPushOrPullRetryCount + 1) {
-		t.Errorf("Unexpect run times : %d, we expect run three times", fooBarRunTimes)
-	}
-
-	//expect fail
-	testImageName = "repo_test_err_no_exist_foo_bar"
-	if err := dockerPullImage(fakeDocker, testImageName, testAuth); err == nil {
-		t.Errorf("Unexpect pull image : %v, want error", err)
-	}
-	defer func() { fooBarRunTimes = 0 }()
-
-	//expect fail
-	testImageName = "repo_test_err_no_exist_progress_only"
-	if err := dockerPullImage(fakeDocker, testImageName, testAuth); err == nil {
-		t.Errorf("Unexpect pull image : %v, want error", err)
-	}
-}
-
-func TestGetContainerNameOrID(t *testing.T) {
-	c := &docker.Container{}
-	c.ID = "ID"
-	c.Name = "Name"
-	ret := getContainerNameOrID(c)
-	if ret != c.Name {
-		t.Errorf("getContainerNameOrID err. ret is %s", ret)
-	}
-
-	c.Name = ""
-	ret = getContainerNameOrID(c)
-	if ret != c.ID {
-		t.Errorf("getContainerNameOrID err.ret is %s", ret)
-	}
-}
-
-func TestPushWriter(t *testing.T) {
-	tests := []struct {
-		Writes    []string
-		Expected  []progressLine
-		ExpectErr string
-	}{
+func TestCGroupParentExtraction(t *testing.T) {
+	tcs := []testcase{
 		{
-			Writes:   []string{"", "\n"},
-			Expected: []progressLine{},
-		},
-		{
-			// The writer doesn't know if another write is coming or not so
-			// this is not an error.
-			Writes:   []string{"{"},
-			Expected: []progressLine{},
-		},
-		{
-			Writes:   []string{"{}"},
-			Expected: []progressLine{{}},
-		},
-		{
-			Writes:   []string{"{", "}{", "}"},
-			Expected: []progressLine{{}, {}},
-		},
-		{
-			Writes:   []string{" ", "{", " ", "}{}{", "}"},
-			Expected: []progressLine{{}, {}, {}},
-		},
-		{
-			Writes:   []string{"{}\r\n{}\r\n{}\r\n"},
-			Expected: []progressLine{{}, {}, {}},
-		},
-		{
-			Writes: []string{"{\"progress\": \"1\"}\r\n{\"progress\": \"2\"}\r\n{\"progress\": \"3\"}\r\n"},
-			Expected: []progressLine{
-				{Progress: "1"},
-				{Progress: "2"},
-				{Progress: "3"},
+			name: "systemd",
+			input: map[string]string{
+				"cpu":          "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"cpuacct":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"name=systemd": "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"net_prio":     "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"freezer":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"blkio":        "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"net_cls":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"memory":       "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"hugetlb":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"perf_event":   "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"cpuset":       "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"devices":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
+				"pids":         "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344.scope",
 			},
+			expect: "kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice",
 		},
 		{
-			Writes:    []string{"}"},
-			ExpectErr: "invalid character",
-		},
-		{
-			Writes:    []string{`{"error": "happened"}`},
-			ExpectErr: "happened",
-		},
-		{
-			Writes:    []string{`{"status": "good!"}{"`, `error": "front fell off"}`},
-			ExpectErr: "front fell off",
-		},
-		{
-			Writes: []string{`{"status": "good!"}{"st`, `atus": `, `"even better"}`},
-			Expected: []progressLine{
-				{Status: "good!"},
-				{Status: "even better"},
+			name: "systemd-besteffortpod",
+			input: map[string]string{
+				"memory": "/kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod8d369e32_521b_11e7_8df4_507b9d27b5d9.slice/docker-fbf6fe5e4effd80b6a9b3318dd0e5f538b9c4ba8918c174768720c83b338a41f.scope",
 			},
-		},
-	}
-
-main:
-	for i, tc := range tests {
-		decoded := []progressLine{}
-		w := newPushWriter(func(line progressLine) error {
-			decoded = append(decoded, line)
-			if len(line.Error) > 0 {
-				return errors.New(line.Error)
-			} else {
-				return nil
-			}
-		})
-
-		for _, part := range tc.Writes {
-			n, err := w.Write([]byte(part))
-
-			partLen := len([]byte(part))
-			if n != partLen {
-				t.Errorf("[%d] Wrote %d bytes but Write() returned %d", i, partLen, n)
-				continue main
-			}
-
-			if err != nil {
-				if len(tc.ExpectErr) > 0 && !strings.Contains(err.Error(), tc.ExpectErr) {
-					t.Errorf("[%d] Expected error: %s, got: %s", i, tc.ExpectErr, err)
-				}
-				if len(tc.ExpectErr) == 0 {
-					t.Errorf("[%d] Unexpected error: %s", i, err)
-				}
-				continue main
-			}
-		}
-
-		if len(tc.ExpectErr) > 0 {
-			t.Errorf("[%d] Expected error %q, got none", i, tc.ExpectErr)
-			continue main
-		}
-
-		if !reflect.DeepEqual(tc.Expected, decoded) {
-			t.Errorf("[%d] Expected: %#v\nGot: %#v\n", i, tc.Expected, decoded)
-			continue main
-		}
-	}
-}
-
-func TestPushImageDigests(t *testing.T) {
-	tests := []struct {
-		Filename  string
-		Expected  string
-		ExpectErr bool
-	}{
-		{
-			Filename: "docker-push-1.10.txt",
-			Expected: "sha256:adc72a07c3a96ffc2201b1d9bf84b8f2416932a8e39000f61d0cda10761f2658",
+			expect: "kubepods-besteffort-pod8d369e32_521b_11e7_8df4_507b9d27b5d9.slice",
 		},
 		{
-			Filename: "docker-push-1.12.txt",
-			Expected: "sha256:29f5d56d12684887bdfa50dcd29fc31eea4aaf4ad3bec43daf19026a7ce69912",
-		},
-		{
-			Filename: "docker-push-exists.txt",
-			Expected: "sha256:29f5d56d12684887bdfa50dcd29fc31eea4aaf4ad3bec43daf19026a7ce69912",
-		},
-		{
-			Filename: "docker-push-0digests.txt",
-			Expected: "",
-		},
-		{
-			Filename: "docker-push-2digests.txt",
-			Expected: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		},
-		{
-			Filename:  "docker-push-malformed1.txt",
-			ExpectErr: true,
-		},
-		{
-			Filename:  "docker-push-malformed2.txt",
-			ExpectErr: true,
-		},
-		{
-			Filename:  "docker-push-malformed3.txt",
-			ExpectErr: true,
-		},
-		{
-			Filename: "empty.txt",
-			Expected: "",
-		},
-	}
-
-	for _, tc := range tests {
-		fakeDocker := NewFakeDockerClient()
-		fakeDocker.pushImageFunc = func(opts docker.PushImageOptions, auth docker.AuthConfiguration) error {
-			if opts.OutputStream == nil {
-				return fmt.Errorf("Expected OutputStream != nil")
-			}
-
-			fh, err := os.Open(filepath.Join("testdata", tc.Filename))
-			if err != nil {
-				return fmt.Errorf("Cannot open %q: %s", tc.Filename, err)
-			}
-
-			_, err = io.Copy(opts.OutputStream, fh)
-			if err != nil {
-				return fmt.Errorf("[%s] Failed to process output stream for: %s", tc.Filename, err)
-			}
-
-			return nil
-		}
-		testAuth := docker.AuthConfiguration{}
-
-		digest, err := dockerPushImage(fakeDocker, "testimage/"+tc.Filename, testAuth)
-		if err != nil && !tc.ExpectErr {
-			t.Errorf("[%s] Unexpected error: %v", tc.Filename, err)
-			continue
-		} else if err == nil && tc.ExpectErr {
-			t.Errorf("[%s] Expected error, got success", tc.Filename)
-			continue
-		}
-
-		if digest != tc.Expected {
-			t.Errorf("[%s] Digest mismatch: expected %q, got %q", tc.Filename, tc.Expected, digest)
-			continue
-		}
-	}
-
-}
-
-func TestSimpleProgress(t *testing.T) {
-	tests := []struct {
-		Filename  string
-		Expected  string
-		ExpectErr bool
-	}{
-		{
-			Filename: "docker-push-1.10.txt",
-			Expected: "(?ms)The push.*Preparing.*Waiting.*Layer.*Pushing.*Pushed.*digest",
-		},
-		{
-			Filename: "docker-push-1.12.txt",
-			Expected: "(?ms)The push.*Preparing.*Pushing.*Pushed.*digest",
-		},
-		{
-			Filename: "docker-push-exists.txt",
-			Expected: "(?ms)The push.*Preparing.*Layer.*digest",
-		},
-		{
-			Filename: "docker-push-0digests.txt",
-			Expected: "(?ms)The push.*Preparing.*Pushing.*Pushed",
-		},
-		{
-			Filename: "docker-push-2digests.txt",
-			Expected: "(?ms)The push.*Preparing.*Pushing.*Pushed.*digest",
-		},
-		{
-			Filename:  "docker-push-malformed1.txt",
-			Expected:  "(?ms)The push",
-			ExpectErr: true,
-		},
-		{
-			Filename:  "docker-push-malformed2.txt",
-			Expected:  "(?ms)The push.*Preparing.*Pushing.*Pushed.*digest",
-			ExpectErr: true,
-		},
-		{
-			Filename:  "docker-push-malformed3.txt",
-			Expected:  "(?ms)The push.*Preparing.*Pushing.*Pushed.*digest",
-			ExpectErr: true,
-		},
-		{
-			Filename: "empty.txt",
-			Expected: "^$",
-		},
-	}
-
-	for _, tc := range tests {
-		fh, err := os.Open(filepath.Join("testdata", tc.Filename))
-		if err != nil {
-			t.Errorf("Cannot open %q: %s", tc.Filename, err)
-			continue
-		}
-
-		output := &bytes.Buffer{}
-		writer := newSimpleWriter(output)
-
-		_, err = io.Copy(writer, fh)
-		if err != nil && !tc.ExpectErr {
-			t.Errorf("Failed to process %q: %s", tc.Filename, err)
-			continue
-		} else if err == nil && tc.ExpectErr {
-			t.Errorf("Expected error for %q, got success", tc.Filename)
-		}
-
-		if outputStr := output.String(); !regexp.MustCompile(tc.Expected).MatchString(outputStr) {
-			t.Errorf("%s: expected %q, got:\n%s\n", tc.Filename, tc.Expected, outputStr)
-			continue
-		}
-	}
-}
-
-var credsRegex = regexp.MustCompile("user:password")
-var redactedRegex = regexp.MustCompile("redacted")
-
-func TestSafeForLoggingDockerCreateOptions(t *testing.T) {
-	opts := &docker.CreateContainerOptions{
-		Config: &docker.Config{
-
-			Env: []string{
-				"http_proxy=http://user:password@proxy.com",
-				"ignore=http://user:password@proxy.com",
+			name: "nonsystemd-burstablepod",
+			input: map[string]string{
+				"memory": "/kubepods/burstable/podc4ab0636-521a-11e7-8eea-0e5e65642be0/9ea9361dc31b0e18f699497a5a78a010eb7bae3f9a2d2b5d3027b37bdaa4b334",
 			},
+			expect: "/kubepods/burstable/podc4ab0636-521a-11e7-8eea-0e5e65642be0",
+		},
+		{
+			name: "non-systemd",
+			input: map[string]string{
+				"cpu":          "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"cpuacct":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"name=systemd": "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"net_prio":     "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"freezer":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"blkio":        "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"net_cls":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"memory":       "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"hugetlb":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"perf_event":   "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"cpuset":       "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"devices":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"pids":         "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+			},
+			expect: "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice",
+		},
+		{
+			name: "no-memory-entry",
+			input: map[string]string{
+				"cpu":          "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"cpuacct":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"name=systemd": "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"net_prio":     "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"freezer":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"blkio":        "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"net_cls":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"hugetlb":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"perf_event":   "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"cpuset":       "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"devices":      "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+				"pids":         "/kubepods.slice/kubepods-podd0d034ed_5204_11e7_9710_507b9d27b5d9.slice/docker-a91b1981b6a4ae463fccd273e3f8665fd911e9abcaa1af27de773afb17ec4344",
+			},
+			expect: "",
+			fail:   true,
+		},
+		{
+			name: "unparseable",
+			input: map[string]string{
+				"memory": "kubepods.slice",
+			},
+			expect: "",
+			fail:   true,
 		},
 	}
-	stripped := SafeForLoggingDockerCreateOptions(opts)
-	if credsRegex.MatchString(stripped.Config.Env[0]) {
-		t.Errorf("stripped proxy variable %s should not contain credentials", stripped.Config.Env[0])
-	}
-	if !redactedRegex.MatchString(stripped.Config.Env[0]) {
-		t.Errorf("stripped proxy variable %s should contain redacted", stripped.Config.Env[0])
-	}
-	if !credsRegex.MatchString(stripped.Config.Env[1]) {
-		t.Errorf("stripped other variable %s should contain credentials", stripped.Config.Env[1])
-	}
-	if redactedRegex.MatchString(stripped.Config.Env[1]) {
-		t.Errorf("stripped other variable %s should not contain redacted", stripped.Config.Env[1])
-	}
 
-	if !credsRegex.MatchString(opts.Config.Env[0]) {
-		t.Errorf("original proxy variable %s should contain credentials", opts.Config.Env[0])
-	}
-	if redactedRegex.MatchString(opts.Config.Env[0]) {
-		t.Errorf("original proxy variable %s should not contain redacted", opts.Config.Env[0])
-	}
-	if !credsRegex.MatchString(opts.Config.Env[1]) {
-		t.Errorf("original other variable %s should contain credentials", opts.Config.Env[1])
-	}
-	if redactedRegex.MatchString(opts.Config.Env[1]) {
-		t.Errorf("original other variable %s should not contain redacted", opts.Config.Env[1])
+	for _, tc := range tcs {
+		parent, err := extractParentFromCgroupMap(tc.input)
+		if err != nil && !tc.fail {
+			t.Errorf("[%s] unexpected exception: %v", tc.name, err)
+		}
+		if tc.fail && err == nil {
+			t.Errorf("[%s] expected failure, did not get one and got cgroup parent=%s", tc.name, parent)
+		}
+		if parent != tc.expect {
+			t.Errorf("[%s] expected cgroup parent= %s, got %s", tc.name, tc.expect, parent)
+		}
 	}
 }
