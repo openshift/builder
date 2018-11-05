@@ -61,8 +61,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	additionalCASrc := fmt.Sprintf("%s/trusted-ca.crt", builder.ConfigMapCertsMountPath)
-	additionalCADst := fmt.Sprintf("%s/openshift-trusted-ca.crt", tlsCertRoot)
+	additionalCASrc := fmt.Sprintf("%s/additional-ca.crt", builder.ConfigMapCertsMountPath)
+	additionalCADst := fmt.Sprintf("%s/additional-ca.crt", tlsCertRoot)
 	err = CopyIfExists(additionalCASrc, additionalCADst)
 	if err != nil {
 		fmt.Printf("Error setting up additional trusted CA bundle: %v", err)
