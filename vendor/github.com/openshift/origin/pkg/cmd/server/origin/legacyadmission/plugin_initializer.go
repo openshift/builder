@@ -24,16 +24,14 @@ import (
 
 	imagev1client "github.com/openshift/client-go/image/clientset/versioned"
 	imagev1informer "github.com/openshift/client-go/image/informers/externalversions"
+	securityv1informer "github.com/openshift/client-go/security/informers/externalversions"
 	userv1informer "github.com/openshift/client-go/user/informers/externalversions"
-	"github.com/openshift/origin/pkg/build/apiserver/admission/jenkinsbootstrapper"
 	oadmission "github.com/openshift/origin/pkg/cmd/server/admission"
-	configapi "github.com/openshift/origin/pkg/cmd/server/apis/config"
 	"github.com/openshift/origin/pkg/image/apiserver/registryhostname"
 	projectcache "github.com/openshift/origin/pkg/project/cache"
 	"github.com/openshift/origin/pkg/quota/controller/clusterquotamapping"
 	quotainformer "github.com/openshift/origin/pkg/quota/generated/informers/internalversion"
 	"github.com/openshift/origin/pkg/quota/image"
-	securityinformer "github.com/openshift/origin/pkg/security/generated/informers/internalversion"
 )
 
 type InformerAccess interface {
@@ -41,7 +39,7 @@ type InformerAccess interface {
 	GetKubernetesInformers() kexternalinformers.SharedInformerFactory
 	GetOpenshiftImageInformers() imagev1informer.SharedInformerFactory
 	GetInternalOpenshiftQuotaInformers() quotainformer.SharedInformerFactory
-	GetInternalOpenshiftSecurityInformers() securityinformer.SharedInformerFactory
+	GetOpenshiftSecurityInformers() securityv1informer.SharedInformerFactory
 	GetOpenshiftUserInformers() userv1informer.SharedInformerFactory
 }
 
@@ -49,7 +47,6 @@ func NewPluginInitializer(
 	externalImageRegistryHostname string,
 	internalImageRegistryHostname string,
 	cloudConfigFile string,
-	jenkinsConfig configapi.JenkinsPipelineConfig,
 	privilegedLoopbackConfig *rest.Config,
 	informers InformerAccess,
 	authorizer authorizer.Authorizer,
@@ -136,12 +133,9 @@ func NewPluginInitializer(
 		ClusterResourceQuotaInformer: informers.GetInternalOpenshiftQuotaInformers().Quota().InternalVersion().ClusterResourceQuotas(),
 		ClusterQuotaMapper:           clusterQuotaMappingController.GetClusterQuotaMapper(),
 		RegistryHostnameRetriever:    registryHostnameRetriever,
-		SecurityInformers:            informers.GetInternalOpenshiftSecurityInformers(),
+		SecurityInformers:            informers.GetOpenshiftSecurityInformers(),
 		UserInformers:                informers.GetOpenshiftUserInformers(),
 	}
-	jenkinsPipelineConfigInitializer := &jenkinsbootstrapper.PluginInitializer{
-		JenkinsPipelineConfig: jenkinsConfig,
-	}
 
-	return admission.PluginInitializers{genericInitializer, webhookInitializer, kubePluginInitializer, openshiftPluginInitializer, jenkinsPipelineConfigInitializer}, nil
+	return admission.PluginInitializers{genericInitializer, webhookInitializer, kubePluginInitializer, openshiftPluginInitializer}, nil
 }

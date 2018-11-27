@@ -13,19 +13,18 @@ import (
 	storageclassdefaultadmission "k8s.io/kubernetes/plugin/pkg/admission/storage/storageclass/setdefault"
 
 	authorizationrestrictusers "github.com/openshift/origin/pkg/authorization/apiserver/admission/restrictusers"
-	buildjenkinsbootstrapper "github.com/openshift/origin/pkg/build/apiserver/admission/jenkinsbootstrapper"
 	buildsecretinjector "github.com/openshift/origin/pkg/build/apiserver/admission/secretinjector"
 	buildstrategyrestrictions "github.com/openshift/origin/pkg/build/apiserver/admission/strategyrestrictions"
 	imagepolicyapi "github.com/openshift/origin/pkg/image/apiserver/admission/apis/imagepolicy"
 	"github.com/openshift/origin/pkg/image/apiserver/admission/imagepolicy"
 	imageadmission "github.com/openshift/origin/pkg/image/apiserver/admission/limitrange"
-	ingressadmission "github.com/openshift/origin/pkg/network/apiserver/admission"
 	projectnodeenv "github.com/openshift/origin/pkg/project/apiserver/admission/nodeenv"
 	projectrequestlimit "github.com/openshift/origin/pkg/project/apiserver/admission/requestlimit"
 	overrideapi "github.com/openshift/origin/pkg/quota/apiserver/admission/apis/clusterresourceoverride"
 	quotaclusterresourceoverride "github.com/openshift/origin/pkg/quota/apiserver/admission/clusterresourceoverride"
 	quotaclusterresourcequota "github.com/openshift/origin/pkg/quota/apiserver/admission/clusterresourcequota"
 	quotarunonceduration "github.com/openshift/origin/pkg/quota/apiserver/admission/runonceduration"
+	ingressadmission "github.com/openshift/origin/pkg/route/apiserver/admission"
 	schedulerpodnodeconstraints "github.com/openshift/origin/pkg/scheduler/admission/podnodeconstraints"
 	securityadmission "github.com/openshift/origin/pkg/security/apiserver/admission/sccadmission"
 	"github.com/openshift/origin/pkg/service/admission/externalipranger"
@@ -48,7 +47,6 @@ func RegisterAllAdmissionPlugins(plugins *admission.Plugins) {
 
 func RegisterOpenshiftAdmissionPlugins(plugins *admission.Plugins) {
 	authorizationrestrictusers.Register(plugins)
-	buildjenkinsbootstrapper.Register(plugins)
 	buildsecretinjector.Register(plugins)
 	buildstrategyrestrictions.Register(plugins)
 	imageadmission.Register(plugins)
@@ -66,9 +64,23 @@ func RegisterOpenshiftAdmissionPlugins(plugins *admission.Plugins) {
 	restrictedendpoints.RegisterRestrictedEndpoints(plugins)
 }
 
+func RegisterOpenshiftKubeAdmissionPlugins(plugins *admission.Plugins) {
+	authorizationrestrictusers.Register(plugins)
+	imagepolicy.Register(plugins)
+	ingressadmission.Register(plugins)
+	projectnodeenv.Register(plugins)
+	quotaclusterresourceoverride.Register(plugins)
+	quotaclusterresourcequota.Register(plugins)
+	quotarunonceduration.Register(plugins)
+	schedulerpodnodeconstraints.Register(plugins)
+	securityadmission.Register(plugins)
+	securityadmission.RegisterSCCExecRestrictions(plugins)
+	externalipranger.RegisterExternalIP(plugins)
+	restrictedendpoints.RegisterRestrictedEndpoints(plugins)
+}
+
 var (
 	DefaultOnPlugins = sets.NewString(
-		"openshift.io/JenkinsBootstrapper",
 		"openshift.io/BuildConfigSecretInjector",
 		"BuildByStrategy",
 		storageclassdefaultadmission.PluginName,

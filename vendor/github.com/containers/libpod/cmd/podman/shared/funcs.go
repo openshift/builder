@@ -3,20 +3,59 @@ package shared
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"github.com/google/shlex"
 )
 
+func substituteCommand(cmd string) (string, error) {
+	// If cmd is an absolute or relative path, check if the file exists.
+	// Throw an error if it doesn't exist.
+	if strings.Contains(cmd, "/") || strings.HasPrefix(cmd, ".") {
+		res, err := filepath.Abs(cmd)
+		if err != nil {
+			return "", err
+		}
+		if _, err := os.Stat(res); !os.IsNotExist(err) {
+			return res, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+
+	// Replace cmd with "/proc/self/exe" if "podman" or "docker" is being
+	// used.  Otherwise, leave the command unchanged.
+	switch cmd {
+	case "podman":
+		fallthrough
+	case "docker":
+		return "/proc/self/exe", nil
+	default:
+		return cmd, nil
+	}
+}
+
 // GenerateCommand takes a label (string) and converts it to an executable command
-func GenerateCommand(command, imageName, name string) []string {
+func GenerateCommand(command, imageName, name string) ([]string, error) {
 	var (
 		newCommand []string
 	)
 	if name == "" {
 		name = imageName
 	}
-	cmd := strings.Split(command, " ")
-	// Replace the first element of cmd with "/proc/self/exe"
-	newCommand = append(newCommand, "/proc/self/exe")
+
+	cmd, err := shlex.Split(command)
+	if err != nil {
+		return nil, err
+	}
+
+	prog, err := substituteCommand(cmd[0])
+	if err != nil {
+		return nil, err
+	}
+	newCommand = append(newCommand, prog)
+
 	for _, arg := range cmd[1:] {
 		var newArg string
 		switch arg {
@@ -37,7 +76,7 @@ func GenerateCommand(command, imageName, name string) []string {
 		}
 		newCommand = append(newCommand, newArg)
 	}
-	return newCommand
+	return newCommand, nil
 }
 
 // GenerateRunEnvironment merges the current environment variables with optional

@@ -12,14 +12,14 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/containers/buildah/imagebuildah"
-	"github.com/containers/libpod/pkg/chrootuser"
+	"github.com/containers/libpod/pkg/ctime"
 	"github.com/containers/libpod/pkg/hooks"
 	"github.com/containers/libpod/pkg/hooks/exec"
-	"github.com/containers/libpod/pkg/resolvconf"
+	"github.com/containers/libpod/pkg/lookup"
 	"github.com/containers/libpod/pkg/rootless"
-	"github.com/containers/libpod/pkg/secrets"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/chrootarchive"
@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/text/language"
+	kwait "k8s.io/apimachinery/pkg/util/wait"
 )
 
 const (
@@ -146,6 +147,77 @@ func (c *Container) execPidPath(sessionID string) string {
 	return filepath.Join(c.state.RunDir, "exec_pid_"+sessionID)
 }
 
+// exitFilePath gets the path to the container's exit file
+func (c *Container) exitFilePath() string {
+	return filepath.Join(c.runtime.ociRuntime.exitsDir, c.ID())
+}
+
+// Wait for the container's exit file to appear.
+// When it does, update our state based on it.
+func (c *Container) waitForExitFileAndSync() error {
+	exitFile := c.exitFilePath()
+
+	err := kwait.ExponentialBackoff(
+		kwait.Backoff{
+			Duration: 500 * time.Millisecond,
+			Factor:   1.2,
+			Steps:    6,
+		},
+		func() (bool, error) {
+			_, err := os.Stat(exitFile)
+			if err != nil {
+				// wait longer
+				return false, nil
+			}
+			return true, nil
+		})
+	if err != nil {
+		// Exit file did not appear
+		// Reset our state
+		c.state.ExitCode = -1
+		c.state.FinishedTime = time.Now()
+		c.state.State = ContainerStateStopped
+
+		if err2 := c.save(); err2 != nil {
+			logrus.Errorf("Error saving container %s state: %v", c.ID(), err2)
+		}
+
+		return err
+	}
+
+	if err := c.runtime.ociRuntime.updateContainerStatus(c, false); err != nil {
+		return err
+	}
+
+	return c.save()
+}
+
+// Handle the container exit file.
+// The exit file is used to supply container exit time and exit code.
+// This assumes the exit file already exists.
+func (c *Container) handleExitFile(exitFile string, fi os.FileInfo) error {
+	c.state.FinishedTime = ctime.Created(fi)
+	statusCodeStr, err := ioutil.ReadFile(exitFile)
+	if err != nil {
+		return errors.Wrapf(err, "failed to read exit file for container %s", c.ID())
+	}
+	statusCode, err := strconv.Atoi(string(statusCodeStr))
+	if err != nil {
+		return errors.Wrapf(err, "error converting exit status code (%q) for container %s to int",
+			c.ID(), statusCodeStr)
+	}
+	c.state.ExitCode = int32(statusCode)
+
+	oomFilePath := filepath.Join(c.bundlePath(), "oom")
+	if _, err = os.Stat(oomFilePath); err == nil {
+		c.state.OOMKilled = true
+	}
+
+	c.state.Exited = true
+
+	return nil
+}
+
 // Sync this container with on-disk state and runtime status
 // Should only be called with container lock held
 // This function should suffice to ensure a container's state is accurate and
@@ -161,7 +233,7 @@ func (c *Container) syncContainer() error {
 		(c.state.State != ContainerStateExited) {
 		oldState := c.state.State
 		// TODO: optionally replace this with a stat for the exit file
-		if err := c.runtime.ociRuntime.updateContainerStatus(c); err != nil {
+		if err := c.runtime.ociRuntime.updateContainerStatus(c, false); err != nil {
 			return err
 		}
 		// Only save back to DB if state changed
@@ -508,7 +580,7 @@ func (c *Container) checkDependenciesRunningLocked(depCtrs map[string]*Container
 }
 
 func (c *Container) completeNetworkSetup() error {
-	if !c.config.PostConfigureNetNS {
+	if !c.config.PostConfigureNetNS || c.NetworkDisabled() {
 		return nil
 	}
 	if err := c.syncContainer(); err != nil {
@@ -522,10 +594,6 @@ func (c *Container) completeNetworkSetup() error {
 
 // Initialize a container, creating it in the runtime
 func (c *Container) init(ctx context.Context) error {
-	if err := c.makeBindMounts(); err != nil {
-		return err
-	}
-
 	// Generate the OCI spec
 	spec, err := c.generateSpec(ctx)
 	if err != nil {
@@ -622,9 +690,6 @@ func (c *Container) initAndStart(ctx context.Context) (err error) {
 		return errors.Wrapf(ErrCtrStateInvalid, "cannot start paused container %s", c.ID())
 	}
 
-	if err := c.prepare(); err != nil {
-		return err
-	}
 	defer func() {
 		if err != nil {
 			if err2 := c.cleanup(ctx); err2 != nil {
@@ -632,6 +697,10 @@ func (c *Container) initAndStart(ctx context.Context) (err error) {
 			}
 		}
 	}()
+
+	if err := c.prepare(); err != nil {
+		return err
+	}
 
 	// If we are ContainerStateStopped we need to remove from runtime
 	// And reset to ContainerStateConfigured
@@ -672,13 +741,8 @@ func (c *Container) stop(timeout uint) error {
 		return err
 	}
 
-	// Sync the container's state to pick up return code
-	if err := c.runtime.ociRuntime.updateContainerStatus(c); err != nil {
-		return err
-	}
-
-	// Container should clean itself up
-	return nil
+	// Wait until we have an exit file, and sync once we do
+	return c.waitForExitFileAndSync()
 }
 
 // Internal, non-locking function to pause a container
@@ -718,9 +782,6 @@ func (c *Container) restartWithTimeout(ctx context.Context, timeout uint) (err e
 			return err
 		}
 	}
-	if err := c.prepare(); err != nil {
-		return err
-	}
 	defer func() {
 		if err != nil {
 			if err2 := c.cleanup(ctx); err2 != nil {
@@ -728,6 +789,9 @@ func (c *Container) restartWithTimeout(ctx context.Context, timeout uint) (err e
 			}
 		}
 	}()
+	if err := c.prepare(); err != nil {
+		return err
+	}
 
 	if c.state.State == ContainerStateStopped {
 		// Reinitialize the container if we need to
@@ -916,86 +980,6 @@ func (c *Container) postDeleteHooks(ctx context.Context) (err error) {
 	return nil
 }
 
-// Make standard bind mounts to include in the container
-func (c *Container) makeBindMounts() error {
-	if err := os.Chown(c.state.RunDir, c.RootUID(), c.RootGID()); err != nil {
-		return errors.Wrapf(err, "cannot chown run directory %s", c.state.RunDir)
-	}
-
-	if c.state.BindMounts == nil {
-		c.state.BindMounts = make(map[string]string)
-	}
-
-	// SHM is always added when we mount the container
-	c.state.BindMounts["/dev/shm"] = c.config.ShmDir
-
-	// Make /etc/resolv.conf
-	if _, ok := c.state.BindMounts["/etc/resolv.conf"]; ok {
-		// If it already exists, delete so we can recreate
-		delete(c.state.BindMounts, "/etc/resolv.conf")
-	}
-	newResolv, err := c.generateResolvConf()
-	if err != nil {
-		return errors.Wrapf(err, "error creating resolv.conf for container %s", c.ID())
-	}
-	c.state.BindMounts["/etc/resolv.conf"] = newResolv
-
-	newPasswd, err := c.generatePasswd()
-	if err != nil {
-		return errors.Wrapf(err, "error creating temporary passwd file for container %s", c.ID())
-	}
-	if newPasswd != "" {
-		// Make /etc/passwd
-		if _, ok := c.state.BindMounts["/etc/passwd"]; ok {
-			// If it already exists, delete so we can recreate
-			delete(c.state.BindMounts, "/etc/passwd")
-		}
-		logrus.Debugf("adding entry to /etc/passwd for non existent default user")
-		c.state.BindMounts["/etc/passwd"] = newPasswd
-	}
-	// Make /etc/hosts
-	if _, ok := c.state.BindMounts["/etc/hosts"]; ok {
-		// If it already exists, delete so we can recreate
-		delete(c.state.BindMounts, "/etc/hosts")
-	}
-	newHosts, err := c.generateHosts()
-	if err != nil {
-		return errors.Wrapf(err, "error creating hosts file for container %s", c.ID())
-	}
-	c.state.BindMounts["/etc/hosts"] = newHosts
-
-	// Make /etc/hostname
-	// This should never change, so no need to recreate if it exists
-	if _, ok := c.state.BindMounts["/etc/hostname"]; !ok {
-		hostnamePath, err := c.writeStringToRundir("hostname", c.Hostname())
-		if err != nil {
-			return errors.Wrapf(err, "error creating hostname file for container %s", c.ID())
-		}
-		c.state.BindMounts["/etc/hostname"] = hostnamePath
-	}
-
-	// Make .containerenv
-	// Empty file, so no need to recreate if it exists
-	if _, ok := c.state.BindMounts["/run/.containerenv"]; !ok {
-		// Empty string for now, but we may consider populating this later
-		containerenvPath, err := c.writeStringToRundir(".containerenv", "")
-		if err != nil {
-			return errors.Wrapf(err, "error creating containerenv file for container %s", c.ID())
-		}
-		c.state.BindMounts["/run/.containerenv"] = containerenvPath
-	}
-
-	// Add Secret Mounts
-	secretMounts := secrets.SecretMountsWithUIDGID(c.config.MountLabel, c.state.RunDir, c.runtime.config.DefaultMountsFile, c.state.DestinationRunDir, c.RootUID(), c.RootGID())
-	for _, mount := range secretMounts {
-		if _, ok := c.state.BindMounts[mount.Destination]; !ok {
-			c.state.BindMounts[mount.Destination] = mount.Source
-		}
-	}
-
-	return nil
-}
-
 // writeStringToRundir copies the provided file to the runtimedir
 func (c *Container) writeStringToRundir(destFile, output string) (string, error) {
 	destFileName := filepath.Join(c.state.RunDir, destFile)
@@ -1024,135 +1008,8 @@ func (c *Container) writeStringToRundir(destFile, output string) (string, error)
 	return filepath.Join(c.state.DestinationRunDir, destFile), nil
 }
 
-// generatePasswd generates a container specific passwd file,
-// iff g.config.User is a number
-func (c *Container) generatePasswd() (string, error) {
-	var (
-		groupspec string
-		gid       uint32
-	)
-	if c.config.User == "" {
-		return "", nil
-	}
-	spec := strings.SplitN(c.config.User, ":", 2)
-	userspec := spec[0]
-	if len(spec) > 1 {
-		groupspec = spec[1]
-	}
-	// If a non numeric User, then don't generate passwd
-	uid, err := strconv.ParseUint(userspec, 10, 32)
-	if err != nil {
-		return "", nil
-	}
-	// if UID exists inside of container rootfs /etc/passwd then
-	// don't generate passwd
-	if _, _, err := chrootuser.LookupUIDInContainer(c.state.Mountpoint, uid); err == nil {
-		return "", nil
-	}
-	if err == nil && groupspec != "" {
-		if !c.state.Mounted {
-			return "", errors.Wrapf(ErrCtrStateInvalid, "container %s must be mounted in order to translate group field for passwd record", c.ID())
-		}
-		gid, err = chrootuser.GetGroup(c.state.Mountpoint, groupspec)
-		if err != nil {
-			return "", errors.Wrapf(err, "unable to get gid from %s formporary passwd file")
-		}
-	}
-
-	originPasswdFile := filepath.Join(c.state.Mountpoint, "/etc/passwd")
-	orig, err := ioutil.ReadFile(originPasswdFile)
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to read passwd file %s", originPasswdFile)
-	}
-
-	pwd := fmt.Sprintf("%s%d:x:%d:%d:container user:%s:/bin/sh\n", orig, uid, uid, gid, c.WorkingDir())
-	passwdFile, err := c.writeStringToRundir("passwd", pwd)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to create temporary passwd file")
-	}
-	if os.Chmod(passwdFile, 0644); err != nil {
-		return "", err
-	}
-	return passwdFile, nil
-}
-
-// generateResolvConf generates a containers resolv.conf
-func (c *Container) generateResolvConf() (string, error) {
-	// Determine the endpoint for resolv.conf in case it is a symlink
-	resolvPath, err := filepath.EvalSymlinks("/etc/resolv.conf")
-	if err != nil {
-		return "", err
-	}
-
-	contents, err := ioutil.ReadFile(resolvPath)
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to read %s", resolvPath)
-	}
-
-	// Process the file to remove localhost nameservers
-	// TODO: set ipv6 enable bool more sanely
-	resolv, err := resolvconf.FilterResolvDNS(contents, true)
-	if err != nil {
-		return "", errors.Wrapf(err, "error parsing host resolv.conf")
-	}
-
-	// Make a new resolv.conf
-	nameservers := resolvconf.GetNameservers(resolv.Content)
-	if len(c.config.DNSServer) > 0 {
-		// We store DNS servers as net.IP, so need to convert to string
-		nameservers = []string{}
-		for _, server := range c.config.DNSServer {
-			nameservers = append(nameservers, server.String())
-		}
-	}
-
-	search := resolvconf.GetSearchDomains(resolv.Content)
-	if len(c.config.DNSSearch) > 0 {
-		search = c.config.DNSSearch
-	}
-
-	options := resolvconf.GetOptions(resolv.Content)
-	if len(c.config.DNSOption) > 0 {
-		options = c.config.DNSOption
-	}
-
-	destPath := filepath.Join(c.state.RunDir, "resolv.conf")
-
-	if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
-		return "", errors.Wrapf(err, "error removing resolv.conf for container %s", c.ID())
-	}
-
-	// Build resolv.conf
-	if _, err = resolvconf.Build(destPath, nameservers, search, options); err != nil {
-		return "", errors.Wrapf(err, "error building resolv.conf for container %s")
-	}
-
-	// Relabel resolv.conf for the container
-	if err := label.Relabel(destPath, c.config.MountLabel, false); err != nil {
-		return "", err
-	}
-
-	return filepath.Join(c.state.DestinationRunDir, "resolv.conf"), nil
-}
-
-// generateHosts creates a containers hosts file
-func (c *Container) generateHosts() (string, error) {
-	orig, err := ioutil.ReadFile("/etc/hosts")
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to read /etc/hosts")
-	}
-	hosts := string(orig)
-	if len(c.config.HostAdd) > 0 {
-		for _, host := range c.config.HostAdd {
-			// the host format has already been verified at this point
-			fields := strings.SplitN(host, ":", 2)
-			hosts += fmt.Sprintf("%s %s\n", fields[1], fields[0])
-		}
-	}
-	return c.writeStringToRundir("hosts", hosts)
-}
-
 func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator) error {
+	var uid, gid int
 	mountPoint := c.state.Mountpoint
 	if !c.state.Mounted {
 		return errors.Wrapf(ErrInternal, "container is not mounted")
@@ -1176,6 +1033,18 @@ func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator) 
 		}
 	}
 
+	if c.config.User != "" {
+		if !c.state.Mounted {
+			return errors.Wrapf(ErrCtrStateInvalid, "container %s must be mounted in order to translate User field", c.ID())
+		}
+		execUser, err := lookup.GetUserGroupInfo(c.state.Mountpoint, c.config.User, nil)
+		if err != nil {
+			return err
+		}
+		uid = execUser.Uid
+		gid = execUser.Gid
+	}
+
 	for k := range imageData.ContainerConfig.Volumes {
 		mount := spec.Mount{
 			Destination: k,
@@ -1186,19 +1055,6 @@ func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator) 
 			continue
 		}
 		volumePath := filepath.Join(c.config.StaticDir, "volumes", k)
-		var (
-			uid uint32
-			gid uint32
-		)
-		if c.config.User != "" {
-			if !c.state.Mounted {
-				return errors.Wrapf(ErrCtrStateInvalid, "container %s must be mounted in order to translate User field", c.ID())
-			}
-			uid, gid, err = chrootuser.GetUser(c.state.Mountpoint, c.config.User)
-			if err != nil {
-				return err
-			}
-		}
 
 		// Ensure the symlinks are resolved
 		resolvedSymlink, err := imagebuildah.ResolveSymLink(mountPoint, k)
@@ -1218,7 +1074,7 @@ func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator) 
 				return errors.Wrapf(err, "error creating directory %q for volume %q in container %q", volumePath, k, c.ID())
 			}
 
-			if err = os.Chown(srcPath, int(uid), int(gid)); err != nil {
+			if err = os.Chown(srcPath, uid, gid); err != nil {
 				return errors.Wrapf(err, "error chowning directory %q for volume %q in container %q", srcPath, k, c.ID())
 			}
 		}
@@ -1228,7 +1084,7 @@ func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator) 
 				return errors.Wrapf(err, "error creating directory %q for volume %q in container %q", volumePath, k, c.ID())
 			}
 
-			if err = os.Chown(volumePath, int(uid), int(gid)); err != nil {
+			if err = os.Chown(volumePath, uid, gid); err != nil {
 				return errors.Wrapf(err, "error chowning directory %q for volume %q in container %q", volumePath, k, c.ID())
 			}
 

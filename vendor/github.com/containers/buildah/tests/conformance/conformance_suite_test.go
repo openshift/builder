@@ -341,14 +341,29 @@ func CompareJSON(a, b map[string]interface{}, skip []string) ([]string, []string
 			continue
 		}
 		if reflect.TypeOf(v) != reflect.TypeOf(vb) {
+			if reflect.TypeOf(v) == nil && reflect.ValueOf(vb).Len() == 0 {
+				continue
+			}
+			if reflect.TypeOf(vb) == nil && reflect.ValueOf(v).Len() == 0 {
+				continue
+			}
 			diffKeys = append(diffKeys, diffDebug(k, v, vb))
 			isSame = false
 			continue
 		}
 		switch v.(type) {
 		case map[string]interface{}:
+			nextSkip := skip
+			for _, s := range skip {
+				if strings.Contains(s, ":") {
+					tmp := strings.Split(s, ":")
+					if tmp[0] == k {
+						nextSkip = append(nextSkip, strings.Join(tmp[1:], ":"))
+					}
+				}
+			}
 			submiss, subleft, subdiff, ok := CompareJSON(v.(map[string]interface{}),
-				vb.(map[string]interface{}), skip)
+				vb.(map[string]interface{}), nextSkip)
 			missKeys = append(missKeys, addPrefix(submiss, k)...)
 			leftKeys = append(leftKeys, addPrefix(subleft, k)...)
 			diffKeys = append(diffKeys, addPrefix(subdiff, k)...)
@@ -452,6 +467,7 @@ func (s *BuildahTestSession) LineInOuputContains(term string) bool {
 
 // SystemExec is used to exec a system command to check its exit code or output
 func SystemExec(command string, args []string) *BuildahTestSession {
+	fmt.Printf("Running: %s %s\n", command, strings.Join(args, " "))
 	c := exec.Command(command, args...)
 	session, err := gexec.Start(c, GinkgoWriter, GinkgoWriter)
 	if err != nil {

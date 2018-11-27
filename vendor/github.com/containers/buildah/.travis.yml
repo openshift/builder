@@ -7,21 +7,25 @@ go:
     - tip
 
 env:
-    - BUILDAH_ISOLATION=oci
-    - BUILDAH_ISOLATION=chroot
-    - BUILDAH_ISOLATION=rootless
-    - TRAVIS_ENV="-e TRAVIS=$TRAVIS
-      -e CI=$CI
-      -e TRAVIS_COMMIT=$TRAVIS_COMMIT
-      -e TRAVIS_COMMIT_RANGE=$TRAVIS_COMMIT_RANGE
-      -e TRAVIS_REPO_SLUG=$TRAVIS_REPO_SLUG
-      -e TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST
-      -e TRAVIS_PULL_REQUEST_SHA=$TRAVIS_PULL_REQUEST_SHA
-      -e TRAVIS_PULL_REQUEST_SLUG=$TRAVIS_PULL_REQUEST_SLUG
-      -e TRAVIS_BRANCH=$TRAVIS_BRANCH
-      -e TRAVIS_JOB_ID=$TRAVIS_JOB_ID
-      -e TRAVIS_BUILD_DIR=$TRAVIS_BUILD_DIR"
-
+    global:
+        - TRAVIS_ENV="-e TRAVIS=$TRAVIS
+                      -e CI=$CI
+                      -e TRAVIS_COMMIT=$TRAVIS_COMMIT
+                      -e TRAVIS_COMMIT_RANGE=$TRAVIS_COMMIT_RANGE
+                      -e TRAVIS_REPO_SLUG=$TRAVIS_REPO_SLUG
+                      -e TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST
+                      -e TRAVIS_PULL_REQUEST_SHA=$TRAVIS_PULL_REQUEST_SHA
+                      -e TRAVIS_PULL_REQUEST_SLUG=$TRAVIS_PULL_REQUEST_SLUG
+                      -e TRAVIS_BRANCH=$TRAVIS_BRANCH
+                      -e TRAVIS_JOB_ID=$TRAVIS_JOB_ID
+                      -e TRAVIS_BUILD_DIR=$TRAVIS_BUILD_DIR"
+    matrix:
+        - BUILDAH_ISOLATION=oci
+          DISTRO="ubuntu"
+        - BUILDAH_ISOLATION=chroot
+          DISTRO="ubuntu"
+        - BUILDAH_ISOLATION=rootless
+          DISTRO="ubuntu"
 matrix:
   # If the latest unstable development version of go fails, that's OK.
   allow_failures:
@@ -77,7 +81,7 @@ script:
     - docker images
     - docker rmi localhost:5000/my-alpine
     # Setting up  Docker Registry is complete, let's do Buildah testing! 
-    - make install.tools install.libseccomp.sudo all runc validate TAGS="apparmor seccomp containers_image_ostree_stub"
+    - make install.tools install.libseccomp.sudo all runc validate SECURITYTAGS="apparmor seccomp"
     - go test -c -tags "apparmor seccomp `./btrfs_tag.sh` `./libdm_tag.sh` `./ostree_tag.sh` `./selinux_tag.sh`" ./cmd/buildah
     - tmp=`mktemp -d`; mkdir $tmp/root $tmp/runroot; sudo PATH="$PATH" ./buildah.test -test.v -root $tmp/root -runroot $tmp/runroot -storage-driver vfs -signature-policy `pwd`/tests/policy.json -registries-conf `pwd`/tests/registries.conf
     - cd tests; travis_wait 60 sudo PATH="$PATH" ./test_runner.sh

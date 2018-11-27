@@ -106,7 +106,10 @@ ircmsg() {
     SCRIPT="$GOSRC/$SCRIPT_BASE/podbot.py"
     NICK="podbot_$CIRRUS_TASK_ID"
     NICK="${NICK:0:15}"  # Any longer will break things
+    set +e
     $SCRIPT $NICK $1
+    echo "Ignoring exit($?)"
+    set -e
 }
 
 # Run sudo in directory with GOPATH set
@@ -116,7 +119,6 @@ cdsudo() {
     CMD="cd $DIR && $@"
     sudo --preserve-env=GOPATH --non-interactive bash -c "$CMD"
 }
-
 
 # Helper/wrapper script to only show stderr/stdout on non-zero exit
 install_ooe() {
@@ -142,8 +144,8 @@ EOF
 install_cni_plugins() {
     echo "Installing CNI Plugins from commit $CNI_COMMIT"
     req_env_var "
-    GOPATH $GOPATH
-    CNI_COMMIT $CNI_COMMIT
+        GOPATH $GOPATH
+        CNI_COMMIT $CNI_COMMIT
     "
     DEST="$GOPATH/src/github.com/containernetworking/plugins"
     rm -rf "$DEST"
@@ -160,9 +162,9 @@ install_runc(){
     echo "Installing RunC from commit $RUNC_COMMIT"
     echo "Platform is $OS_RELEASE_ID"
     req_env_var "
-    GOPATH $GOPATH
-    RUNC_COMMIT $RUNC_COMMIT
-    OS_RELEASE_ID $OS_RELEASE_ID
+        GOPATH $GOPATH
+        RUNC_COMMIT $RUNC_COMMIT
+        OS_RELEASE_ID $OS_RELEASE_ID
     "
     if [[ "$OS_RELEASE_ID" =~ "ubuntu" ]]; then
         echo "Running make install.libseccomp.sudo for ubuntu"
@@ -202,8 +204,8 @@ install_buildah() {
 install_conmon(){
     echo "Installing conmon from commit $CRIO_COMMIT"
     req_env_var "
-    GOPATH $GOPATH
-    CRIO_COMMIT $CRIO_COMMIT
+        GOPATH $GOPATH
+        CRIO_COMMIT $CRIO_COMMIT
     "
     DEST="$GOPATH/src/github.com/kubernetes-sigs/cri-o.git"
     rm -rf "$DEST"
@@ -234,8 +236,8 @@ install_criu(){
 install_testing_dependencies() {
     echo "Installing ginkgo, gomega, and easyjson into \$GOPATH=$GOPATH"
     req_env_var "
-    GOPATH $GOPATH
-    GOSRC $GOSRC
+        GOPATH $GOPATH
+        GOSRC $GOSRC
     "
     cd "$GOSRC"
     ooe.sh go get -u github.com/onsi/ginkgo/ginkgo
@@ -263,7 +265,7 @@ install_varlink(){
 _finalize(){
     echo "Removing leftover giblets from cloud-init"
     cd /
-    sudo rm -rf /var/lib/cloud
+    sudo rm -rf /var/lib/cloud/instance?
     sudo rm -rf /root/.ssh/*
     sudo rm -rf /home/*
 }

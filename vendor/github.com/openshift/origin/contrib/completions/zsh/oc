@@ -399,9 +399,6 @@ __oc_override_flags()
                     ;;
             esac
         done
-        if [ "${w}" == "--all-namespaces" ]; then
-            namespace="--all-namespaces"
-        fi
     done
     for of in "${__oc_override_flag_list[@]}"; do
         if eval "test -n \"\$${of}\""; then
@@ -432,9 +429,14 @@ __oc_get_namespaces()
 __oc_get_resource()
 {
     if [[ ${#nouns[@]} -eq 0 ]]; then
-        return 1
+      local oc_out
+      if oc_out=$(oc api-resources $(__oc_override_flags) -o name --cached --request-timeout=5s --verbs=get 2>/dev/null); then
+          COMPREPLY=( $( compgen -W "${oc_out[*]}" -- "$cur" ) )
+          return 0
+      fi
+      return 1
     fi
-    __oc_parse_get ${nouns[${#nouns[@]} -1]}
+    __oc_parse_get "${nouns[${#nouns[@]} -1]}"
 }
 
 # $1 is the name of the pod we want to get the list of containers inside
@@ -470,7 +472,7 @@ __custom_func() {
     case ${last_command} in
  
         # first arg is the kind according to ValidArgs, second is resource name
-        oc_get | oc_describe | oc_delete | oc_label | oc_stop | oc_expose | oc_export | oc_patch | oc_annotate | oc_env | oc_edit | oc_volume | oc_scale )
+        oc_get | oc_describe | oc_delete | oc_label | oc_expose | oc_export | oc_patch | oc_annotate | oc_env | oc_edit | oc_volume | oc_scale | oc_observe )
             __oc_get_resource
             return
             ;;
@@ -5122,6 +5124,54 @@ _oc_adm_release_extract()
     noun_aliases=()
 }
 
+_oc_adm_release_info()
+{
+    last_command="oc_adm_release_info"
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--changes-from=")
+    local_nonpersistent_flags+=("--changes-from=")
+    flags+=("--commits")
+    local_nonpersistent_flags+=("--commits")
+    flags+=("--pullspecs")
+    local_nonpersistent_flags+=("--pullspecs")
+    flags+=("--as=")
+    flags+=("--as-group=")
+    flags+=("--cache-dir=")
+    flags+=("--certificate-authority=")
+    flags+=("--client-certificate=")
+    flags+=("--client-key=")
+    flags+=("--cluster=")
+    flags+=("--config=")
+    flags+=("--context=")
+    flags+=("--insecure-skip-tls-verify")
+    flags+=("--kubeconfig=")
+    flags+=("--loglevel=")
+    flags+=("--logspec=")
+    flags+=("--match-server-version")
+    flags+=("--namespace=")
+    flags_with_completion+=("--namespace")
+    flags_completion+=("__oc_get_namespaces")
+    two_word_flags+=("-n")
+    flags_with_completion+=("-n")
+    flags_completion+=("__oc_get_namespaces")
+    flags+=("--request-timeout=")
+    flags+=("--server=")
+    two_word_flags+=("-s")
+    flags+=("--token=")
+    flags+=("--user=")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _oc_adm_release_mirror()
 {
     last_command="oc_adm_release_mirror"
@@ -5202,8 +5252,12 @@ _oc_adm_release_new()
     local_nonpersistent_flags+=("--from-image-stream=")
     flags+=("--from-release=")
     local_nonpersistent_flags+=("--from-release=")
+    flags+=("--include=")
+    local_nonpersistent_flags+=("--include=")
     flags+=("--max-per-registry=")
     local_nonpersistent_flags+=("--max-per-registry=")
+    flags+=("--metadata=")
+    local_nonpersistent_flags+=("--metadata=")
     flags+=("--mirror=")
     local_nonpersistent_flags+=("--mirror=")
     flags+=("--name=")
@@ -5211,6 +5265,10 @@ _oc_adm_release_new()
     flags+=("--output=")
     two_word_flags+=("-o")
     local_nonpersistent_flags+=("--output=")
+    flags+=("--previous=")
+    local_nonpersistent_flags+=("--previous=")
+    flags+=("--release-manifest")
+    local_nonpersistent_flags+=("--release-manifest")
     flags+=("--skip-manifest-check")
     local_nonpersistent_flags+=("--skip-manifest-check")
     flags+=("--to-dir=")
@@ -5257,6 +5315,7 @@ _oc_adm_release()
     last_command="oc_adm_release"
     commands=()
     commands+=("extract")
+    commands+=("info")
     commands+=("mirror")
     commands+=("new")
 
@@ -6691,142 +6750,6 @@ _oc_cancel-build()
     local_nonpersistent_flags+=("--restart")
     flags+=("--state=")
     local_nonpersistent_flags+=("--state=")
-    flags+=("--as=")
-    flags+=("--as-group=")
-    flags+=("--cache-dir=")
-    flags+=("--certificate-authority=")
-    flags+=("--client-certificate=")
-    flags+=("--client-key=")
-    flags+=("--cluster=")
-    flags+=("--config=")
-    flags+=("--context=")
-    flags+=("--insecure-skip-tls-verify")
-    flags+=("--kubeconfig=")
-    flags+=("--loglevel=")
-    flags+=("--logspec=")
-    flags+=("--match-server-version")
-    flags+=("--namespace=")
-    flags_with_completion+=("--namespace")
-    flags_completion+=("__oc_get_namespaces")
-    two_word_flags+=("-n")
-    flags_with_completion+=("-n")
-    flags_completion+=("__oc_get_namespaces")
-    flags+=("--request-timeout=")
-    flags+=("--server=")
-    two_word_flags+=("-s")
-    flags+=("--token=")
-    flags+=("--user=")
-
-    must_have_one_flag=()
-    must_have_one_noun=()
-    noun_aliases=()
-}
-
-_oc_cluster_down()
-{
-    last_command="oc_cluster_down"
-    commands=()
-
-    flags=()
-    two_word_flags=()
-    local_nonpersistent_flags=()
-    flags_with_completion=()
-    flags_completion=()
-
-    flags+=("--as=")
-    flags+=("--as-group=")
-    flags+=("--cache-dir=")
-    flags+=("--certificate-authority=")
-    flags+=("--client-certificate=")
-    flags+=("--client-key=")
-    flags+=("--cluster=")
-    flags+=("--config=")
-    flags+=("--context=")
-    flags+=("--insecure-skip-tls-verify")
-    flags+=("--kubeconfig=")
-    flags+=("--loglevel=")
-    flags+=("--logspec=")
-    flags+=("--match-server-version")
-    flags+=("--namespace=")
-    flags_with_completion+=("--namespace")
-    flags_completion+=("__oc_get_namespaces")
-    two_word_flags+=("-n")
-    flags_with_completion+=("-n")
-    flags_completion+=("__oc_get_namespaces")
-    flags+=("--request-timeout=")
-    flags+=("--server=")
-    two_word_flags+=("-s")
-    flags+=("--token=")
-    flags+=("--user=")
-
-    must_have_one_flag=()
-    must_have_one_noun=()
-    noun_aliases=()
-}
-
-_oc_cluster_up()
-{
-    last_command="oc_cluster_up"
-    commands=()
-
-    flags=()
-    two_word_flags=()
-    local_nonpersistent_flags=()
-    flags_with_completion=()
-    flags_completion=()
-
-    flags+=("--base-dir=")
-    local_nonpersistent_flags+=("--base-dir=")
-    flags+=("--image=")
-    local_nonpersistent_flags+=("--image=")
-    flags+=("--public-hostname=")
-    local_nonpersistent_flags+=("--public-hostname=")
-    flags+=("--server-loglevel=")
-    local_nonpersistent_flags+=("--server-loglevel=")
-    flags+=("--as=")
-    flags+=("--as-group=")
-    flags+=("--cache-dir=")
-    flags+=("--certificate-authority=")
-    flags+=("--client-certificate=")
-    flags+=("--client-key=")
-    flags+=("--cluster=")
-    flags+=("--config=")
-    flags+=("--context=")
-    flags+=("--insecure-skip-tls-verify")
-    flags+=("--kubeconfig=")
-    flags+=("--loglevel=")
-    flags+=("--logspec=")
-    flags+=("--match-server-version")
-    flags+=("--namespace=")
-    flags_with_completion+=("--namespace")
-    flags_completion+=("__oc_get_namespaces")
-    two_word_flags+=("-n")
-    flags_with_completion+=("-n")
-    flags_completion+=("__oc_get_namespaces")
-    flags+=("--request-timeout=")
-    flags+=("--server=")
-    two_word_flags+=("-s")
-    flags+=("--token=")
-    flags+=("--user=")
-
-    must_have_one_flag=()
-    must_have_one_noun=()
-    noun_aliases=()
-}
-
-_oc_cluster()
-{
-    last_command="oc_cluster"
-    commands=()
-    commands+=("down")
-    commands+=("up")
-
-    flags=()
-    two_word_flags=()
-    local_nonpersistent_flags=()
-    flags_with_completion=()
-    flags_completion=()
-
     flags+=("--as=")
     flags+=("--as-group=")
     flags+=("--cache-dir=")
@@ -11101,6 +11024,55 @@ _oc_image_extract()
     noun_aliases=()
 }
 
+_oc_image_info()
+{
+    last_command="oc_image_info"
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--filter-by-os=")
+    local_nonpersistent_flags+=("--filter-by-os=")
+    flags+=("--insecure")
+    local_nonpersistent_flags+=("--insecure")
+    flags+=("--output=")
+    two_word_flags+=("-o")
+    local_nonpersistent_flags+=("--output=")
+    flags+=("--as=")
+    flags+=("--as-group=")
+    flags+=("--cache-dir=")
+    flags+=("--certificate-authority=")
+    flags+=("--client-certificate=")
+    flags+=("--client-key=")
+    flags+=("--cluster=")
+    flags+=("--config=")
+    flags+=("--context=")
+    flags+=("--insecure-skip-tls-verify")
+    flags+=("--kubeconfig=")
+    flags+=("--loglevel=")
+    flags+=("--logspec=")
+    flags+=("--match-server-version")
+    flags+=("--namespace=")
+    flags_with_completion+=("--namespace")
+    flags_completion+=("__oc_get_namespaces")
+    two_word_flags+=("-n")
+    flags_with_completion+=("-n")
+    flags_completion+=("__oc_get_namespaces")
+    flags+=("--request-timeout=")
+    flags+=("--server=")
+    two_word_flags+=("-s")
+    flags+=("--token=")
+    flags+=("--user=")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _oc_image_mirror()
 {
     last_command="oc_image_mirror"
@@ -11129,6 +11101,8 @@ _oc_image_mirror()
     local_nonpersistent_flags+=("--max-registry=")
     flags+=("--s3-source-bucket=")
     local_nonpersistent_flags+=("--s3-source-bucket=")
+    flags+=("--skip-missing")
+    local_nonpersistent_flags+=("--skip-missing")
     flags+=("--skip-mount")
     local_nonpersistent_flags+=("--skip-mount")
     flags+=("--skip-multiple-scopes")
@@ -11170,6 +11144,7 @@ _oc_image()
     commands=()
     commands+=("append")
     commands+=("extract")
+    commands+=("info")
     commands+=("mirror")
 
     flags=()
@@ -11644,6 +11619,8 @@ _oc_new-app()
     local_nonpersistent_flags+=("--allow-missing-template-keys")
     flags+=("--as-test")
     local_nonpersistent_flags+=("--as-test")
+    flags+=("--binary")
+    local_nonpersistent_flags+=("--binary")
     flags+=("--build-env=")
     local_nonpersistent_flags+=("--build-env=")
     flags+=("--build-env-file=")
@@ -16114,7 +16091,6 @@ _oc_root_command()
     commands+=("auth")
     commands+=("autoscale")
     commands+=("cancel-build")
-    commands+=("cluster")
     commands+=("completion")
     commands+=("config")
     commands+=("convert")

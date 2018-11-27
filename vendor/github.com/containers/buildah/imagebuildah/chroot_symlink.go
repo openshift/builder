@@ -57,9 +57,9 @@ func resolveChrootedSymlinks() {
 	os.Exit(status)
 }
 
-// resolveSymLink (in the grandparent process) resolves any symlink in filename
+// ResolveSymLink (in the grandparent process) resolves any symlink in filename
 // in the context of rootdir.
-func resolveSymLink(rootdir, filename string) (string, error) {
+func ResolveSymLink(rootdir, filename string) (string, error) {
 	// The child process expects a chroot and one path that
 	// will be consulted relative to the chroot directory and evaluated
 	// for any symbolic links present.
@@ -140,6 +140,13 @@ func modTimeIsGreater(rootdir, path string, historyTime string) (bool, error) {
 	// Since we are chroot in rootdir, only want the path of the actual filename, i.e path - rootdir.
 	// +1 to account for the extra "/" (e.g rootdir=/home/user/mydir, path=/home/user/mydir/myfile.json)
 	err = filepath.Walk(path[len(rootdir)+1:], func(path string, info os.FileInfo, err error) error {
+		// If using cached images, it is possible for files that are being copied to come from
+		// previous build stages. But if using cached images, then the copied file won't exist
+		// since a container won't have been created for the previous build stage and info will be nil.
+		// In that case just return nil and continue on with using the cached image for the whole build process.
+		if info == nil {
+			return nil
+		}
 		modTime := info.ModTime()
 		if info.Mode()&os.ModeSymlink == os.ModeSymlink {
 			// Evaluate any symlink that occurs to get updated modified information

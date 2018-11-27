@@ -1,5 +1,5 @@
-hash: ac6dbd6bab6de923e6faddb7966a8b9e7b56d07183369819b85ec31f37a4971c
-updated: 2018-10-03T16:29:15.670011885-04:00
+hash: 0e9f84bfd5657942debe1823c56b3acc325fed4afb8debf6e6025ea80d5b793b
+updated: 2018-11-19T17:51:08.233992468-05:00
 imports:
 - name: bitbucket.org/ww/goautoneg
   version: 75cd24fc2f2c2a2088577d12123ddee5f54e0675
@@ -339,7 +339,6 @@ imports:
   - api/types/volume
   - builder/dockerfile/command
   - builder/dockerfile/parser
-  - cli/config
   - client
   - opts
   - pkg/archive
@@ -403,8 +402,7 @@ imports:
 - name: github.com/fsnotify/fsnotify
   version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
 - name: github.com/fsouza/go-dockerclient
-  version: 7511300f03c521cfc8e07e88ea8c915add790f50
-  repo: https://github.com/openshift/go-dockerclient.git
+  version: da3951ba2e9e02bc0e7642150b3e265aed7e1df3
 - name: github.com/getsentry/raven-go
   version: 32a13797442ccb601b11761d74232773c1402d14
 - name: github.com/ghodss/yaml
@@ -607,11 +605,11 @@ imports:
   - pagination
   - testhelper
 - name: github.com/gorilla/context
-  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+  version: 51ce91d2eaddeca0ef29a71d766bb3634dadf729
 - name: github.com/gorilla/mux
-  version: 9e1f5955c0d22b55d9e20d6faa28589f83b2faca
+  version: 3d80bc801bb034e17cae38591335b3b1110f1c47
 - name: github.com/gorilla/securecookie
-  version: bb1ab76598893258e90f45d8a708a2505a95af2a
+  version: e65cf8c5df817c89aeb47ecb46064e802e2de943
 - name: github.com/gorilla/sessions
   version: a3acf13e802c358d65f249324d14ed24aac11370
 - name: github.com/gorilla/websocket
@@ -744,7 +742,7 @@ imports:
 - name: github.com/NYTimes/gziphandler
   version: 56545f4a5d46df9a6648819d1664c3a03a13ffdb
 - name: github.com/onsi/ginkgo
-  version: 6e93088a6ab736ec6a12d10ef99962f8d9e435ee
+  version: 2adc71ecca6a3b0d54214b3c1ea1c2cfc11e970a
   repo: https://github.com/openshift/onsi-ginkgo.git
   subpackages:
   - config
@@ -817,7 +815,7 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: c9d033a0b3c3dfca1c70722720c3aea184022496
+  version: 7019e79772a9bfa1ade7b231de705293b9c12401
   subpackages:
   - apps
   - apps/v1
@@ -841,6 +839,7 @@ imports:
   - openshiftcontrolplane
   - openshiftcontrolplane/v1
   - operator
+  - operator/v1
   - operator/v1alpha1
   - osin
   - osin/v1
@@ -862,7 +861,7 @@ imports:
   - webconsole
   - webconsole/v1
 - name: github.com/openshift/client-go
-  version: 431ec9a26e5021f35fa41ee9a89842db9bfdb370
+  version: 960f72aa32a8e9b4dd769b90ff1cb5bd4c898eec
   subpackages:
   - apps/clientset/versioned
   - apps/clientset/versioned/fake
@@ -975,17 +974,9 @@ imports:
   - user/informers/externalversions/user
   - user/informers/externalversions/user/v1
   - user/listers/user/v1
-- name: github.com/openshift/imagebuilder
-  version: fbd4f31c568b767447302e08fb3531b33bcbf837
-  subpackages:
-  - dockerclient
-  - imageprogress
-  - signal
-  - strslice
 - name: github.com/openshift/library-go
-  version: 80f2f78af2af54fd257580a3680cba397b79cc49
+  version: b468f2b93d32f4506f0b4a998ca2ae4fc4a6871c
   subpackages:
-  - pkg/assets
   - pkg/config/configdefaults
   - pkg/config/helpers
   - pkg/config/leaderelection
@@ -998,39 +989,25 @@ imports:
   - pkg/network/networkapihelpers
   - pkg/serviceability
 - name: github.com/openshift/service-serving-cert-signer
-  version: 20988243298ac483d5c7898842cf23ba115e1b50
+  version: 058da9c8b336ae72ce1f8d9f0708b73dd445ceb2
   subpackages:
-  - pkg/controller/servingcert
+  - pkg/boilerplate/controller
+  - pkg/controller/api
+  - pkg/controller/servingcert/controller
   - pkg/controller/servingcert/cryptoextensions
 - name: github.com/openshift/source-to-image
-  version: 402b6f8302ae9a5c35643d939b607c715136ea36
+  version: 3c34ff83e47ae6947b157f053fd119bc378635ba
   subpackages:
   - pkg/api
   - pkg/api/constants
-  - pkg/api/describe
-  - pkg/api/validation
-  - pkg/build
-  - pkg/build/strategies
-  - pkg/build/strategies/dockerfile
-  - pkg/build/strategies/layered
-  - pkg/build/strategies/onbuild
-  - pkg/build/strategies/sti
-  - pkg/docker
   - pkg/errors
-  - pkg/ignore
-  - pkg/scm
-  - pkg/scm/downloaders/empty
-  - pkg/scm/downloaders/file
-  - pkg/scm/downloaders/git
   - pkg/scm/git
-  - pkg/scripts
   - pkg/tar
   - pkg/util
   - pkg/util/cmd
   - pkg/util/cygpath
   - pkg/util/fs
   - pkg/util/glog
-  - pkg/util/interrupt
   - pkg/util/status
   - pkg/util/user
 - name: github.com/pborman/uuid
@@ -1042,7 +1019,7 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/pkg/profile
-  version: 057bc52a47ec3c79498dda63f4a6f8298725e976
+  version: 22592cc4bae3572d59be8852c6980023e4c9dec5
 - name: github.com/pkg/sftp
   version: 4d0e916071f68db74f8a73926335f809396d6b42
 - name: github.com/pmezard/go-difflib
@@ -1633,7 +1610,7 @@ imports:
   - plugin/pkg/authenticator/token/webhook
   - plugin/pkg/authorizer/webhook
 - name: k8s.io/client-go
-  version: 427190a5c8fb757089de86d5081f2e058408d217
+  version: b28cdde46f9c296b8ecde9c0bed0d215b6cda59d
   repo: https://github.com/openshift/kubernetes-client-go.git
   subpackages:
   - discovery
@@ -1835,7 +1812,7 @@ imports:
   - metrics/api/v1/types
 - name: k8s.io/kube-aggregator
   version: 660b3ce4ff19afa530c17cfa305df52a17360e09
-  repo: https://github.com/openshift/kube-aggregator.git
+  repo: https://github.com/openshift/kubernetes-kube-aggregator.git
   subpackages:
   - pkg/apis/apiregistration
   - pkg/apis/apiregistration/install
@@ -1875,7 +1852,7 @@ imports:
   - pkg/util/proto/testing
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 852d32d3b3526363bad501101fc2e73b344b1d9a
+  version: 7bc23512e58d861696ff262173188c053c68d66c
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - cmd/controller-manager/app
@@ -2675,6 +2652,9 @@ imports:
   - test/e2e/storage/vsphere
   - test/images/net/common
   - test/images/net/nat
+  - test/integration
+  - test/integration/etcd
+  - test/integration/framework
   - test/utils
   - test/utils/image
   - third_party/forked/golang/expansion
@@ -2700,7 +2680,7 @@ imports:
   - pkg/client/custom_metrics
   - pkg/client/external_metrics
 - name: k8s.io/sample-apiserver
-  version: d55e0f90463d5b0aa4db614bb18c30af4fac7748
+  version: 3ee9c24f9398f7dcde4007aea8a3a260fcfed6d9
   subpackages:
   - pkg/apis/wardle
   - pkg/apis/wardle/v1alpha1

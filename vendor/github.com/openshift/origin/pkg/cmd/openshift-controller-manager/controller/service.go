@@ -2,11 +2,10 @@ package controller
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
 	"github.com/openshift/origin/pkg/cmd/server/bootstrappolicy"
-	servingcertcontroller "github.com/openshift/service-serving-cert-signer/pkg/controller/servingcert"
+	servingcertcontroller "github.com/openshift/service-serving-cert-signer/pkg/controller/servingcert/controller"
 )
 
 func RunServiceServingCertsController(ctx *ControllerContext) (bool, error) {
@@ -26,7 +25,6 @@ func RunServiceServingCertsController(ctx *ControllerContext) (bool, error) {
 		ctx.ClientBuilder.ClientOrDie(bootstrappolicy.InfraServiceServingCertServiceAccountName).Core(),
 		ca,
 		"cluster.local",
-		2*time.Minute,
 	)
 	servingCertUpdateController := servingcertcontroller.NewServiceServingCertUpdateController(
 		ctx.KubernetesInformers.Core().V1().Services(),
@@ -34,7 +32,6 @@ func RunServiceServingCertsController(ctx *ControllerContext) (bool, error) {
 		ctx.ClientBuilder.ClientOrDie(bootstrappolicy.InfraServiceServingCertServiceAccountName).Core(),
 		ca,
 		"cluster.local",
-		20*time.Minute,
 	)
 
 	go servingCertController.Run(1, ctx.Stop)

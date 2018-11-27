@@ -12,17 +12,16 @@ import (
 
 	// Admission control plug-ins used by OpenShift
 	authorizationrestrictusers "github.com/openshift/origin/pkg/authorization/apiserver/admission/restrictusers"
-	buildjenkinsbootstrapper "github.com/openshift/origin/pkg/build/apiserver/admission/jenkinsbootstrapper"
 	buildsecretinjector "github.com/openshift/origin/pkg/build/apiserver/admission/secretinjector"
 	buildstrategyrestrictions "github.com/openshift/origin/pkg/build/apiserver/admission/strategyrestrictions"
 	"github.com/openshift/origin/pkg/image/apiserver/admission/imagepolicy"
 	imageadmission "github.com/openshift/origin/pkg/image/apiserver/admission/limitrange"
-	ingressadmission "github.com/openshift/origin/pkg/network/apiserver/admission"
 	projectnodeenv "github.com/openshift/origin/pkg/project/apiserver/admission/nodeenv"
 	projectrequestlimit "github.com/openshift/origin/pkg/project/apiserver/admission/requestlimit"
 	quotaclusterresourceoverride "github.com/openshift/origin/pkg/quota/apiserver/admission/clusterresourceoverride"
 	quotaclusterresourcequota "github.com/openshift/origin/pkg/quota/apiserver/admission/clusterresourcequota"
 	quotarunonceduration "github.com/openshift/origin/pkg/quota/apiserver/admission/runonceduration"
+	ingressadmission "github.com/openshift/origin/pkg/route/apiserver/admission"
 	schedulerpodnodeconstraints "github.com/openshift/origin/pkg/scheduler/admission/podnodeconstraints"
 	securityadmission "github.com/openshift/origin/pkg/security/apiserver/admission/sccadmission"
 	mutatingwebhook "k8s.io/apiserver/pkg/admission/plugin/webhook/mutating"
@@ -57,7 +56,6 @@ func RegisterAllAdmissionPlugins(plugins *admission.Plugins) {
 
 func RegisterOpenshiftAdmissionPlugins(plugins *admission.Plugins) {
 	authorizationrestrictusers.Register(plugins)
-	buildjenkinsbootstrapper.Register(plugins)
 	buildsecretinjector.Register(plugins)
 	buildstrategyrestrictions.Register(plugins)
 	imageadmission.Register(plugins)
@@ -77,7 +75,6 @@ func RegisterOpenshiftAdmissionPlugins(plugins *admission.Plugins) {
 
 var (
 	DefaultOnPlugins = sets.NewString(
-		"openshift.io/JenkinsBootstrapper",
 		"openshift.io/BuildConfigSecretInjector",
 		"BuildByStrategy",
 		storageclassdefaultadmission.PluginName,

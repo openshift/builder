@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	. "github.com/containers/libpod/test/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/opencontainers/selinux/go-selinux"
@@ -13,7 +14,7 @@ var _ = Describe("Podman run", func() {
 	var (
 		tempdir    string
 		err        error
-		podmanTest PodmanTest
+		podmanTest *PodmanTestIntegration
 	)
 
 	BeforeEach(func() {
@@ -21,7 +22,7 @@ var _ = Describe("Podman run", func() {
 		if err != nil {
 			os.Exit(1)
 		}
-		podmanTest = PodmanCreate(tempdir)
+		podmanTest = PodmanTestCreate(tempdir)
 		podmanTest.RestoreAllArtifacts()
 		if !selinux.GetEnabled() {
 			Skip("SELinux not enabled")
@@ -81,6 +82,70 @@ var _ = Describe("Podman run", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
 		match, _ := session.GrepString("spc_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux label resolv.conf", func() {
+		session := podmanTest.Podman([]string{"run", fedoraMinimal, "ls", "-Z", "/etc/resolv.conf"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux label hosts", func() {
+		session := podmanTest.Podman([]string{"run", fedoraMinimal, "ls", "-Z", "/etc/hosts"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux label hostname", func() {
+		session := podmanTest.Podman([]string{"run", fedoraMinimal, "ls", "-Z", "/etc/hostname"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux label /run/secrets", func() {
+		session := podmanTest.Podman([]string{"run", fedoraMinimal, "ls", "-dZ", "/run/secrets"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux --privileged label resolv.conf", func() {
+		session := podmanTest.Podman([]string{"run", "--privileged", fedoraMinimal, "ls", "-Z", "/etc/resolv.conf"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux --privileged label hosts", func() {
+		session := podmanTest.Podman([]string{"run", "--privileged", fedoraMinimal, "ls", "-Z", "/etc/hosts"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux --privileged label hostname", func() {
+		session := podmanTest.Podman([]string{"run", "--privileged", fedoraMinimal, "ls", "-Z", "/etc/hostname"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman test selinux --privileged label /run/secrets", func() {
+		session := podmanTest.Podman([]string{"run", "--privileged", fedoraMinimal, "ls", "-dZ", "/run/secrets"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("container_file_t")
 		Expect(match).Should(BeTrue())
 	})
 

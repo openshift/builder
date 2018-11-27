@@ -1,5 +1,6 @@
 : ${PROG:=$(basename ${BASH_SOURCE})}
 
+
 __podman_previous_extglob_setting=$(shopt -p extglob)
 shopt -s extglob
 
@@ -1770,8 +1771,13 @@ _podman_restart() {
      --timeout -t
      "
      local boolean_options="
+     --all
+     -a
      --latest
-     -l"
+     -l
+     --running
+     --timeout
+     -t"
      case "$cur" in
         -*)
             COMPREPLY=($(compgen -W "$boolean_options $options_with_args" -- "$cur"))
@@ -1900,11 +1906,16 @@ _podman_top() {
 }
 
 _podman_version() {
-     local options_with_args="
-     "
-     local boolean_options="
-     "
-     _complete_ "$options_with_args" "$boolean_options"
+    local boolean_options="
+     --help
+     -h
+    "
+    local options_with_args="
+     --format
+    "
+    local all_options="$options_with_args $boolean_options"
+
+    _complete_ "$options_with_args" "$boolean_options"
 }
 
 _podman_save() {
@@ -1929,6 +1940,10 @@ _podman_save() {
 }
 
 _podman_pause() {
+    local boolean_options="
+    -a
+    --all
+    "
      local options_with_args="
      --help -h
      "
@@ -2030,6 +2045,10 @@ _podman_stop() {
 }
 
 _podman_unpause() {
+    local boolean_options="
+    -a
+    --all
+    "
      local options_with_args="
      --help -h
      "
@@ -2159,17 +2178,35 @@ _podman_container_runlabel() {
     esac
 }
 
+_podman_container_exists() {
+    local options_with_args="
+    "
+
+    local boolean_options="
+  "
+}
+
+_podman_image_exists() {
+    local options_with_args="
+    "
+
+    local boolean_options="
+  "
+}
+
 _podman_pod_create() {
   local options_with_args="
       --cgroup-parent
       --infra-command
       --infra-image
-      --share
-      --podidfile
       --label-file
       --label
       -l
       --name
+      --podidfile
+      --publish
+      -p
+      --share
   "
 
   local boolean_options="

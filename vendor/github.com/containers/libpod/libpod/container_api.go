@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/containers/libpod/libpod/driver"
-	"github.com/containers/libpod/pkg/chrootuser"
 	"github.com/containers/libpod/pkg/inspect"
+	"github.com/containers/libpod/pkg/lookup"
 	"github.com/containers/storage/pkg/stringid"
 	"github.com/docker/docker/daemon/caps"
 	"github.com/pkg/errors"
@@ -46,9 +46,6 @@ func (c *Container) Init(ctx context.Context) (err error) {
 		return errors.Wrapf(ErrCtrStateInvalid, "some dependencies of container %s are not started: %s", c.ID(), depString)
 	}
 
-	if err := c.prepare(); err != nil {
-		return err
-	}
 	defer func() {
 		if err != nil {
 			if err2 := c.cleanup(ctx); err2 != nil {
@@ -56,6 +53,10 @@ func (c *Container) Init(ctx context.Context) (err error) {
 			}
 		}
 	}()
+
+	if err := c.prepare(); err != nil {
+		return err
+	}
 
 	if c.state.State == ContainerStateStopped {
 		// Reinitialize the container
@@ -99,9 +100,6 @@ func (c *Container) Start(ctx context.Context) (err error) {
 		return errors.Wrapf(ErrCtrStateInvalid, "some dependencies of container %s are not started: %s", c.ID(), depString)
 	}
 
-	if err := c.prepare(); err != nil {
-		return err
-	}
 	defer func() {
 		if err != nil {
 			if err2 := c.cleanup(ctx); err2 != nil {
@@ -109,6 +107,10 @@ func (c *Container) Start(ctx context.Context) (err error) {
 			}
 		}
 	}()
+
+	if err := c.prepare(); err != nil {
+		return err
+	}
 
 	if c.state.State == ContainerStateStopped {
 		// Reinitialize the container if we need to
@@ -164,9 +166,6 @@ func (c *Container) StartAndAttach(ctx context.Context, streams *AttachStreams, 
 		return nil, errors.Wrapf(ErrCtrStateInvalid, "some dependencies of container %s are not started: %s", c.ID(), depString)
 	}
 
-	if err := c.prepare(); err != nil {
-		return nil, err
-	}
 	defer func() {
 		if err != nil {
 			if err2 := c.cleanup(ctx); err2 != nil {
@@ -174,6 +173,10 @@ func (c *Container) StartAndAttach(ctx context.Context, streams *AttachStreams, 
 			}
 		}
 	}()
+
+	if err := c.prepare(); err != nil {
+		return nil, err
+	}
 
 	if c.state.State == ContainerStateStopped {
 		// Reinitialize the container if we need to
@@ -292,13 +295,13 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user string) e
 	// the host
 	hostUser := ""
 	if user != "" {
-		uid, gid, err := chrootuser.GetUser(c.state.Mountpoint, user)
+		execUser, err := lookup.GetUserGroupInfo(c.state.Mountpoint, user, nil)
 		if err != nil {
-			return errors.Wrapf(err, "error getting user to launch exec session as")
+			return err
 		}
 
 		// runc expects user formatted as uid:gid
-		hostUser = fmt.Sprintf("%d:%d", uid, gid)
+		hostUser = fmt.Sprintf("%d:%d", execUser.Uid, execUser.Gid)
 	}
 
 	// Generate exec session ID
@@ -327,9 +330,10 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user string) e
 	}
 
 	pidFile := c.execPidPath(sessionID)
-	// 1 second seems a reasonable time to wait
-	// See https://github.com/containers/libpod/issues/1495
-	const pidWaitTimeout = 1000
+	// 60 second seems a reasonable time to wait
+	// https://github.com/containers/libpod/issues/1495
+	// https://github.com/containers/libpod/issues/1816
+	const pidWaitTimeout = 60000
 
 	// Wait until the runtime makes the pidfile
 	// TODO: If runtime errors before the PID file is created, we have to
@@ -453,22 +457,19 @@ func (c *Container) Unmount(force bool) error {
 		}
 	}
 
-	if c.state.State == ContainerStateRunning || c.state.State == ContainerStatePaused {
-		return errors.Wrapf(ErrCtrStateInvalid, "cannot unmount storage for container %s as it is running or paused", c.ID())
-	}
-
-	// Check if we have active exec sessions
-	if len(c.state.ExecSessions) != 0 {
-		return errors.Wrapf(ErrCtrStateInvalid, "container %s has active exec sessions, refusing to unmount", c.ID())
-	}
-
 	if c.state.Mounted {
 		mounted, err := c.runtime.storageService.MountedContainerImage(c.ID())
 		if err != nil {
 			return errors.Wrapf(err, "can't determine how many times %s is mounted, refusing to unmount", c.ID())
 		}
 		if mounted == 1 {
-			return errors.Wrapf(err, "can't unmount %s last mount, it is still in use", c.ID())
+			if c.state.State == ContainerStateRunning || c.state.State == ContainerStatePaused {
+				return errors.Wrapf(ErrCtrStateInvalid, "cannot unmount storage for container %s as it is running or paused", c.ID())
+			}
+			if len(c.state.ExecSessions) != 0 {
+				return errors.Wrapf(ErrCtrStateInvalid, "container %s has active exec sessions, refusing to unmount", c.ID())
+			}
+			return errors.Wrapf(ErrInternal, "can't unmount %s last mount, it is still in use", c.ID())
 		}
 	}
 	return c.unmount(force)
@@ -688,7 +689,7 @@ func (c *Container) Sync() error {
 		(c.state.State != ContainerStateConfigured) {
 		oldState := c.state.State
 		// TODO: optionally replace this with a stat for the exit file
-		if err := c.runtime.ociRuntime.updateContainerStatus(c); err != nil {
+		if err := c.runtime.ociRuntime.updateContainerStatus(c, true); err != nil {
 			return err
 		}
 		// Only save back to DB if state changed
@@ -829,8 +830,15 @@ func (c *Container) Refresh(ctx context.Context) error {
 	return nil
 }
 
+// ContainerCheckpointOptions is a struct used to pass the parameters
+// for checkpointing to corresponding functions
+type ContainerCheckpointOptions struct {
+	Keep        bool
+	KeepRunning bool
+}
+
 // Checkpoint checkpoints a container
-func (c *Container) Checkpoint(ctx context.Context, keep bool) error {
+func (c *Container) Checkpoint(ctx context.Context, options ContainerCheckpointOptions) error {
 	logrus.Debugf("Trying to checkpoint container %s", c)
 	if !c.batched {
 		c.lock.Lock()
@@ -841,7 +849,7 @@ func (c *Container) Checkpoint(ctx context.Context, keep bool) error {
 		}
 	}
 
-	return c.checkpoint(ctx, keep)
+	return c.checkpoint(ctx, options)
 }
 
 // Restore restores a container

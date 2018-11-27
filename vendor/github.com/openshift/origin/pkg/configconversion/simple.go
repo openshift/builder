@@ -6,6 +6,7 @@ import (
 	legacyconfigv1 "github.com/openshift/api/legacyconfig/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	osinv1 "github.com/openshift/api/osin/v1"
+	"github.com/openshift/library-go/pkg/crypto"
 	"github.com/openshift/origin/pkg/apiserver/admission"
 )
 
@@ -13,6 +14,9 @@ func ToHTTPServingInfo(in *legacyconfigv1.HTTPServingInfo) (out configv1.HTTPSer
 	err = Convert_legacyconfigv1_HTTPServingInfo_to_configv1_HTTPServingInfo(in, &out, nil)
 	if err != nil {
 		return configv1.HTTPServingInfo{}, err
+	}
+	if len(out.CipherSuites) == 0 {
+		out.CipherSuites = crypto.CipherSuitesToNamesOrDie(crypto.DefaultCiphers())
 	}
 	return out, nil
 }
@@ -26,6 +30,9 @@ func ToKubeClientConfig(in *legacyconfigv1.MasterClients) (out configv1.KubeClie
 }
 
 func ToAuditConfig(in *legacyconfigv1.AuditConfig) (out configv1.AuditConfig, err error) {
+	// FIXME: drop this once we drop openshift start, this prevents unnecessary conversions
+	// of the embeded CreationTimestamp in audit object
+	in.PolicyConfiguration.Object = nil
 	err = Convert_legacyconfigv1_AuditConfig_to_configv1_AuditConfig(in, &out, nil)
 	if err != nil {
 		return configv1.AuditConfig{}, err

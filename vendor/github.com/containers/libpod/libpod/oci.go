@@ -11,12 +11,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/containers/libpod/pkg/ctime"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/libpod/pkg/util"
 	"github.com/coreos/go-systemd/activation"
@@ -352,7 +350,8 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 		// Set the label of the conmon process to be level :s0
 		// This will allow the container processes to talk to fifo-files
 		// passed into the container by conmon
-		plabel, err := selinux.CurrentLabel()
+		var plabel string
+		plabel, err = selinux.CurrentLabel()
 		if err != nil {
 			childPipe.Close()
 			return errors.Wrapf(err, "Failed to get current SELinux label")
@@ -362,7 +361,7 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 		runtime.LockOSThread()
 		if c["level"] != "s0" && c["level"] != "" {
 			c["level"] = "s0"
-			if err := label.SetProcessLabel(c.Get()); err != nil {
+			if err = label.SetProcessLabel(c.Get()); err != nil {
 				runtime.UnlockOSThread()
 				return err
 			}
@@ -443,6 +442,7 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 			}
 			return errors.Wrapf(ErrInternal, "container create failed")
 		}
+		ctr.state.PID = ss.si.Pid
 	case <-time.After(ContainerCreateTimeout):
 		return errors.Wrapf(ErrInternal, "container creation timeout")
 	}
@@ -451,16 +451,46 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 
 // updateContainerStatus retrieves the current status of the container from the
 // runtime. It updates the container's state but does not save it.
-func (r *OCIRuntime) updateContainerStatus(ctr *Container) error {
-	state := new(spec.State)
+// If useRunc is false, we will not directly hit runc to see the container's
+// status, but will instead only check for the existence of the conmon exit file
+// and update state to stopped if it exists.
+func (r *OCIRuntime) updateContainerStatus(ctr *Container, useRunc bool) error {
+	exitFile := ctr.exitFilePath()
 
 	runtimeDir, err := util.GetRootlessRuntimeDir()
 	if err != nil {
 		return err
 	}
 
+	// If not using runc, we don't need to do most of this.
+	if !useRunc {
+		// If the container's not running, nothing to do.
+		if ctr.state.State != ContainerStateRunning {
+			return nil
+		}
+
+		// Check for the exit file conmon makes
+		info, err := os.Stat(exitFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// Container is still running, no error
+				return nil
+			}
+
+			return errors.Wrapf(err, "error running stat on container %s exit file", ctr.ID())
+		}
+
+		// Alright, it exists. Transition to Stopped state.
+		ctr.state.State = ContainerStateStopped
+
+		// Read the exit file to get our stopped time and exit code.
+		return ctr.handleExitFile(exitFile, info)
+	}
+
 	// Store old state so we know if we were already stopped
 	oldState := ctr.state.State
+
+	state := new(spec.State)
 
 	cmd := exec.Command(r.path, "state", ctr.ID())
 	cmd.Env = append(cmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", runtimeDir))
@@ -480,6 +510,8 @@ func (r *OCIRuntime) updateContainerStatus(ctr *Container) error {
 		}
 		if strings.Contains(string(out), "does not exist") {
 			ctr.removeConmonFiles()
+			ctr.state.ExitCode = -1
+			ctr.state.FinishedTime = time.Now()
 			ctr.state.State = ContainerStateExited
 			return nil
 		}
@@ -514,7 +546,6 @@ func (r *OCIRuntime) updateContainerStatus(ctr *Container) error {
 	// Only grab exit status if we were not already stopped
 	// If we were, it should already be in the database
 	if ctr.state.State == ContainerStateStopped && oldState != ContainerStateStopped {
-		exitFile := filepath.Join(r.exitsDir, ctr.ID())
 		var fi os.FileInfo
 		err = kwait.ExponentialBackoff(
 			kwait.Backoff{
@@ -538,24 +569,7 @@ func (r *OCIRuntime) updateContainerStatus(ctr *Container) error {
 			return nil
 		}
 
-		ctr.state.FinishedTime = ctime.Created(fi)
-		statusCodeStr, err := ioutil.ReadFile(exitFile)
-		if err != nil {
-			return errors.Wrapf(err, "failed to read exit file for container %s", ctr.ID())
-		}
-		statusCode, err := strconv.Atoi(string(statusCodeStr))
-		if err != nil {
-			return errors.Wrapf(err, "error converting exit status code for container %s to int",
-				ctr.ID())
-		}
-		ctr.state.ExitCode = int32(statusCode)
-
-		oomFilePath := filepath.Join(ctr.bundlePath(), "oom")
-		if _, err = os.Stat(oomFilePath); err == nil {
-			ctr.state.OOMKilled = true
-		}
-
-		ctr.state.Exited = true
+		return ctr.handleExitFile(exitFile, fi)
 	}
 
 	return nil
@@ -601,6 +615,8 @@ func (r *OCIRuntime) killContainer(ctr *Container, signal uint) error {
 // Does not set finished time for container, assumes you will run updateStatus
 // after to pull the exit code
 func (r *OCIRuntime) stopContainer(ctr *Container, timeout uint) error {
+	logrus.Debugf("Stopping container %s (PID %d)", ctr.ID(), ctr.state.PID)
+
 	// Ping the container to see if it's alive
 	// If it's not, it's already stopped, return
 	err := unix.Kill(ctr.state.PID, 0)
@@ -725,6 +741,8 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 
 	if tty {
 		args = append(args, "--tty")
+	} else {
+		args = append(args, "--tty=false")
 	}
 
 	if user != "" {
@@ -828,13 +846,22 @@ func (r *OCIRuntime) execStopContainer(ctr *Container, timeout uint) error {
 }
 
 // checkpointContainer checkpoints the given container
-func (r *OCIRuntime) checkpointContainer(ctr *Container) error {
+func (r *OCIRuntime) checkpointContainer(ctr *Container, options ContainerCheckpointOptions) error {
 	// imagePath is used by CRIU to store the actual checkpoint files
 	imagePath := ctr.CheckpointPath()
 	// workPath will be used to store dump.log and stats-dump
 	workPath := ctr.bundlePath()
 	logrus.Debugf("Writing checkpoint to %s", imagePath)
 	logrus.Debugf("Writing checkpoint logs to %s", workPath)
-	return utils.ExecCmdWithStdStreams(os.Stdin, os.Stdout, os.Stderr, nil, r.path, "checkpoint",
-		"--image-path", imagePath, "--work-path", workPath, ctr.ID())
+	args := []string{}
+	args = append(args, "checkpoint")
+	args = append(args, "--image-path")
+	args = append(args, imagePath)
+	args = append(args, "--work-path")
+	args = append(args, workPath)
+	if options.KeepRunning {
+		args = append(args, "--leave-running")
+	}
+	args = append(args, ctr.ID())
+	return utils.ExecCmdWithStdStreams(os.Stdin, os.Stdout, os.Stderr, nil, r.path, args...)
 }

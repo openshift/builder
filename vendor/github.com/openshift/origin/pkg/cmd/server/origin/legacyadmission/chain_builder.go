@@ -23,8 +23,8 @@ import (
 	configapilatest "github.com/openshift/origin/pkg/cmd/server/apis/config/latest"
 	"github.com/openshift/origin/pkg/image/apiserver/admission/apis/imagepolicy"
 	imageadmission "github.com/openshift/origin/pkg/image/apiserver/admission/limitrange"
-	ingressadmission "github.com/openshift/origin/pkg/network/apiserver/admission"
 	overrideapi "github.com/openshift/origin/pkg/quota/apiserver/admission/apis/clusterresourceoverride"
+	ingressadmission "github.com/openshift/origin/pkg/route/apiserver/admission"
 	"github.com/openshift/origin/pkg/security/apiserver/admission/sccadmission"
 	"github.com/openshift/origin/pkg/service/admission/externalipranger"
 	"github.com/openshift/origin/pkg/service/admission/restrictedendpoints"
@@ -51,7 +51,6 @@ var (
 	openshiftAdmissionControlPlugins = []string{
 		"ProjectRequestLimit",
 		"openshift.io/RestrictSubjectBindings",
-		"openshift.io/JenkinsBootstrapper",
 		"openshift.io/BuildConfigSecretInjector",
 		"BuildByStrategy",
 		imageadmission.PluginName,
@@ -122,7 +121,6 @@ var (
 		"EventRateLimit",
 		"ProjectRequestLimit",
 		"openshift.io/RestrictSubjectBindings",
-		"openshift.io/JenkinsBootstrapper",
 		"openshift.io/BuildConfigSecretInjector",
 		"BuildByStrategy",
 		imageadmission.PluginName,

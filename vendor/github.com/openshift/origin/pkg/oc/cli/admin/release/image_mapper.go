@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -122,12 +123,19 @@ func (p *Payload) References() (*imageapi.ImageStream, error) {
 
 func parseImageStream(path string) (*imageapi.ImageStream, error) {
 	data, err := ioutil.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, err
+	}
 	if err != nil {
 		return nil, fmt.Errorf("unable to read release image info from release contents: %v", err)
 	}
+	return readReleaseImageReferences(data)
+}
+
+func readReleaseImageReferences(data []byte) (*imageapi.ImageStream, error) {
 	is := &imageapi.ImageStream{}
 	if err := yaml.Unmarshal(data, &is); err != nil {
-		return nil, fmt.Errorf("unable to load image-references from release payload at %s: %v", path, err)
+		return nil, fmt.Errorf("unable to load release image-references: %v", err)
 	}
 	if is.Kind != "ImageStream" || is.APIVersion != "image.openshift.io/v1" {
 		return nil, fmt.Errorf("unrecognized image-references in release payload")

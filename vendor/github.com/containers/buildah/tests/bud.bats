@@ -59,6 +59,48 @@ load helpers
   rm -rf ${TESTSDIR}/bud/use-layers/mount
 }
 
+@test "bud with --layers, multistage, and COPY with --from" {
+  mkdir -p ${TESTSDIR}/bud/use-layers/uuid
+  uuidgen > ${TESTSDIR}/bud/use-layers/uuid/data
+  mkdir -p ${TESTSDIR}/bud/use-layers/date
+  date > ${TESTSDIR}/bud/use-layers/date/data
+
+  buildah bud --signature-policy ${TESTSDIR}/policy.json --layers -t test1 -f Dockerfile.multistage-copy ${TESTSDIR}/bud/use-layers
+  run buildah --debug=false images -a
+  [ $(wc -l <<< "$output") -eq 6 ]
+  [ "${status}" -eq 0 ]
+  buildah bud --signature-policy ${TESTSDIR}/policy.json --layers -t test2 -f Dockerfile.multistage-copy ${TESTSDIR}/bud/use-layers
+  run buildah --debug=false images -a
+  [ $(wc -l <<< "$output") -eq 7 ]
+  [ "${status}" -eq 0 ]
+
+  uuidgen > ${TESTSDIR}/bud/use-layers/uuid/data
+  date > ${TESTSDIR}/bud/use-layers/date/data
+  buildah bud --signature-policy ${TESTSDIR}/policy.json --layers -t test3 -f Dockerfile.multistage-copy ${TESTSDIR}/bud/use-layers
+  run buildah --debug=false images -a
+  [ $(wc -l <<< "$output") -eq 11 ]
+  [ "${status}" -eq 0 ]
+  run buildah --debug=false containers
+  [ $(wc -l <<< "$output") -eq 1 ]
+  [ "${status}" -eq 0 ]
+  
+  ctr=$(buildah --debug=false from --signature-policy ${TESTSDIR}/policy.json test3)
+  mnt=$(buildah --debug=false mount ${ctr})
+  run test -e $mnt/uuid
+  [ "${status}" -eq 0 ]
+  run test -e $mnt/date
+  [ "${status}" -eq 0 ]
+
+  buildah bud --signature-policy ${TESTSDIR}/policy.json -t test4 -f Dockerfile.multistage-copy ${TESTSDIR}/bud/use-layers
+  run buildah --debug=false images -a
+  [ $(wc -l <<< "$output") -eq 12 ]
+  [ "${status}" -eq 0 ]
+
+  buildah rmi -a -f
+  rm -rf ${TESTSDIR}/bud/use-layers/uuid
+  rm -rf ${TESTSDIR}/bud/use-layers/date
+}
+
 @test "bud with --layers and symlink file" {
   echo 'echo "Hello World!"' > ${TESTSDIR}/bud/use-layers/hello.sh
   cd ${TESTSDIR}/bud/use-layers && ln -s hello.sh hello_world.sh
@@ -980,4 +1022,53 @@ load helpers
   echo "$output"
   [ "$status" -eq 0 ]
   [[ $output =~ "[PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LOCAL=/1]" ]]
+}
+
+@test "bud with symlink Dockerfile not specified in file" {
+  target=alpine-image
+  run buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/symlink ${TESTSDIR}/bud/symlink
+  echo "$output"
+  [[ $output =~ "FROM alpine" ]]
+  [ "$status" -eq 0 ]
+}
+
+@test "bud with dir for file but no Dockerfile in dir" {
+  target=alpine-image
+  run buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/empty-dir ${TESTSDIR}/bud/empty-dir
+  echo "$output"
+  [[ $output =~ "no such file or directory" ]]
+  [ "$status" -ne 0 ]
+}
+
+@test "bud with bad dir Dockerfile" {
+  target=alpine-image
+  run buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/baddirname ${TESTSDIR}/baddirname
+  echo "$output"
+  [[ $output =~ "no such file or directory" ]]
+  [ "$status" -ne 0 ]
+}
+
+@test "bud with ARG before FROM default value" {
+  target=leading-args-default
+  run buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/leading-args/Dockerfile ${TESTSDIR}/bud/leading-args
+  [ "$status" -eq 0 ]
+}
+
+@test "bud with ARG before FROM" {
+  target=leading-args
+  run buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} --build-arg=VERSION=musl -f ${TESTSDIR}/bud/leading-args/Dockerfile ${TESTSDIR}/bud/leading-args
+  [ "$status" -eq 0 ]
+}
+
+@test "bud-with-healthcheck" {
+  target=alpine-image
+  buildah --debug=false bud -q --signature-policy ${TESTSDIR}/policy.json -t ${target} --format docker ${TESTSDIR}/bud/healthcheck
+  run buildah --debug=false inspect -f '{{printf "%q" .Docker.Config.Healthcheck.Test}} {{printf "%d" .Docker.Config.Healthcheck.StartPeriod}} {{printf "%d" .Docker.Config.Healthcheck.Interval}} {{printf "%d" .Docker.Config.Healthcheck.Timeout}} {{printf "%d" .Docker.Config.Healthcheck.Retries}}' ${target}
+  echo "$output"
+  [ "$status" -eq 0 ]
+  second=1000000000
+  threeseconds=$(( 3 * $second ))
+  fiveminutes=$(( 5 * 60 * $second ))
+  tenminutes=$(( 10 * 60 * $second ))
+  [ "$output" = '["CMD-SHELL" "curl -f http://localhost/ || exit 1"]'" $tenminutes $fiveminutes $threeseconds 4" ]
 }
