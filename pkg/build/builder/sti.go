@@ -464,7 +464,12 @@ func (s *S2IBuilder) pushImage(name string, authConfig dockerclient.AuthConfigur
 		Name: repository,
 		Tag:  tag,
 	}
-	sha, err := s.dockerClient.PushImage(options, authConfig)
+	var err error
+	sha := ""
+	retryImageAction("Push", func() (pushErr error) {
+		sha, err = s.dockerClient.PushImage(options, authConfig)
+		return err
+	})
 	return sha, err
 }
 
