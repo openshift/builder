@@ -2,6 +2,8 @@ package build
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -150,24 +152,27 @@ type BuildController struct {
 	buildDefaults  builddefaults.BuildDefaults
 	buildOverrides buildoverrides.BuildOverrides
 
-	recorder record.EventRecorder
+	recorder                record.EventRecorder
+	additionalTrustedCAPath string
+	additionalTrustedCAData []byte
 }
 
 // BuildControllerParams is the set of parameters needed to
 // create a new BuildController
 type BuildControllerParams struct {
-	BuildInformer       buildv1informer.BuildInformer
-	BuildConfigInformer buildv1informer.BuildConfigInformer
-	ImageStreamInformer imagev1informer.ImageStreamInformer
-	PodInformer         kubeinformers.PodInformer
-	SecretInformer      kubeinformers.SecretInformer
-	KubeClient          kubernetes.Interface
-	BuildClient         buildv1client.Interface
-	DockerBuildStrategy *strategy.DockerBuildStrategy
-	SourceBuildStrategy *strategy.SourceBuildStrategy
-	CustomBuildStrategy *strategy.CustomBuildStrategy
-	BuildDefaults       builddefaults.BuildDefaults
-	BuildOverrides      buildoverrides.BuildOverrides
+	BuildInformer           buildv1informer.BuildInformer
+	BuildConfigInformer     buildv1informer.BuildConfigInformer
+	ImageStreamInformer     imagev1informer.ImageStreamInformer
+	PodInformer             kubeinformers.PodInformer
+	SecretInformer          kubeinformers.SecretInformer
+	KubeClient              kubernetes.Interface
+	BuildClient             buildv1client.Interface
+	DockerBuildStrategy     *strategy.DockerBuildStrategy
+	SourceBuildStrategy     *strategy.SourceBuildStrategy
+	CustomBuildStrategy     *strategy.CustomBuildStrategy
+	BuildDefaults           builddefaults.BuildDefaults
+	BuildOverrides          buildoverrides.BuildOverrides
+	AdditionalTrustedCAPath string
 }
 
 // NewBuildController creates a new BuildController.
@@ -204,8 +209,9 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		imageStreamQueue: newResourceTriggerQueue(),
 		buildConfigQueue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 
-		recorder:    eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "build-controller"}),
-		runPolicies: policy.GetAllRunPolicies(buildLister, buildClient),
+		recorder:                eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "build-controller"}),
+		runPolicies:             policy.GetAllRunPolicies(buildLister, buildClient),
+		additionalTrustedCAPath: params.AdditionalTrustedCAPath,
 	}
 
 	c.podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -235,6 +241,15 @@ func (bc *BuildController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer bc.buildQueue.ShutDown()
 	defer bc.buildConfigQueue.ShutDown()
+
+	// Read additionalCA data, if it exists
+	if len(bc.additionalTrustedCAPath) > 0 {
+		caData, err := bc.readBuildCAData()
+		if err != nil {
+			glog.Warningf("Failed to read additional CA bundle %s: %v", bc.additionalTrustedCAPath, err)
+		}
+		bc.additionalTrustedCAData = caData
+	}
 
 	// Wait for the controller stores to sync before starting any work in this controller.
 	if !cache.WaitForCacheSync(stopCh, bc.buildStoreSynced, bc.podStoreSynced, bc.secretStoreSynced, bc.imageStreamStoreSynced) {
@@ -476,7 +491,7 @@ func (bc *BuildController) handleNewBuild(build *buildv1.Build, pod *corev1.Pod)
 }
 
 // createPodSpec creates a pod spec for the given build, with all references already resolved.
-func (bc *BuildController) createPodSpec(build *buildv1.Build) (*corev1.Pod, error) {
+func (bc *BuildController) createPodSpec(build *buildv1.Build, includeAdditionalCA bool) (*corev1.Pod, error) {
 	if build.Spec.Output.To != nil {
 		build.Status.OutputDockerImageReference = build.Spec.Output.To.Name
 	}
@@ -489,7 +504,7 @@ func (bc *BuildController) createPodSpec(build *buildv1.Build) (*corev1.Pod, err
 	build.Status.Message = ""
 
 	// Invoke the strategy to create a build pod.
-	podSpec, err := bc.createStrategy.CreateBuildPod(build)
+	podSpec, err := bc.createStrategy.CreateBuildPod(build, includeAdditionalCA)
 	if err != nil {
 		if strategy.IsFatal(err) {
 			return nil, &strategy.FatalError{Reason: fmt.Sprintf("failed to create a build pod spec for build %s/%s: %v", build.Namespace, build.Name, err)}
@@ -528,12 +543,17 @@ func (bc *BuildController) resolveImageSecretAsReference(build *buildv1.Build, i
 	if err != nil {
 		return nil, fmt.Errorf("Error getting push/pull secrets for service account %s/%s: %v", build.Namespace, serviceAccount, err)
 	}
-	secret := buildutil.FindDockerSecretAsReference(builderSecrets, imagename)
+	var secret *corev1.LocalObjectReference
+	if len(imagename) != 0 {
+		secret = buildutil.FindDockerSecretAsReference(builderSecrets, imagename)
+	}
 	if secret == nil {
+		glog.V(4).Infof("build %s is referencing an unknown image, will attempt to use the default secret for the service account", build.Name)
 		dockerSecretExists := false
 		for _, builderSecret := range builderSecrets {
 			if builderSecret.Type == corev1.SecretTypeDockercfg || builderSecret.Type == corev1.SecretTypeDockerConfigJson {
 				dockerSecretExists = true
+				secret = &corev1.LocalObjectReference{Name: builderSecret.Name}
 				break
 			}
 		}
@@ -542,7 +562,7 @@ func (bc *BuildController) resolveImageSecretAsReference(build *buildv1.Build, i
 		if !dockerSecretExists {
 			return nil, fmt.Errorf("No docker secrets associated with build service account %s", serviceAccount)
 		}
-		glog.V(4).Infof("No secrets found for pushing or pulling image named %s for build %s/%s", imagename, build.Namespace, build.Name)
+		glog.V(4).Infof("No secrets found for pushing or pulling image named %s for build, using default: %s %s/%s", imagename, build.Namespace, build.Name, secret.Name)
 	}
 	return secret, nil
 }
@@ -834,9 +854,11 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		pullSecret = build.Spec.Strategy.CustomStrategy.PullSecret
 		imageName = build.Spec.Strategy.CustomStrategy.From.Name
 	}
-	// Only look up a pull secret if the user hasn't explicitly provided one and
-	// we have a base/builder image (Docker builds may not have one).
-	if pullSecret == nil && len(imageName) != 0 {
+
+	// Only look up a pull secret if the user hasn't explicitly provided one
+	// if we don't know what image they are referencing, we'll end up using the
+	// docker secret associated w/ the build's service account.
+	if pullSecret == nil {
 		var err error
 		pullSecret, err = bc.resolveImageSecretAsReference(build, imageName)
 		if err != nil {
@@ -874,8 +896,13 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		buildutil.UpdateCustomImageEnv(build.Spec.Strategy.CustomStrategy, build.Spec.Strategy.CustomStrategy.From.Name)
 	}
 
+	// Indicate if the pod spec should mount the additional trusted CAs
+	includeAdditionalCA := false
+	if len(bc.additionalTrustedCAData) > 0 {
+		includeAdditionalCA = true
+	}
 	// Create the build pod spec
-	buildPod, err := bc.createPodSpec(build)
+	buildPod, err := bc.createPodSpec(build, includeAdditionalCA)
 	if err != nil {
 		switch err.(type) {
 		case common.ErrEnvVarResolver:
@@ -1394,10 +1421,10 @@ func (bc *BuildController) createBuildCAConfigMap(build *buildv1.Build, buildPod
 	configMapSpec := bc.createBuildCAConfigMapSpec(build, buildPod)
 	configMap, err := bc.configMapClient.ConfigMaps(buildPod.Namespace).Create(configMapSpec)
 	if err != nil {
-		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build certificate authority: %v", err)
+		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build certificate authority configMap: %v", err)
 		update.setReason("CannotCreateCAConfigMap")
 		update.setMessage(buildutil.StatusMessageCannotCreateCAConfigMap)
-		return update, fmt.Errorf("failed to create build certificate authority: %v", err)
+		return update, fmt.Errorf("failed to create build certificate authority configMap: %v", err)
 	}
 	glog.V(4).Infof("Created certificate authority configMap %s/%s for build %s", build.Namespace, configMap.Name, buildDesc(build))
 	return update, nil
@@ -1419,7 +1446,25 @@ func (bc *BuildController) createBuildCAConfigMapSpec(build *buildv1.Build, buil
 			},
 		},
 	}
+	if len(bc.additionalTrustedCAData) > 0 {
+		cm.Data = map[string]string{
+			buildutil.AdditionalTrustedCAKey: string(bc.additionalTrustedCAData),
+		}
+	}
 	return cm
+}
+
+// readBuildCAData reads the additional trusted CA data from the provided path.
+func (bc *BuildController) readBuildCAData() ([]byte, error) {
+	_, err := os.Stat(bc.additionalTrustedCAPath)
+	if err != nil {
+		return nil, err
+	}
+	pemData, err := ioutil.ReadFile(bc.additionalTrustedCAPath)
+	if err != nil {
+		return nil, err
+	}
+	return pemData, nil
 }
 
 // findBuildCAConfigMap finds the ConfigMap containing the certificate authorities for the build.

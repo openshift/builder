@@ -184,6 +184,8 @@ var (
 		RuntimePath: []string{
 			"/usr/bin/runc",
 			"/usr/sbin/runc",
+			"/usr/local/bin/runc",
+			"/usr/local/sbin/runc",
 			"/sbin/runc",
 			"/bin/runc",
 			"/usr/lib/cri-o-runc/sbin/runc",
@@ -191,6 +193,7 @@ var (
 		ConmonPath: []string{
 			"/usr/libexec/podman/conmon",
 			"/usr/libexec/crio/conmon",
+			"/usr/local/lib/podman/conmon",
 			"/usr/local/libexec/crio/conmon",
 			"/usr/bin/conmon",
 			"/usr/sbin/conmon",
@@ -206,7 +209,7 @@ var (
 		MaxLogSize:            -1,
 		NoPivotRoot:           false,
 		CNIConfigDir:          "/etc/cni/net.d/",
-		CNIPluginDir:          []string{"/usr/libexec/cni", "/usr/lib/cni", "/opt/cni/bin"},
+		CNIPluginDir:          []string{"/usr/libexec/cni", "/usr/lib/cni", "/usr/local/lib/cni", "/opt/cni/bin"},
 		InfraCommand:          DefaultInfraCommand,
 		InfraImage:            DefaultInfraImage,
 		EnablePortReservation: true,
@@ -261,6 +264,7 @@ func NewRuntime(options ...RuntimeOption) (runtime *Runtime, err error) {
 
 	configPath := ConfigPath
 	foundConfig := true
+	rootlessConfigPath := ""
 	if rootless.IsRootless() {
 		home := os.Getenv("HOME")
 		if runtime.config.SignaturePolicyPath == "" {
@@ -269,7 +273,10 @@ func NewRuntime(options ...RuntimeOption) (runtime *Runtime, err error) {
 				runtime.config.SignaturePolicyPath = newPath
 			}
 		}
-		configPath = filepath.Join(home, ".config/containers/libpod.conf")
+
+		rootlessConfigPath = filepath.Join(home, ".config/containers/libpod.conf")
+
+		configPath = rootlessConfigPath
 		if _, err := os.Stat(configPath); err != nil {
 			foundConfig = false
 		}
@@ -314,6 +321,22 @@ func NewRuntime(options ...RuntimeOption) (runtime *Runtime, err error) {
 	if err := makeRuntime(runtime); err != nil {
 		return nil, err
 	}
+
+	if !foundConfig && rootlessConfigPath != "" {
+		os.MkdirAll(filepath.Dir(rootlessConfigPath), 0755)
+		file, err := os.OpenFile(rootlessConfigPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
+		if err != nil && !os.IsExist(err) {
+			return nil, errors.Wrapf(err, "cannot open file %s", rootlessConfigPath)
+		}
+		if err == nil {
+			defer file.Close()
+			enc := toml.NewEncoder(file)
+			if err := enc.Encode(runtime.config); err != nil {
+				os.Remove(rootlessConfigPath)
+			}
+		}
+	}
+
 	return runtime, nil
 }
 

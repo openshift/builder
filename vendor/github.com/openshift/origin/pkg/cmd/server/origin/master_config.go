@@ -20,11 +20,11 @@ import (
 	rbacregistryvalidation "k8s.io/kubernetes/pkg/registry/rbac/validation"
 	rbacauthorizer "k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac"
 
+	authorizationv1informer "github.com/openshift/client-go/authorization/informers/externalversions"
 	imagev1informer "github.com/openshift/client-go/image/informers/externalversions"
 	oauthv1informer "github.com/openshift/client-go/oauth/informers/externalversions"
 	routev1informer "github.com/openshift/client-go/route/informers/externalversions"
 	userv1informer "github.com/openshift/client-go/user/informers/externalversions"
-	authorizationinformer "github.com/openshift/origin/pkg/authorization/generated/informers/internalversion"
 	"github.com/openshift/origin/pkg/cmd/openshift-kube-apiserver/openshiftkubeapiserver"
 	configapi "github.com/openshift/origin/pkg/cmd/server/apis/config"
 	kubernetes "github.com/openshift/origin/pkg/cmd/server/kubernetes/master"
@@ -36,11 +36,11 @@ import (
 	"github.com/openshift/origin/pkg/quota/controller/clusterquotamapping"
 	quotainformer "github.com/openshift/origin/pkg/quota/generated/informers/internalversion"
 
+	securityv1informer "github.com/openshift/client-go/security/informers/externalversions"
 	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftapiserver"
 	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftapiserver/configprocessing"
 	"github.com/openshift/origin/pkg/cmd/server/origin/legacyconfigprocessing"
 	"github.com/openshift/origin/pkg/image/apiserver/registryhostname"
-	securityinformer "github.com/openshift/origin/pkg/security/generated/informers/internalversion"
 )
 
 // MasterConfig defines the required parameters for starting the OpenShift master
@@ -74,10 +74,10 @@ type MasterConfig struct {
 	// TODO inspect uses to eliminate them
 	InternalKubeInformers  kinternalinformers.SharedInformerFactory
 	ClientGoKubeInformers  kubeclientgoinformers.SharedInformerFactory
-	AuthorizationInformers authorizationinformer.SharedInformerFactory
+	AuthorizationInformers authorizationv1informer.SharedInformerFactory
 	RouteInformers         routev1informer.SharedInformerFactory
 	QuotaInformers         quotainformer.SharedInformerFactory
-	SecurityInformers      securityinformer.SharedInformerFactory
+	SecurityInformers      securityv1informer.SharedInformerFactory
 }
 
 type InformerAccess interface {
@@ -89,9 +89,9 @@ type InformerAccess interface {
 	GetOpenshiftRouteInformers() routev1informer.SharedInformerFactory
 	GetOpenshiftUserInformers() userv1informer.SharedInformerFactory
 
-	GetInternalOpenshiftAuthorizationInformers() authorizationinformer.SharedInformerFactory
+	GetOpenshiftAuthorizationInformers() authorizationv1informer.SharedInformerFactory
 	GetInternalOpenshiftQuotaInformers() quotainformer.SharedInformerFactory
-	GetInternalOpenshiftSecurityInformers() securityinformer.SharedInformerFactory
+	GetOpenshiftSecurityInformers() securityv1informer.SharedInformerFactory
 
 	Start(stopCh <-chan struct{})
 }
@@ -144,18 +144,18 @@ func BuildMasterConfig(
 		return nil, err
 	}
 	authorizer := openshiftkubeapiserver.NewAuthorizer(informers.GetInternalKubernetesInformers(), informers.GetKubernetesInformers())
-	projectCache, err := openshiftapiserver.NewProjectCache(informers.GetInternalKubernetesInformers().Core().InternalVersion().Namespaces(), privilegedLoopbackConfig, options.ProjectConfig.DefaultNodeSelector)
+	projectCache, err := openshiftapiserver.NewProjectCache(informers.GetKubernetesInformers().Core().V1().Namespaces(), privilegedLoopbackConfig, options.ProjectConfig.DefaultNodeSelector)
 	if err != nil {
 		return nil, err
 	}
-	clusterQuotaMappingController := openshiftapiserver.NewClusterQuotaMappingController(informers.GetInternalKubernetesInformers().Core().InternalVersion().Namespaces(), informers.GetInternalOpenshiftQuotaInformers().Quota().InternalVersion().ClusterResourceQuotas())
+	clusterQuotaMappingController := openshiftapiserver.NewClusterQuotaMappingController(informers.GetKubernetesInformers().Core().V1().Namespaces(), informers.GetInternalOpenshiftQuotaInformers().Quota().InternalVersion().ClusterResourceQuotas())
 	discoveryClient := cacheddiscovery.NewMemCacheClient(privilegedLoopbackKubeClientsetExternal.Discovery())
 	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
 	cloudConfigFile, err := configprocessing.GetCloudProviderConfigFile(options.KubernetesMasterConfig.APIServerArguments)
 	if err != nil {
 		return nil, err
 	}
-	admissionInitializer, err := originadmission.NewPluginInitializer(options.ImagePolicyConfig.ExternalRegistryHostname, options.ImagePolicyConfig.InternalRegistryHostname, cloudConfigFile, options.JenkinsPipelineConfig, privilegedLoopbackConfig, informers, authorizer, projectCache, restMapper, clusterQuotaMappingController)
+	admissionInitializer, err := originadmission.NewPluginInitializer(options.ImagePolicyConfig.ExternalRegistryHostname, options.ImagePolicyConfig.InternalRegistryHostname, cloudConfigFile, privilegedLoopbackConfig, informers, authorizer, projectCache, restMapper, clusterQuotaMappingController)
 	if err != nil {
 		return nil, err
 	}
@@ -211,9 +211,9 @@ func BuildMasterConfig(
 
 		InternalKubeInformers:  informers.GetInternalKubernetesInformers(),
 		ClientGoKubeInformers:  informers.GetKubernetesInformers(),
-		AuthorizationInformers: informers.GetInternalOpenshiftAuthorizationInformers(),
+		AuthorizationInformers: informers.GetOpenshiftAuthorizationInformers(),
 		QuotaInformers:         informers.GetInternalOpenshiftQuotaInformers(),
-		SecurityInformers:      informers.GetInternalOpenshiftSecurityInformers(),
+		SecurityInformers:      informers.GetOpenshiftSecurityInformers(),
 		RouteInformers:         informers.GetOpenshiftRouteInformers(),
 	}
 

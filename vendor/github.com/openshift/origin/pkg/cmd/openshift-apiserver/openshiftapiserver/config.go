@@ -129,7 +129,7 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 	if err := authenticationOptions.ApplyTo(&genericConfig.Authentication, genericConfig.SecureServing, genericConfig.OpenAPIConfig); err != nil {
 		return nil, err
 	}
-	authorizationOptions := genericapiserveroptions.NewDelegatingAuthorizationOptions()
+	authorizationOptions := genericapiserveroptions.NewDelegatingAuthorizationOptions().WithAlwaysAllowPaths("/healthz", "/healthz/").WithAlwaysAllowGroups("system:masters")
 	authorizationOptions.RemoteKubeConfigFile = config.KubeClientConfig.KubeConfig
 	if err := authorizationOptions.ApplyTo(&genericConfig.Authorization); err != nil {
 		return nil, err
@@ -144,14 +144,15 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 	}); err != nil {
 		return nil, err
 	}
-	projectCache, err := NewProjectCache(informers.internalKubernetesInformers.Core().InternalVersion().Namespaces(), kubeClientConfig, config.ProjectConfig.DefaultNodeSelector)
+
+	projectCache, err := NewProjectCache(informers.kubernetesInformers.Core().V1().Namespaces(), kubeClientConfig, config.ProjectConfig.DefaultNodeSelector)
 	if err != nil {
 		return nil, err
 	}
-	clusterQuotaMappingController := NewClusterQuotaMappingController(informers.internalKubernetesInformers.Core().InternalVersion().Namespaces(), informers.quotaInformers.Quota().InternalVersion().ClusterResourceQuotas())
+	clusterQuotaMappingController := NewClusterQuotaMappingController(informers.kubernetesInformers.Core().V1().Namespaces(), informers.quotaInformers.Quota().InternalVersion().ClusterResourceQuotas())
 	discoveryClient := cacheddiscovery.NewMemCacheClient(kubeClient.Discovery())
 	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
-	admissionInitializer, err := originadmission.NewPluginInitializer(config.ImagePolicyConfig.ExternalRegistryHostname, config.ImagePolicyConfig.InternalRegistryHostname, config.CloudProviderFile, config.JenkinsPipelineConfig, kubeClientConfig, informers, genericConfig.Authorization.Authorizer, projectCache, restMapper, clusterQuotaMappingController)
+	admissionInitializer, err := originadmission.NewPluginInitializer(config.ImagePolicyConfig.ExternalRegistryHostname, config.ImagePolicyConfig.InternalRegistryHostname, config.CloudProviderFile, kubeClientConfig, informers, genericConfig.Authorization.Authorizer, projectCache, restMapper, clusterQuotaMappingController)
 	if err != nil {
 		return nil, err
 	}
@@ -166,8 +167,8 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 		admission.DecoratorFunc(namespaceLabelDecorator.WithNamespaceLabelConditions),
 		admission.DecoratorFunc(admissionmetrics.WithControllerMetrics),
 	}
-	expliticOn := []string{}
-	expliticOff := []string{}
+	explicitOn := []string{}
+	explicitOff := []string{}
 	for plugin, config := range config.AdmissionPluginConfig {
 		enabled, err := isAdmissionPluginActivated(config)
 		if err != nil {
@@ -175,13 +176,13 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 		}
 		if enabled {
 			glog.V(2).Infof("Enabling %s", plugin)
-			expliticOn = append(expliticOn, plugin)
+			explicitOn = append(explicitOn, plugin)
 		} else {
 			glog.V(2).Infof("Disabling %s", plugin)
-			expliticOff = append(expliticOff, plugin)
+			explicitOff = append(explicitOff, plugin)
 		}
 	}
-	genericConfig.AdmissionControl, err = originadmission.NewAdmissionChains([]string{}, expliticOn, expliticOff, config.AdmissionPluginConfig, admissionInitializer, admissionDecorators)
+	genericConfig.AdmissionControl, err = originadmission.NewAdmissionChains([]string{}, explicitOn, explicitOff, config.AdmissionPluginConfig, admissionInitializer, admissionDecorators)
 	if err != nil {
 		return nil, err
 	}

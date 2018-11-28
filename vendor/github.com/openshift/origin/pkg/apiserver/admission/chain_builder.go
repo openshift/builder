@@ -24,8 +24,8 @@ import (
 	configapilatest "github.com/openshift/origin/pkg/cmd/server/apis/config/latest"
 	"github.com/openshift/origin/pkg/image/apiserver/admission/apis/imagepolicy"
 	imageadmission "github.com/openshift/origin/pkg/image/apiserver/admission/limitrange"
-	ingressadmission "github.com/openshift/origin/pkg/network/apiserver/admission"
 	overrideapi "github.com/openshift/origin/pkg/quota/apiserver/admission/apis/clusterresourceoverride"
+	ingressadmission "github.com/openshift/origin/pkg/route/apiserver/admission"
 	"github.com/openshift/origin/pkg/security/apiserver/admission/sccadmission"
 	"github.com/openshift/origin/pkg/service/admission/externalipranger"
 	"github.com/openshift/origin/pkg/service/admission/restrictedendpoints"
@@ -52,7 +52,6 @@ var (
 	OpenShiftAdmissionPlugins = []string{
 		lifecycle.PluginName,
 		"ProjectRequestLimit",
-		"openshift.io/JenkinsBootstrapper",
 		"openshift.io/BuildConfigSecretInjector",
 		"BuildByStrategy",
 		imageadmission.PluginName,
@@ -73,62 +72,6 @@ var (
 		lifecycle.PluginName,
 		"EventRateLimit",
 		"openshift.io/RestrictSubjectBindings",
-		"RunOnceDuration",
-		"PodNodeConstraints",
-		"OriginPodNodeEnvironment",
-		"PodNodeSelector",
-		overrideapi.PluginName,
-		externalipranger.ExternalIPPluginName,
-		restrictedendpoints.RestrictedEndpointsPluginName,
-		imagepolicy.PluginName,
-		"ImagePolicyWebhook",
-		"PodPreset",
-		"LimitRanger",
-		"ServiceAccount",
-		noderestriction.PluginName,
-		"SecurityContextDeny",
-		sccadmission.PluginName,
-		"PodSecurityPolicy",
-		"DenyEscalatingExec",
-		"DenyExecOnPrivileged",
-		storageclassdefaultadmission.PluginName,
-		expandpvcadmission.PluginName,
-		"AlwaysPullImages",
-		"LimitPodHardAntiAffinityTopology",
-		"SCCExecRestrictions",
-		"PersistentVolumeLabel",
-		"OwnerReferencesPermissionEnforcement",
-		ingressadmission.IngressAdmission,
-		"Priority",
-		"ExtendedResourceToleration",
-		"DefaultTolerationSeconds",
-		"StorageObjectInUseProtection",
-		"Initializers",
-		mutatingwebhook.PluginName,
-		validatingwebhook.PluginName,
-		"PodTolerationRestriction",
-		"AlwaysDeny",
-		// NOTE: ResourceQuota and ClusterResourceQuota must be the last 2 plugins.
-		// DO NOT ADD ANY PLUGINS AFTER THIS LINE!
-		"ResourceQuota",
-		"openshift.io/ClusterResourceQuota",
-	}
-
-	// combinedAdmissionControlPlugins gives the in-order default admission chain for all resources resources.
-	// When possible, this list is used.  The set of openshift+kube chains must exactly match this set.  In addition,
-	// the order specified in the openshift and kube chains must match the order here.
-	CombinedAdmissionControlPlugins = []string{
-		"AlwaysAdmit",
-		"NamespaceAutoProvision",
-		"NamespaceExists",
-		lifecycle.PluginName,
-		"EventRateLimit",
-		"ProjectRequestLimit",
-		"openshift.io/RestrictSubjectBindings",
-		"openshift.io/JenkinsBootstrapper",
-		"openshift.io/BuildConfigSecretInjector",
-		"BuildByStrategy",
-		imageadmission.PluginName,
 		"RunOnceDuration",
 		"PodNodeConstraints",
 		"OriginPodNodeEnvironment",

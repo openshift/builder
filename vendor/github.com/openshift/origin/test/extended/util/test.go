@@ -6,8 +6,8 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
-	"testing"
 
 	"github.com/golang/glog"
 	"github.com/onsi/ginkgo"
@@ -46,12 +46,21 @@ var TestContext *e2e.TestContextType = &e2e.TestContext
 // KUBECONFIG - Path to kubeconfig containing embedded authinfo
 // TEST_REPORT_DIR - If set, JUnit output will be written to this directory for each test
 // TEST_REPORT_FILE_NAME - If set, will determine the name of the file that JUnit output is written to
+func Init() {
+	flag.StringVar(&syntheticSuite, "suite", "", "DEPRECATED: Optional suite selector to filter which tests are run. Use focus.")
+	e2e.ViperizeFlags()
+	InitTest()
+}
+
+func InitStandardFlags() {
+	e2e.RegisterCommonFlags()
+	e2e.RegisterClusterFlags()
+	e2e.RegisterStorageFlags()
+}
+
 func InitTest() {
 	// interpret synthetic input in `--ginkgo.focus` and/or `--ginkgo.skip`
 	ginkgo.BeforeEach(checkSyntheticInput)
-
-	flag.StringVar(&syntheticSuite, "suite", "", "DEPRECATED: Optional suite selector to filter which tests are run. Use focus.")
-	e2e.ViperizeFlags()
 
 	TestContext.DeleteNamespace = os.Getenv("DELETE_NAMESPACE") != "false"
 	TestContext.VerifyServiceAccount = true
@@ -82,10 +91,10 @@ func InitTest() {
 	// Ensure that Kube tests run privileged (like they do upstream)
 	TestContext.CreateTestingNS = createTestingNS
 
-	glog.Infof("Extended test version %s", version.Get().String())
+	glog.V(2).Infof("Extended test version %s", version.Get().String())
 }
 
-func ExecuteTest(t *testing.T, suite string) {
+func ExecuteTest(t ginkgo.GinkgoTestingT, suite string) {
 	var r []ginkgo.Reporter
 
 	if dir := os.Getenv("TEST_REPORT_DIR"); len(dir) > 0 {
@@ -109,20 +118,45 @@ func ExecuteTest(t *testing.T, suite string) {
 		r = append(r, reporters.NewJUnitReporter(path.Join(TestContext.ReportDir, fmt.Sprintf("%s_%02d.xml", reportFileName, config.GinkgoConfig.ParallelNode))))
 	}
 
+	AnnotateTestSuite()
+
+	if quiet {
+		r = append(r, NewSimpleReporter())
+		ginkgo.RunSpecsWithCustomReporters(t, suite, r)
+	} else {
+		ginkgo.RunSpecsWithDefaultAndCustomReporters(t, suite, r)
+	}
+}
+
+func AnnotateTestSuite() {
+	var allLabels []string
 	matches := make(map[string]*regexp.Regexp)
+	excludes := make(map[string]*regexp.Regexp)
 	for label, items := range testMaps {
+		sort.Strings(items)
+		allLabels = append(allLabels, label)
 		matches[label] = regexp.MustCompile(strings.Join(items, `|`))
 	}
+	for label, items := range labelExcludes {
+		sort.Strings(items)
+		excludes[label] = regexp.MustCompile(strings.Join(items, `|`))
+	}
+	sort.Strings(allLabels)
 
 	ginkgo.WalkTests(func(name string, node types.TestNode) {
 		labels := ""
 		for {
 			count := 0
-			for label, matcher := range matches {
+			for _, label := range allLabels {
 				if strings.Contains(name, label) {
 					continue
 				}
-				if matcher.MatchString(name) {
+
+				if matches[label].MatchString(name) {
+					// TODO: remove when we no longer need it
+					if re, ok := excludes[label]; ok && re.MatchString(name) {
+						continue
+					}
 					count++
 					labels += " " + label
 					name += " " + label
@@ -154,13 +188,6 @@ func ExecuteTest(t *testing.T, suite string) {
 		}
 		node.SetText(node.Text() + labels)
 	})
-
-	if quiet {
-		r = append(r, NewSimpleReporter())
-		ginkgo.RunSpecsWithCustomReporters(t, suite, r)
-	} else {
-		ginkgo.RunSpecsWithDefaultAndCustomReporters(t, suite, r)
-	}
 }
 
 // TODO: Use either explicit tags (k8s.io) or https://github.com/onsi/ginkgo/pull/228 to implement this.
@@ -321,6 +348,7 @@ var (
 			`Services should be able to up and down services`,                // we don't have wget installed on nodes
 			`Network should set TCP CLOSE_WAIT timeout`,                      // possibly some difference between ubuntu and fedora
 			`should allow ingress access on one named port`,                  // broken even with network policy on
+			`should answer endpoint and wildcard queries for the cluster`,    // currently not supported by dns operator https://github.com/openshift/cluster-dns-operator/issues/43
 
 			`\[NodeFeature:Sysctls\]`, // needs SCC support
 
@@ -368,6 +396,59 @@ var (
 			`should allow starting 95 pods per node`,
 
 			`Should be able to support the 1.7 Sample API Server using the current Aggregator`, // down apiservices break other clients today https://bugzilla.redhat.com/show_bug.cgi?id=1623195
+		},
+		// tests that will pass in 4.0
+		// TODO: this will be removed once 4.0 passes all conformance tests
+		"[Suite:openshift/smoke-4]": {
+			`Managed cluster should start all core operators`,
+
+			regexp.QuoteMeta("[sig-storage] Subpath [Volume type"),
+			regexp.QuoteMeta("[sig-storage] Volume Placement"),
+			regexp.QuoteMeta("[sig-storage] Subpath Atomic writer volumes should support subpaths with"),
+			regexp.QuoteMeta("[sig-storage] Secrets should be consumable from pods in volume"),
+			regexp.QuoteMeta("[sig-storage] Projected should be consumable"),
+			regexp.QuoteMeta("[sig-storage] HostPath should give a volume the correct mode"),
+			regexp.QuoteMeta("[sig-storage] HostPath should support r/w"),
+			regexp.QuoteMeta("[sig-storage] Dynamic Provisioning DynamicProvisioner"),
+			regexp.QuoteMeta("[sig-storage] ConfigMap should be consumable from pods"),
+			regexp.QuoteMeta("[sig-storage] ConfigMap should be consumable from pods"),
+			regexp.QuoteMeta("[sig-storage] Downward API volume should"),
+			regexp.QuoteMeta("[sig-storage] CSI Volumes CSI plugin test using CSI driver: hostPath should provision storage"),
+			regexp.QuoteMeta("[sig-scheduling] ResourceQuota should"),
+			regexp.QuoteMeta("[sig-scheduling] LimitRange should create a LimitRange with defaults"),
+			regexp.QuoteMeta("[sig-network] Services should"),
+			regexp.QuoteMeta("[sig-network] Networking Granular Checks: Pods should function for"),
+			regexp.QuoteMeta("[sig-network] DNS"),
+			regexp.QuoteMeta("[sig-cli] Kubectl client [k8s.io]"),
+			regexp.QuoteMeta("[sig-auth] [Feature:NodeAuthorizer]"),
+			regexp.QuoteMeta("[sig-auth] PodSecurityPolicy should"),
+			regexp.QuoteMeta("[sig-apps] ReplicaSet should"),
+			regexp.QuoteMeta("[sig-apps] Job should"),
+			regexp.QuoteMeta("[sig-apps] DisruptionController"),
+			regexp.QuoteMeta("[sig-apps] Deployment deployment"),
+			regexp.QuoteMeta("[sig-apps] CronJob should"),
+			regexp.QuoteMeta("[sig-api-machinery]"),
+			regexp.QuoteMeta("[k8s.io] [sig-node] Security Context [Feature:SecurityContext]"),
+			regexp.QuoteMeta("[k8s.io] [sig-node] Events should be sent by kubelets"),
+			regexp.QuoteMeta("[k8s.io] Pods should"),
+			regexp.QuoteMeta("[k8s.io] Docker Containers should"),
+			regexp.QuoteMeta("[Feature:DeploymentConfig] deploymentconfigs with multiple image change triggers"),
+			regexp.QuoteMeta("[Conformance][templates] templateinstance object kinds test should create and delete objects from varying API groups"),
+			regexp.QuoteMeta("[Conformance][Area:Networking][Feature:Router]"),
+			regexp.QuoteMeta("[Area:Networking] NetworkPolicy"),
+			regexp.QuoteMeta("[Area:Networking] network isolation"),
+			regexp.QuoteMeta("[Area:Networking] services when using a plugin"),
+		},
+	}
+
+	// labelExcludes temporarily block tests out of a specific suite
+	labelExcludes = map[string][]string{
+		"[Suite:openshift/smoke-4]": {
+			`\[sig-network\] Services .* NodePort`,
+			`DynamicProvisioner deletion should be idempotent`,
+			`Kubectl taint \[Serial\]`,
+			// flaking, very slow
+			`100 namespaces in 150 seconds`,
 		},
 	}
 

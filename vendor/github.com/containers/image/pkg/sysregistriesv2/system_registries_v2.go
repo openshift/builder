@@ -113,23 +113,12 @@ func parseURL(input string) (string, error) {
 	// "example.com:5000" -> {Scheme:"example.com", Opaque:"5000"}
 	// "example.com:5000/repo" -> {Scheme:"example.com", Opaque:"5000/repo"}
 	trimmedIsIP := false
-	switch trimmed[0] {
-	case '[':
-		if sep := strings.LastIndex(trimmed, "]:"); sep != -1 && net.ParseIP(trimmed[1:sep]) != nil {
-			if _, err := strconv.ParseUint(trimmed[sep+2:], 10, 16); err != nil {
-				msg := fmt.Sprintf("invalid URL '%s': invalid port number '%q' in numeric IPv6 address", input, trimmed[sep+2:])
-				return "", &InvalidRegistries{s: msg}
-			}
-			trimmedIsIP = true
+	if sep := strings.LastIndex(trimmed, ":"); sep != -1 && net.ParseIP(trimmed[:sep]) != nil {
+		if _, err := strconv.ParseUint(trimmed[sep+1:], 10, 16); err != nil {
+			msg := fmt.Sprintf("invalid URL '%s': invalid port number '%s' in numeric IPv4 address", input, trimmed[sep+1:])
+			return "", &InvalidRegistries{s: msg}
 		}
-	default:
-		if sep := strings.LastIndex(trimmed, ":"); sep != -1 && net.ParseIP(trimmed[:sep]) != nil {
-			if _, err := strconv.ParseUint(trimmed[sep+1:], 10, 16); err != nil {
-				msg := fmt.Sprintf("invalid URL '%s': invalid port number '%s' in numeric IPv4 address", input, trimmed[sep+1:])
-				return "", &InvalidRegistries{s: msg}
-			}
-			trimmedIsIP = true
-		}
+		trimmedIsIP = true
 	}
 	if !trimmedIsIP {
 		uri, err := url.Parse(trimmed)
@@ -164,6 +153,10 @@ func parseURL(input string) (string, error) {
 // registries of type Registry.
 func getV1Registries(config *tomlConfig) ([]Registry, error) {
 	regMap := make(map[string]*Registry)
+	// We must preserve the order of config.V1Registries.Search.Registries at least.  The order of the
+	// other registries is not really important, but make it deterministic (the same for the same config file)
+	// to minimize behavior inconsistency and not contribute to difficult-to-reproduce situations.
+	registryOrder := []string{}
 
 	getRegistry := func(url string) (*Registry, error) { // Note: _pointer_ to a long-lived object
 		var err error
@@ -179,10 +172,13 @@ func getV1Registries(config *tomlConfig) ([]Registry, error) {
 				Prefix:  url,
 			}
 			regMap[url] = reg
+			registryOrder = append(registryOrder, url)
 		}
 		return reg, nil
 	}
 
+	// Note: config.V1Registries.Search needs to be processed first to ensure registryOrder is populated in the right order
+	// if one of the search registries is also in one of the other lists.
 	for _, search := range config.V1Registries.Search.Registries {
 		reg, err := getRegistry(search)
 		if err != nil {
@@ -206,7 +202,8 @@ func getV1Registries(config *tomlConfig) ([]Registry, error) {
 	}
 
 	registries := []Registry{}
-	for _, reg := range regMap {
+	for _, url := range registryOrder {
+		reg := regMap[url]
 		registries = append(registries, *reg)
 	}
 	return registries, nil

@@ -58,7 +58,7 @@ as yum, dnf or apt-get on a number of Linux distributions.
 
 Prior to installing Buildah, install the following packages on your Linux distro:
 * make
-* golang (Requires version 1.8.1 or higher.)
+* golang (Requires version 1.10 or higher.)
 * bats
 * btrfs-progs-devel
 * bzip2
@@ -136,11 +136,14 @@ run this command:
 
 The build steps for Buildah on RHEL or CentOS are the same as for Fedora, above.
 
+*NOTE:* Buildah on RHEL or CentOS version 7.* is not supported running as non-root due to
+these systems not having newuidmap or newgidmap installed.  It is possible to pull
+the shadow-utils source RPM from Fedora 29 and build and install from that in order to
+run Buildah as non-root on these systems.
 
 ### openSUSE
 
-Currently openSUSE Leap 15 offers `go1.8` , while openSUSE Tumbleweed has `go1.9`.
-`zypper in go1.X` should do the work, then run this command:
+On openSUSE Tumbleweed, install go via `zypper in go`, then run this command:
 
 ```
  zypper in make \
@@ -169,7 +172,7 @@ In Ubuntu zesty and xenial, you can use these commands:
   apt-add-repository -y ppa:projectatomic/ppa
   apt-get -y -qq update
   apt-get -y install bats btrfs-tools git libapparmor-dev libdevmapper-dev libglib2.0-dev libgpgme11-dev libostree-dev libseccomp-dev libselinux1-dev skopeo-containers go-md2man
-  apt-get -y install golang-1.8
+  apt-get -y install golang-1.10
 ```
 Then to install Buildah on Ubuntu follow the steps in this example:
 
@@ -179,7 +182,7 @@ Then to install Buildah on Ubuntu follow the steps in this example:
   export GOPATH=`pwd`
   git clone https://github.com/containers/buildah ./src/github.com/containers/buildah
   cd ./src/github.com/containers/buildah
-  PATH=/usr/lib/go-1.8/bin:$PATH make runc all TAGS="apparmor seccomp"
+  PATH=/usr/lib/go-1.10/bin:$PATH make runc all SECURITYTAGS="apparmor seccomp"
   sudo make install install.runc
   buildah --help
 ```
@@ -203,7 +206,7 @@ The build steps on Debian are otherwise the same as Ubuntu, above.
 
 ### [registries.conf](https://src.fedoraproject.org/rpms/skopeo/blob/master/f/registries.conf)
 
-#### Man Page: [registries.conf.5](https://github.com/containers/image/blob/master/docs/registries.conf.5.md)
+#### Man Page: [registries.conf.5](https://github.com/containers/image/blob/master/docs/containers-registries.conf.5.md)
 
 `/etc/containers/registries.conf`
 

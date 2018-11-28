@@ -419,7 +419,9 @@ func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.Sou
 		return err
 	}
 
-	replaceImagesFromSource(node, build.Spec.Source.Images)
+	if err := replaceImagesFromSource(node, build.Spec.Source.Images); err != nil {
+		return err
+	}
 
 	out := dockerfile.Write(node)
 	glog.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
@@ -429,7 +431,7 @@ func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.Sou
 // replaceImagesFromSource updates a single or multi-stage Dockerfile with any replacement
 // image sources ('FROM <name>' and 'COPY --from=<name>'). It operates on exact string matches
 // and performs no interpretation of names from the Dockerfile.
-func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageSource) {
+func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageSource) error {
 	replacements := make(map[string]string)
 	for _, image := range imageSources {
 		if image.From.Kind != "DockerImage" || len(image.From.Name) == 0 {
@@ -440,7 +442,10 @@ func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageS
 		}
 	}
 	names := make(map[string]string)
-	stages := imagebuilder.NewStages(node, imagebuilder.NewBuilder(nil))
+	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(nil))
+	if err != nil {
+		return err
+	}
 	for _, stage := range stages {
 		for _, child := range stage.Node.Children {
 			switch {
@@ -463,6 +468,7 @@ func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageS
 			}
 		}
 	}
+	return nil
 }
 
 // findReferencedImages returns all qualified images referenced by the Dockerfile, or returns an error.
@@ -476,7 +482,10 @@ func findReferencedImages(dockerfilePath string) ([]string, error) {
 	}
 	names := make(map[string]string)
 	images := sets.NewString()
-	stages := imagebuilder.NewStages(node, imagebuilder.NewBuilder(nil))
+	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(nil))
+	if err != nil {
+		return nil, err
+	}
 	for _, stage := range stages {
 		for _, child := range stage.Node.Children {
 			switch {

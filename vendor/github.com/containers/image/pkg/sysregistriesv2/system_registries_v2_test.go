@@ -1,9 +1,10 @@
 package sysregistriesv2
 
 import (
+	"testing"
+
 	"github.com/containers/image/types"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 var testConfig = []byte("")
@@ -59,10 +60,6 @@ func TestParseURL(t *testing.T) {
 	url, err = parseURL("172.30.0.1:5000") // often used in OpenShift
 	assert.Nil(t, err)
 	assert.Equal(t, "172.30.0.1:5000", url)
-
-	url, err = parseURL("[::1]:5000")
-	assert.Nil(t, err)
-	assert.Equal(t, "[::1]:5000", url)
 }
 
 func TestEmptyConfig(t *testing.T) {
@@ -188,6 +185,15 @@ prefix = ""`)
 	assert.Equal(t, "empty-prefix.com", reg.URL)
 }
 
+func assertSearchRegistryURLsEqual(t *testing.T, expected []string, regs []Registry) {
+	// verify the expected registries and their order
+	names := []string{}
+	for _, r := range regs {
+		names = append(names, r.URL)
+	}
+	assert.Equal(t, expected, names)
+}
+
 func TestFindUnqualifiedSearchRegistries(t *testing.T) {
 	testConfig = []byte(`
 [[registry]]
@@ -199,22 +205,20 @@ url = "registry-b.com"
 
 [[registry]]
 url = "registry-c.com"
-unqualified-search = true`)
+unqualified-search = true
+
+[[registry]]
+url = "registry-d.com"
+unqualified-search = true
+`)
 
 	configCache = make(map[string][]Registry)
 	registries, err := GetRegistries(nil)
 	assert.Nil(t, err)
-	assert.Equal(t, 3, len(registries))
+	assert.Equal(t, 4, len(registries))
 
 	unqRegs := FindUnqualifiedSearchRegistries(registries)
-	assert.Equal(t, 2, len(unqRegs))
-
-	// check if the expected images are actually in the array
-	var reg *Registry
-	reg = FindRegistry("registry-a.com/foo:bar", unqRegs)
-	assert.NotNil(t, reg)
-	reg = FindRegistry("registry-c.com/foo:bar", unqRegs)
-	assert.NotNil(t, reg)
+	assertSearchRegistryURLsEqual(t, []string{"registry-a.com", "registry-c.com", "registry-d.com"}, unqRegs)
 }
 
 func TestInsecureConfligs(t *testing.T) {
@@ -300,7 +304,7 @@ insecure = true`)
 func TestV1BackwardsCompatibility(t *testing.T) {
 	testConfig = []byte(`
 [registries.search]
-registries = ["registry-a.com////", "registry-c.com"]
+registries = ["registry-a.com////", "registry-c.com", "registry-d.com"]
 
 [registries.block]
 registries = ["registry-b.com"]
@@ -314,19 +318,10 @@ registries = ["registry-d.com", "registry-e.com", "registry-a.com"]`)
 	assert.Equal(t, 5, len(registries))
 
 	unqRegs := FindUnqualifiedSearchRegistries(registries)
-	assert.Equal(t, 2, len(unqRegs))
-
-	// check if the expected images are actually in the array
-	var reg *Registry
-	reg = FindRegistry("registry-a.com/foo:bar", unqRegs)
-	// test https fallback for v1
-	assert.Equal(t, "registry-a.com", reg.URL)
-	assert.NotNil(t, reg)
-	reg = FindRegistry("registry-c.com/foo:bar", unqRegs)
-	assert.NotNil(t, reg)
+	assertSearchRegistryURLsEqual(t, []string{"registry-a.com", "registry-c.com", "registry-d.com"}, unqRegs)
 
 	// check if merging works
-	reg = FindRegistry("registry-a.com/bar/foo/barfoo:latest", registries)
+	reg := FindRegistry("registry-a.com/bar/foo/barfoo:latest", registries)
 	assert.NotNil(t, reg)
 	assert.True(t, reg.Search)
 	assert.True(t, reg.Insecure)

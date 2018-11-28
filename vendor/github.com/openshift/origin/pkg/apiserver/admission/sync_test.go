@@ -23,7 +23,6 @@ var admissionPluginsNotUsedByKube = sets.NewString(
 
 	"BuildByStrategy",                        // from origin, only needed for managing builds, not kubernetes resources
 	imageadmission.PluginName,                // from origin, used for limiting image sizes, not kubernetes resources
-	"openshift.io/JenkinsBootstrapper",       // from origin, only needed for managing builds, not kubernetes resources
 	"openshift.io/BuildConfigSecretInjector", // from origin, only needed for managing builds, not kubernetes resources
 	"ProjectRequestLimit",                    // from origin, used for limiting project requests by user (online use case)
 	"openshift.io/RestrictSubjectBindings",   // from origin, used for enforcing rolebindingrestrictions, not kubernetes resources
@@ -60,7 +59,7 @@ func TestKubeAdmissionControllerUsage(t *testing.T) {
 }
 
 func TestAdmissionOnOffCoverage(t *testing.T) {
-	configuredAdmissionPlugins := sets.NewString(CombinedAdmissionControlPlugins...)
+	configuredAdmissionPlugins := sets.NewString(combinedAdmissionControlPlugins...)
 	allCoveredAdmissionPlugins := sets.String{}
 	allCoveredAdmissionPlugins.Insert(DefaultOnPlugins.List()...)
 	allCoveredAdmissionPlugins.Insert(DefaultOffPlugins.List()...)
