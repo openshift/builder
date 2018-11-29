@@ -17,21 +17,9 @@ import (
 var (
 	// DefaultPushOrPullRetryCount is the number of retries of pushing or pulling the built Docker image
 	// into a configured repository
-	DefaultPushOrPullRetryCount = 6
+	DefaultPushOrPullRetryCount = 2
 	// DefaultPushOrPullRetryDelay is the time to wait before triggering a push or pull retry
 	DefaultPushOrPullRetryDelay = 5 * time.Second
-	// RetriableErrors is a set of strings that indicate that an retriable error occurred.
-	RetriableErrors = []string{
-		"ping attempt failed with error",
-		"is already in progress",
-		"connection reset by peer",
-		"transport closed before response was received",
-		"connection refused",
-		"no route to host",
-		"unexpected end of JSON input",
-		"i/o timeout",
-		"TLS handshake timeout",
-	}
 )
 
 // DockerClient is an interface to the Docker client that contains
@@ -50,25 +38,12 @@ type DockerClient interface {
 
 func retryImageAction(actionName string, action func() error) error {
 	var err error
-	var retriableError = false
 
 	for retries := 0; retries <= DefaultPushOrPullRetryCount; retries++ {
 		err = action()
 		if err == nil {
 			return nil
 		}
-
-		errMsg := fmt.Sprintf("%s", err)
-		for _, errorString := range RetriableErrors {
-			if strings.Contains(errMsg, errorString) {
-				retriableError = true
-				break
-			}
-		}
-		if !retriableError {
-			return err
-		}
-
 		glog.V(0).Infof("Warning: %s failed, retrying in %s ...", actionName, DefaultPushOrPullRetryDelay)
 		time.Sleep(DefaultPushOrPullRetryDelay)
 	}

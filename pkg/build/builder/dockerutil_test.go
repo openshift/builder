@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 
@@ -34,38 +33,6 @@ func NewFakeDockerClient() *FakeDocker {
 }
 
 var fooBarRunTimes = 0
-
-func fakePushImageFunc(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error) {
-	switch opts.Tag {
-	case "tag_test_succ_foo_bar":
-		return "", nil
-	case "tag_test_err_exist_foo_bar":
-		fooBarRunTimes++
-		return "", errors.New(RetriableErrors[0])
-	case "tag_test_err_no_exist_foo_bar":
-		return "", errors.New("no_exist_err_foo_bar")
-	case "tag_test_err_no_exist_progress_only":
-		_, _ = opts.OutputStream.Write([]byte(`{"error":"no_exist_progress_only"}`)) // Ignore error even if returned from the progressWriter, test that progressWriter.Close is used.
-		return "", nil                                                               // Don't fail the PushImage either, we want to ensure the progres parser detects this
-	}
-	return "", nil
-}
-
-func fakePullImageFunc(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
-	switch opts.Repository {
-	case "repo_test_succ_foo_bar":
-		return nil
-	case "repo_test_err_exist_foo_bar":
-		fooBarRunTimes++
-		return errors.New(RetriableErrors[0])
-	case "repo_test_err_no_exist_foo_bar":
-		return errors.New("no_exist_err_foo_bar")
-	case "repo_test_err_no_exist_progress_only":
-		_, _ = opts.OutputStream.Write([]byte(`{"error":"no_exist_progress_only"}`)) // Ignore error even if returned from the progressWriter, test that progressWriter.Close is used.
-		return nil                                                                   // Don't fail the PullImage either, we want to ensure the progres parser detects this
-	}
-	return nil
-}
 
 func (d *FakeDocker) BuildImage(opts docker.BuildImageOptions) error {
 	if d.buildImageFunc != nil {
