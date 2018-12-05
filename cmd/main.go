@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -35,10 +36,11 @@ func main() {
 	}
 
 	const tlsCertRoot = "/etc/pki/tls/certs"
+	const runtimeCertRoot = "/etc/docker/certs.d"
 
 	clusterCASrc := fmt.Sprintf("%s/ca.crt", builder.SecretCertsMountPath)
 	clusterCADst := fmt.Sprintf("%s/cluster.crt", tlsCertRoot)
-	err := CopyIfExists(clusterCASrc, clusterCADst)
+	err := CopyFileIfExists(clusterCASrc, clusterCADst)
 	if err != nil {
 		fmt.Printf("Error setting up cluster CA cert: %v", err)
 		os.Exit(1)
@@ -47,25 +49,16 @@ func main() {
 	// TODO: Remove this once the config-map based mount approach lands after rebase
 	oldServiceCASrc := fmt.Sprintf("%s/service-ca.crt", builder.SecretCertsMountPath)
 	oldServiceCADst := fmt.Sprintf("%s/service.crt", tlsCertRoot)
-	err = CopyIfExists(oldServiceCASrc, oldServiceCADst)
+	err = CopyFileIfExists(oldServiceCASrc, oldServiceCADst)
 	if err != nil {
 		fmt.Printf("Error setting up service CA cert: %v", err)
 		os.Exit(1)
 	}
 
-	newServiceCASrc := fmt.Sprintf("%s/service-ca.crt", builder.ConfigMapCertsMountPath)
-	newServiceCADst := fmt.Sprintf("%s/openshift-service.crt", tlsCertRoot)
-	err = CopyIfExists(newServiceCASrc, newServiceCADst)
+	runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
+	err = CopyDirIfExists(runtimeCASrc, runtimeCertRoot)
 	if err != nil {
 		fmt.Printf("Error setting up service CA cert: %v", err)
-		os.Exit(1)
-	}
-
-	additionalCASrc := fmt.Sprintf("%s/additional-ca.crt", builder.ConfigMapCertsMountPath)
-	additionalCADst := fmt.Sprintf("%s/additional-ca.crt", tlsCertRoot)
-	err = CopyIfExists(additionalCASrc, additionalCADst)
-	if err != nil {
-		fmt.Printf("Error setting up additional trusted CA bundle: %v", err)
 		os.Exit(1)
 	}
 
@@ -76,9 +69,37 @@ func main() {
 	}
 }
 
-// CopyIfExists copies the source file to the given destination, if the source file exists.
+// CopyDirIfExists recursively copies a directory to the destination path.
+// If the source directory does not exist, no error is returned.
+// If the destination directory exists, any contents with matching file names
+// will be overwritten.
+func CopyDirIfExists(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err = os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return err
+	}
+	dirInfo, err := ioutil.ReadDir(src)
+	for _, info := range dirInfo {
+		srcPath := filepath.Join(src, info.Name())
+		dstPath := filepath.Join(dst, info.Name())
+		if info.IsDir() {
+			err = CopyDirIfExists(srcPath, dstPath)
+		} else {
+			err = CopyFileIfExists(srcPath, dstPath)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CopyFileIfExists copies the source file to the given destination, if the source file exists.
 // If the destination file exists, it will be overwritten and will not copy file attributes.
-func CopyIfExists(src, dst string) error {
+func CopyFileIfExists(src, dst string) error {
 	_, err := os.Stat(src)
 	if os.IsNotExist(err) {
 		return nil
