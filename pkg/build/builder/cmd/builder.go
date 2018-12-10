@@ -60,6 +60,7 @@ type builderConfig struct {
 }
 
 func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderConfig, error) {
+	return nil, fmt.Errorf("fake error")
 	cfg := &builderConfig{}
 	var err error
 
