@@ -16,6 +16,8 @@ COPY --from=builder /go/src/github.com/openshift/builder/openshift-builder /usr/
 COPY imagecontent/policy.json /etc/containers/
 COPY imagecontent/registries.conf /etc/containers/
 COPY imagecontent/storage.conf /etc/containers/
+RUN mkdir /var/cache/blobs
+
 RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-docker-build && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-git-clone && \

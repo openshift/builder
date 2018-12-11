@@ -28,7 +28,7 @@ import (
 	"github.com/openshift/library-go/pkg/image/reference"
 )
 
-func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration) error {
+func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration, blobCacheDirectory string) error {
 	glog.V(2).Infof("Asked to pull fresh copy of %q.", imageName)
 
 	if imageName == "" {
@@ -66,12 +66,13 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		ReportWriter:  os.Stderr,
 		Store:         store,
 		SystemContext: &systemContext,
+		BlobDirectory: blobCacheDirectory,
 	}
 	_, err = buildah.Pull(context.TODO(), "docker://"+imageName, options)
 	return err
 }
 
-func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation buildah.Isolation, dir string, optimization buildapiv1.ImageOptimizationPolicy, opts *docker.BuildImageOptions) error {
+func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation buildah.Isolation, contextDir string, optimization buildapiv1.ImageOptimizationPolicy, opts *docker.BuildImageOptions, blobCacheDirectory string) error {
 	glog.V(2).Infof("Building...")
 
 	args := make(map[string]string)
@@ -126,7 +127,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 	}
 
 	options := imagebuildah.BuildOptions{
-		ContextDirectory: dir,
+		ContextDirectory: contextDir,
 		PullPolicy:       pullPolicy,
 		Isolation:        isolation,
 		TransientMounts:  transientMounts,
@@ -149,6 +150,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		NoCache:                 opts.NoCache,
 		RemoveIntermediateCtrs:  opts.RmTmpContainer,
 		ForceRmIntermediateCtrs: true,
+		BlobDirectory:           blobCacheDirectory,
 	}
 
 	_, _, err := imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
@@ -211,7 +213,7 @@ func removeDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag
 	return nil
 }
 
-func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration) (string, error) {
+func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration, blobCacheDirectory string) (string, error) {
 	glog.V(2).Infof("Pushing image %q from local storage.", imageName)
 
 	if imageName == "" {
@@ -240,9 +242,11 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	}
 
 	options := buildah.PushOptions{
+		Compression:   archive.Gzip,
 		ReportWriter:  os.Stdout,
 		Store:         store,
 		SystemContext: &systemContext,
+		BlobDirectory: blobCacheDirectory,
 	}
 
 	// TODO - do something with the digest
@@ -335,7 +339,7 @@ func inspectDaemonlessImage(sc types.SystemContext, store storage.Store, name st
 
 // daemonlessRun mimics the 'docker run --rm' CLI command well enough. It creates and
 // starts a container and streams its logs. The container is removed after it terminates.
-func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.Isolation, createOpts docker.CreateContainerOptions, attachOpts docker.AttachToContainerOptions) error {
+func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.Isolation, createOpts docker.CreateContainerOptions, attachOpts docker.AttachToContainerOptions, blobCacheDirectory string) error {
 	if createOpts.Config == nil {
 		return fmt.Errorf("error calling daemonlessRun: expected a Config")
 	}
@@ -351,6 +355,7 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 			MemorySwap:   createOpts.HostConfig.MemorySwap,
 			CgroupParent: createOpts.HostConfig.CgroupParent,
 		},
+		PullBlobDirectory: blobCacheDirectory,
 	}
 
 	builder, err := buildah.NewBuilder(ctx, store, builderOptions)
@@ -420,15 +425,16 @@ func downloadFromDaemonlessContainer(builder *buildah.Builder, id string, path s
 
 // DaemonlessClient is a daemonless DockerClient-like implementation.
 type DaemonlessClient struct {
-	SystemContext types.SystemContext
-	Store         storage.Store
-	Isolation     buildah.Isolation
-	builders      map[string]*buildah.Builder
+	SystemContext      types.SystemContext
+	Store              storage.Store
+	Isolation          buildah.Isolation
+	BlobCacheDirectory string
+	builders           map[string]*buildah.Builder
 }
 
 // GetDaemonlessClient returns a valid implemenatation of the DockerClient
 // interface, or an error if the implementation couldn't be created.
-func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, isolationSpec string) (client DockerClient, err error) {
+func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, isolationSpec, blobCacheDirectory string) (client DockerClient, err error) {
 	isolation := buildah.IsolationDefault
 	switch strings.ToLower(isolationSpec) {
 	case "chroot":
@@ -442,16 +448,21 @@ func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store,
 		return nil, fmt.Errorf("unrecognized BUILD_ISOLATION setting %q", strings.ToLower(isolationSpec))
 	}
 
+	if blobCacheDirectory != "" {
+		glog.V(0).Infof("Caching blobs under %q.", blobCacheDirectory)
+	}
+
 	return &DaemonlessClient{
-		SystemContext: systemContext,
-		Store:         store,
-		Isolation:     isolation,
-		builders:      make(map[string]*buildah.Builder),
+		SystemContext:      systemContext,
+		Store:              store,
+		Isolation:          isolation,
+		BlobCacheDirectory: blobCacheDirectory,
+		builders:           make(map[string]*buildah.Builder),
 	}, nil
 }
 
 func (d *DaemonlessClient) BuildImage(opts docker.BuildImageOptions) error {
-	return buildDaemonlessImage(d.SystemContext, d.Store, d.Isolation, opts.ContextDir, buildapiv1.ImageOptimizationNone, &opts)
+	return buildDaemonlessImage(d.SystemContext, d.Store, d.Isolation, opts.ContextDir, buildapiv1.ImageOptimizationNone, &opts, d.BlobCacheDirectory)
 }
 
 func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error) {
@@ -459,7 +470,7 @@ func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.A
 	if opts.Tag != "" {
 		imageName = imageName + ":" + opts.Tag
 	}
-	return pushDaemonlessImage(d.SystemContext, d.Store, imageName, auth)
+	return pushDaemonlessImage(d.SystemContext, d.Store, imageName, auth, d.BlobCacheDirectory)
 }
 
 func (d *DaemonlessClient) RemoveImage(name string) error {
@@ -468,8 +479,9 @@ func (d *DaemonlessClient) RemoveImage(name string) error {
 
 func (d *DaemonlessClient) CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error) {
 	options := buildah.BuilderOptions{
-		FromImage: opts.Config.Image,
-		Container: opts.Name,
+		FromImage:         opts.Config.Image,
+		Container:         opts.Name,
+		PullBlobDirectory: d.BlobCacheDirectory,
 	}
 	builder, err := buildah.NewBuilder(opts.Context, d.Store, options)
 	if err != nil {
@@ -522,7 +534,7 @@ func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, auth docker.A
 	if opts.Tag != "" {
 		imageName = imageName + ":" + opts.Tag
 	}
-	return pullDaemonlessImage(d.SystemContext, d.Store, imageName, auth)
+	return pullDaemonlessImage(d.SystemContext, d.Store, imageName, auth, d.BlobCacheDirectory)
 }
 
 func (d *DaemonlessClient) TagImage(name string, opts docker.TagImageOptions) error {

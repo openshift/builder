@@ -131,7 +131,7 @@ func ManageDockerfile(dir string, build *buildapiv1.Build) error {
 	return nil
 }
 
-func ExtractImageContent(ctx context.Context, dockerClient DockerClient, store storage.Store, dir string, build *buildapiv1.Build) error {
+func ExtractImageContent(ctx context.Context, dockerClient DockerClient, store storage.Store, dir string, build *buildapiv1.Build, blobCacheDirectory string) error {
 	os.MkdirAll(dir, 0777)
 	forcePull := false
 	switch {
@@ -151,7 +151,7 @@ func ExtractImageContent(ctx context.Context, dockerClient DockerClient, store s
 		if image.PullSecret == nil {
 			imageSecretIndex = -1
 		}
-		err := extractSourceFromImage(ctx, dockerClient, store, image.From.Name, dir, imageSecretIndex, image.Paths, forcePull)
+		err := extractSourceFromImage(ctx, dockerClient, store, image.From.Name, dir, imageSecretIndex, image.Paths, forcePull, blobCacheDirectory)
 		if err != nil {
 			return err
 		}
@@ -394,7 +394,7 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 	return nil
 }
 
-func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, store storage.Store, image, buildDir string, imageSecretIndex int, paths []buildapiv1.ImageSourcePath, forcePull bool) error {
+func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, store storage.Store, image, buildDir string, imageSecretIndex int, paths []buildapiv1.ImageSourcePath, forcePull bool, blobCacheDirectory string) error {
 	glog.V(4).Infof("Extracting image source from image %s", image)
 
 	pullPolicy := buildah.PullIfMissing
