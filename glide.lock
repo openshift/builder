@@ -1,5 +1,5 @@
 hash: a2d41560bae11089032aaef05703c4451526a1d7286a2bf895d9504a8a45fa05
-updated: 2019-01-07T11:03:12.279332564-05:00
+updated: 2019-01-07T11:07:01.816133354-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -7,6 +7,8 @@ imports:
   - winterm
 - name: github.com/blang/semver
   version: b38d23b8782a487059e8fc8773e9a5b228a77cb6
+- name: github.com/boltdb/bolt
+  version: fd01fc79c553a8e99d512a07e8e0c63d4a3ccfc5
 - name: github.com/BurntSushi/toml
   version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - name: github.com/certifi/gocertifi
@@ -34,8 +36,7 @@ imports:
   - unshare
   - util
 - name: github.com/containers/image
-  version: c15806b373f71526b451bcdd26996d7bdf6fb205
-  repo: https://github.com/nalind/image
+  version: f0cbc16b444d729362c78244c715b45bf4019b71
   subpackages:
   - copy
   - directory
@@ -54,6 +55,7 @@ imports:
   - oci/layout
   - openshift
   - ostree
+  - pkg/blobinfocache
   - pkg/compression
   - pkg/docker/config
   - pkg/strslice
@@ -493,6 +495,10 @@ imports:
   - lex/httplex
   - proxy
   - websocket
+- name: golang.org/x/sync
+  version: 37e7f081c4d4c64e13b10787722085407fe5d15f
+  subpackages:
+  - semaphore
 - name: golang.org/x/sys
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
   subpackages:
