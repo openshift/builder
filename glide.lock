@@ -1,5 +1,5 @@
 hash: a2d41560bae11089032aaef05703c4451526a1d7286a2bf895d9504a8a45fa05
-updated: 2019-01-07T11:07:01.816133354-05:00
+updated: 2019-01-08T09:56:22.257698985-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -27,12 +27,13 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 412617652af33064d599feb86bdf90af342c686c
+  version: e7ca330f923701dba8859f5c014d0a9a3f7f0a49
   subpackages:
   - bind
   - chroot
   - docker
   - imagebuildah
+  - pkg/blobcache
   - unshare
   - util
 - name: github.com/containers/image

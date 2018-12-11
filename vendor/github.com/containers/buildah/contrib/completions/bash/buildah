@@ -74,11 +74,11 @@ __buildah_previous_extglob_setting=$(shopt -p extglob)
 shopt -s extglob
 
 __buildah_list_containers() {
-    COMPREPLY=($(compgen -W "$(buildah containers -q)" -- $cur))
+   COMPREPLY=($(compgen -W "$(buildah containers --format '{{.ContainerName}} {{.ContainerID}}' )" -- $cur))
 }
 
 __buildah_list_images() {
-    COMPREPLY=($(compgen -W "$(buildah images -q)" -- $cur))
+   COMPREPLY=($(compgen -W "$(buildah images --format '{{.ID}} {{.Name}}' )" -- $cur))
 }
 
 __buildah_pos_first_nonflag() {
@@ -404,6 +404,7 @@ return 1
      --network
      --no-pivot
      --pid
+     --platform
      --runtime
      --runtime-flag
      --security-opt
@@ -651,7 +652,19 @@ return 1
      esac
  }
 
- _buildah_containers() {
+ _buildah_ps() {
+   _buildah_containers
+ }
+
+_buildah_list() {
+   _buildah_containers
+ }
+
+_buildah_ls() {
+   _buildah_containers
+ }
+
+_buildah_containers() {
      local boolean_options="
      --help
      -h
@@ -710,6 +723,22 @@ return 1
              ;;
      esac
  }
+
+ _buildah_info() {
+     local options_with_args="
+       --debug
+       --D
+       --format
+     "
+
+     local all_options="$options_with_args"
+
+     case "$cur" in
+         -*)
+             COMPREPLY=($(compgen -W "$options_with_args" -- "$cur"))
+             ;;
+     esac
+}
 
  _buildah_inspect() {
      local options_with_args="
@@ -846,10 +875,14 @@ return 1
        delete
        from
        images
+       info
        inspect
+       list
+       ls
        mount
        pull
        push
+       ps
        rename
        rm
        rmi

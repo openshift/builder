@@ -68,13 +68,16 @@ func maybeReexecUsingUserNamespace(c *cli.Context, evenForRoot bool) {
 		return
 	}
 
+	var uidNum, gidNum uint64
 	// Figure out who we are.
 	me, err := user.Current()
-	bailOnError(err, "error determining current user")
-	uidNum, err := strconv.ParseUint(me.Uid, 10, 32)
-	bailOnError(err, "error parsing current UID %s", me.Uid)
-	gidNum, err := strconv.ParseUint(me.Gid, 10, 32)
-	bailOnError(err, "error parsing current GID %s", me.Gid)
+	if !os.IsNotExist(err) {
+		bailOnError(err, "error determining current user")
+		uidNum, err = strconv.ParseUint(me.Uid, 10, 32)
+		bailOnError(err, "error parsing current UID %s", me.Uid)
+		gidNum, err = strconv.ParseUint(me.Gid, 10, 32)
+		bailOnError(err, "error parsing current GID %s", me.Gid)
+	}
 
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -204,7 +207,7 @@ func unshareCmd(c *cli.Context) error {
 		args = []string{shell}
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = append(os.Environ(), "USER=root", "USERNAME=root", "GROUP=root", "LOGNAME=root", "UID=0", "GID=0")
+	cmd.Env = append(os.Environ(), "USER=root", "USERNAME=root", "GROUP=root", "LOGNAME=root", "UID=0", "GID=0", "_BUILDAH_STARTED_IN_USERNS=")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

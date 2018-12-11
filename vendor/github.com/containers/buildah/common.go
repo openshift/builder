@@ -6,10 +6,8 @@ import (
 	"path/filepath"
 
 	cp "github.com/containers/image/copy"
-	"github.com/containers/image/transports"
 	"github.com/containers/image/types"
 	"github.com/containers/libpod/pkg/rootless"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -34,13 +32,6 @@ func getCopyOptions(reportWriter io.Writer, sourceReference types.ImageReference
 
 		}
 	}
-	sourceInsecure, err := isReferenceInsecure(sourceReference, sourceCtx)
-	if err != nil {
-		logrus.Debugf("error determining if registry for %q is insecure: %v", transports.ImageName(sourceReference), err)
-	} else if sourceInsecure {
-		sourceCtx.DockerInsecureSkipTLSVerify = true
-		sourceCtx.OCIInsecureSkipTLSVerify = true
-	}
 
 	destinationCtx := &types.SystemContext{}
 	if destinationSystemContext != nil {
@@ -51,13 +42,6 @@ func getCopyOptions(reportWriter io.Writer, sourceReference types.ImageReference
 				destinationCtx.SystemRegistriesConfPath = userRegistriesFile
 			}
 		}
-	}
-	destinationInsecure, err := isReferenceInsecure(destinationReference, destinationCtx)
-	if err != nil {
-		logrus.Debugf("error determining if registry for %q is insecure: %v", transports.ImageName(destinationReference), err)
-	} else if destinationInsecure {
-		destinationCtx.DockerInsecureSkipTLSVerify = true
-		destinationCtx.OCIInsecureSkipTLSVerify = true
 	}
 
 	return &cp.Options{
