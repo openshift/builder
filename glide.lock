@@ -1,5 +1,5 @@
-hash: 178ee381d8a978c1bb95cc7591706fb2a3de2b55642c9fb62d7f03f83b87b2f8
-updated: 2018-11-27T14:07:43.127548898-05:00
+hash: a2d41560bae11089032aaef05703c4451526a1d7286a2bf895d9504a8a45fa05
+updated: 2019-01-07T11:03:12.279332564-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -74,11 +74,12 @@ imports:
   - pkg/rootless
   - pkg/secrets
 - name: github.com/containers/storage
-  version: c12292897a26de8bb20be9cfbee00a9d8ebad1b3
+  version: 2e0e1a581257fb1ab2b2298648bc7573d0b4f880
   subpackages:
   - drivers
   - drivers/aufs
   - drivers/btrfs
+  - drivers/copy
   - drivers/devmapper
   - drivers/overlay
   - drivers/overlayutils
@@ -260,6 +261,14 @@ imports:
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/json-iterator/go
   version: f2b4162afba35581b6d4a50d3b8f34e33c144682
+- name: github.com/klauspost/compress
+  version: 30be6041bed523c18e269a700ebd9c2ea9328574
+  subpackages:
+  - flate
+- name: github.com/klauspost/cpuid
+  version: c640019ed4bda023bac884990967336803e39e3a
+- name: github.com/klauspost/pgzip
+  version: 083b1c3f84dd6486588802e5ce295de3a7f41a8b
 - name: github.com/mailru/easyjson
   version: 2f5df55504ebc322e4d52d34df6a1f5b503bf26d
   subpackages:

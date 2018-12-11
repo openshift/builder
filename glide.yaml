@@ -87,14 +87,14 @@ import:
 # we need some of the newer constants
 - package: golang.org/x/sys
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
-- package: github.com/containers/storage
-  version: master
 # builds
 - package: github.com/containers/buildah
   version: master
 - package: github.com/containers/image
   repo:    https://github.com/nalind/image
   version: ip-registry
+- package: github.com/containers/storage
+  version: master
 # new enough to know how to disable itself when cross-compiling
 - package: github.com/opencontainers/selinux
   version: master
