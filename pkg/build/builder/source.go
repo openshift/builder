@@ -428,7 +428,7 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 
 	// TODO remove this, get CAs+insecure registry config from host.
 	systemContext.OCIInsecureSkipTLSVerify = true
-	systemContext.DockerInsecureSkipTLSVerify = true
+	systemContext.DockerInsecureSkipTLSVerify = types.NewOptionalBool(true)
 
 	if auths != nil {
 		for registry, ac := range auths.Configs {

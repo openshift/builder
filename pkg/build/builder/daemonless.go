@@ -15,7 +15,6 @@ import (
 	"github.com/containers/buildah/imagebuildah"
 	"github.com/containers/buildah/util"
 	"github.com/containers/image/pkg/docker/config"
-	"github.com/containers/image/pkg/sysregistriesv2"
 	"github.com/containers/image/transports/alltransports"
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
@@ -47,11 +46,6 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	// }
 	systemContext.AuthFilePath = "/tmp/config.json"
 
-	registries, err := sysregistriesv2.GetRegistries(&systemContext)
-	if err != nil {
-		return fmt.Errorf("error reading system registries configuration: %v", err)
-	}
-
 	ref, err := reference.Parse(imageName)
 	if err != nil {
 		return fmt.Errorf("error parsing image name %s: %v", ref, err)
@@ -66,18 +60,6 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		if err := config.SetAuthentication(&systemContext, ref.Registry, authConfig.Username, authConfig.Password); err != nil {
 			return err
 		}
-	}
-
-	if registry := sysregistriesv2.FindRegistry(imageName, registries); registry != nil {
-		if registry.Insecure {
-			glog.V(2).Infof("Registry %q is marked as insecure in the registries configuration.", registry.URL)
-			systemContext.DockerInsecureSkipTLSVerify = true
-			systemContext.OCIInsecureSkipTLSVerify = true
-		} else {
-			glog.V(2).Infof("Registry %q is marked as secure in the registries configuration.", registry.URL)
-		}
-	} else {
-		glog.V(2).Infof("Registry for %q is not present in the registries configuration, assuming it is secure.", imageName)
 	}
 
 	options := buildah.PullOptions{
@@ -255,22 +237,6 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		}
 	} else {
 		glog.V(2).Infof("No authentication secret provided for pushing to registry.")
-	}
-
-	registries, err := sysregistriesv2.GetRegistries(&systemContext)
-	if err != nil {
-		return "", fmt.Errorf("error reading system registries configuration: %v", err)
-	}
-	if registry := sysregistriesv2.FindRegistry(imageName, registries); registry != nil {
-		if registry.Insecure {
-			glog.V(2).Infof("Registry %q is marked as insecure in the registries configuration.", registry.URL)
-			systemContext.DockerInsecureSkipTLSVerify = true
-			systemContext.OCIInsecureSkipTLSVerify = true
-		} else {
-			glog.V(2).Infof("Registry %q is marked as secure in the registries configuration.", registry.URL)
-		}
-	} else {
-		glog.V(2).Infof("Registry for %q is not present in the registries configuration, assuming it is secure.", imageName)
 	}
 
 	options := buildah.PushOptions{
