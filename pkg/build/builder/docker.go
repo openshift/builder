@@ -354,16 +354,6 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 		opts.AuthConfigs = *auth
 	}
 
-	/*
-		// TODO: pass this to buildah
-			imageOptimizationPolicy := buildapiv1.ImageOptimizationNone
-			if s := d.build.Spec.Strategy.DockerStrategy; s != nil {
-				if policy := s.ImageOptimizationPolicy; policy != nil {
-					imageOptimizationPolicy = *policy
-				}
-			}
-	*/
-
 	return d.dockerClient.BuildImage(opts)
 }
 

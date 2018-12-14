@@ -108,9 +108,9 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 	layers := false
 	switch optimization {
 	case buildapiv1.ImageOptimizationSkipLayers, buildapiv1.ImageOptimizationSkipLayersAndWarn:
-		// layers: false
+		layers = false
 	case buildapiv1.ImageOptimizationNone:
-		// layers = true // TODO: enable
+		layers = true
 	default:
 		return fmt.Errorf("internal error: image optimization policy %q not fully implemented", string(optimization))
 	}
@@ -269,7 +269,7 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		BlobDirectory: blobCacheDirectory,
 	}
 
-	// TODO - do something with the digest
+	// return the digest of the image
 	_, digest, err := buildah.Push(context.TODO(), imageName, dest, options)
 	logName := imageName
 	if dref := dest.DockerReference(); dref != nil {
@@ -415,16 +415,17 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 
 // DaemonlessClient is a daemonless DockerClient-like implementation.
 type DaemonlessClient struct {
-	SystemContext      types.SystemContext
-	Store              storage.Store
-	Isolation          buildah.Isolation
-	BlobCacheDirectory string
-	builders           map[string]*buildah.Builder
+	SystemContext           types.SystemContext
+	Store                   storage.Store
+	Isolation               buildah.Isolation
+	BlobCacheDirectory      string
+	ImageOptimizationPolicy buildapiv1.ImageOptimizationPolicy
+	builders                map[string]*buildah.Builder
 }
 
 // GetDaemonlessClient returns a valid implemenatation of the DockerClient
 // interface, or an error if the implementation couldn't be created.
-func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, isolationSpec, blobCacheDirectory string) (client DockerClient, err error) {
+func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, isolationSpec, blobCacheDirectory string, imageOptimizationPolicy buildapiv1.ImageOptimizationPolicy) (client DockerClient, err error) {
 	isolation := buildah.IsolationDefault
 	switch strings.ToLower(isolationSpec) {
 	case "chroot":
@@ -443,16 +444,17 @@ func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store,
 	}
 
 	return &DaemonlessClient{
-		SystemContext:      systemContext,
-		Store:              store,
-		Isolation:          isolation,
-		BlobCacheDirectory: blobCacheDirectory,
-		builders:           make(map[string]*buildah.Builder),
+		SystemContext:           systemContext,
+		Store:                   store,
+		Isolation:               isolation,
+		BlobCacheDirectory:      blobCacheDirectory,
+		ImageOptimizationPolicy: imageOptimizationPolicy,
+		builders:                make(map[string]*buildah.Builder),
 	}, nil
 }
 
 func (d *DaemonlessClient) BuildImage(opts docker.BuildImageOptions) error {
-	return buildDaemonlessImage(d.SystemContext, d.Store, d.Isolation, opts.ContextDir, buildapiv1.ImageOptimizationNone, &opts, d.BlobCacheDirectory)
+	return buildDaemonlessImage(d.SystemContext, d.Store, d.Isolation, opts.ContextDir, d.ImageOptimizationPolicy, &opts, d.BlobCacheDirectory)
 }
 
 func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error) {
