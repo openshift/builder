@@ -332,7 +332,7 @@ imports:
   - specerror
   - validate
 - name: github.com/opencontainers/selinux
-  version: 6ba084dd09db3dfe49a839bab0bbe97fd9274d80
+  version: 51c6c0a5dbc675792e953298cb9871819d6f9bb8
   subpackages:
   - go-selinux
   - go-selinux/label
