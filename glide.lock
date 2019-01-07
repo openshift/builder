@@ -245,7 +245,7 @@ imports:
   - compiler
   - extensions
 - name: github.com/gorilla/mux
-  version: 3d80bc801bb034e17cae38591335b3b1110f1c47
+  version: f3ff42f93a451d7ffb2ff11cb9485f3f88089c83
 - name: github.com/gregjones/httpcache
   version: 787624de3eb7bd915c329cba748687a3b22666a6
   subpackages:
