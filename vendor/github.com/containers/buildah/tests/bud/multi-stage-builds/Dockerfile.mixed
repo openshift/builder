@@ -1,7 +1,7 @@
-FROM scratch as myname
+FROM scratch AS myname
 COPY Dockerfile.name /
 
-FROM scratch as myname2
+FROM scratch AS myname2
 COPY Dockerfile.index /
 
 FROM scratch

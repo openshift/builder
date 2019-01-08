@@ -273,20 +273,8 @@ func outputImages(ctx context.Context, images []storage.Image, store storage.Sto
 			// images without names should be printed with "<none>" as the image name
 			names = append(names, "<none>:<none>")
 		}
-		if opts.quiet && argName == "" {
-			fmt.Printf("%-64s\n", image.ID)
-			// We only want to print each id once
-			continue
-		}
-		if opts.json && argName == "" {
-			JSONImage := jsonImage{ID: image.ID, Names: image.Names}
-			data, err2 := json.MarshalIndent(JSONImage, "", "    ")
-			if err2 != nil {
-				return err2
-			}
-			fmt.Printf("%s\n", data)
-			continue
-		}
+
+	outer:
 		for name, tags := range imagebuildah.ReposToMap(names) {
 			for _, tag := range tags {
 				if !matchesReference(name+":"+tag, argName) {
@@ -300,7 +288,7 @@ func outputImages(ctx context.Context, images []storage.Image, store storage.Sto
 				if opts.quiet {
 					fmt.Printf("%-64s\n", image.ID)
 					// We only want to print each id once
-					break
+					break outer
 				}
 				if opts.json {
 					JSONImage := jsonImage{ID: image.ID, Names: image.Names}
@@ -309,7 +297,8 @@ func outputImages(ctx context.Context, images []storage.Image, store storage.Sto
 						return err2
 					}
 					fmt.Printf("%s\n", data)
-					break
+					// We only want to print each id once
+					break outer
 				}
 				params := imageOutputParams{
 					Tag:       tag,
@@ -356,9 +345,9 @@ func matchesFilter(ctx context.Context, image storage.Image, store storage.Store
 }
 
 func matchesDangling(name string, dangling string) bool {
-	if dangling == "false" && name != "<none>" {
+	if dangling == "false" && !strings.Contains(name, "<none>") {
 		return true
-	} else if dangling == "true" && name == "<none>" {
+	} else if dangling == "true" && strings.Contains(name, "<none>") {
 		return true
 	}
 	return false

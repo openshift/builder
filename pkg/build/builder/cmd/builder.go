@@ -57,6 +57,7 @@ type builderConfig struct {
 	buildsClient    buildclientv1.BuildInterface
 	cleanup         func()
 	store           storage.Store
+	blobCache       string
 }
 
 func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderConfig, error) {
@@ -131,7 +132,15 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 		}
 		istorage.Transport.SetStore(store)
 
-		dockerClient, err := bld.GetDaemonlessClient(systemContext, store, os.Getenv("BUILD_ISOLATION"))
+		// Default to using /var/cache/blobs as a blob cache, but allow its location
+		// to be changed by setting $BUILD_BLOBCACHE_DIR.  Setting the location to an
+		// empty value disables the cache.
+		cfg.blobCache = "/var/cache/blobs"
+		if blobCacheDir, isSet := os.LookupEnv("BUILD_BLOBCACHE_DIR"); isSet {
+			cfg.blobCache = blobCacheDir
+		}
+
+		dockerClient, err := bld.GetDaemonlessClient(systemContext, store, os.Getenv("BUILD_ISOLATION"), cfg.blobCache)
 		if err != nil {
 			return nil, fmt.Errorf("no daemonless store: %v", err)
 		}
@@ -260,7 +269,7 @@ func (c *builderConfig) extractImageContent() error {
 	}()
 
 	buildDir := bld.InputContentPath
-	return bld.ExtractImageContent(ctx, c.dockerClient, c.store, buildDir, c.build)
+	return bld.ExtractImageContent(ctx, c.dockerClient, c.store, buildDir, c.build, c.blobCache)
 }
 
 // execute is responsible for running a build

@@ -170,6 +170,10 @@ The [username[:password]] to use to authenticate with the registry if required.
 If one or both values are not supplied, a command line prompt will appear and the
 value can be entered.  The password is entered without echo.
 
+**--disable-compression, -D**
+
+Don't default to compressing filesystem layers when building the image.
+
 **--disable-content-trust**
 
 This is a Docker specific option to disable image verification to a Docker
@@ -293,6 +297,12 @@ that a new PID namespace should be created, or it can be "host" to indicate
 that the PID namespace in which `buildah` itself is being run should be reused,
 or it can be the path to a PID namespace which is already in use by another
 process.
+
+**--platform**="Linux"
+
+This option has no effect on the build. Other container engines use this option
+to control the execution platform for the build (e.g., Windows, Linux) which is
+not required for Buildah as it supports only Linux.
 
 **--pull**
 

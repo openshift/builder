@@ -97,6 +97,19 @@ load helpers
   buildah rmi -a -f
 }
 
+@test "images json dup test" {
+  cid=$(buildah from --signature-policy ${TESTSDIR}/policy.json scratch)
+  buildah commit --signature-policy ${TESTSDIR}/policy.json $cid test
+  buildah tag test new-name
+
+  run buildah --debug=false images --json
+  [ $(grep '"id": "' <<< "$output" | wc -l) -eq 1 ]
+  [ "${status}" -eq 0 ]
+
+  buildah rm -a
+  buildah rmi -a -f
+}
+
 @test "specify an existing image" {
   cid1=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json alpine)
   cid2=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json busybox)
@@ -112,4 +125,23 @@ load helpers
   [ "${lines[0]}" == "No such image alpine" ]
   [ $(wc -l <<< "$output") -eq 1 ]
   [ "${status}" -eq 1 ]
+}
+
+@test "Test dangling images" {
+  cid=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json scratch)
+  buildah commit --signature-policy ${TESTSDIR}/policy.json $cid test
+  buildah commit --signature-policy ${TESTSDIR}/policy.json $cid test
+  run buildah --debug=false images 
+  [ $(wc -l <<< "$output") -eq 3 ]
+  [ "${status}" -eq 0 ]
+  run buildah --debug=false images --filter dangling=true
+  [[ $output =~ " <none> " ]]
+  [ $(wc -l <<< "$output") -eq 2 ]
+  [ "${status}" -eq 0 ]
+  run buildah --debug=false images --filter dangling=false
+  [[ $output =~ " latest " ]]
+  [ $(wc -l <<< "$output") -eq 2 ]
+  [ "${status}" -eq 0 ]
+  buildah rm -a
+  buildah rmi -a -f
 }

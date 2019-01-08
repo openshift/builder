@@ -1,6 +1,7 @@
 package sysregistriesv2
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/containers/image/types"
@@ -25,12 +26,7 @@ func TestParseURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid URL 'https://example.com': URI schemes are not supported")
 
 	_, err = parseURL("john.doe@example.com")
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "invalid URL 'john.doe@example.com': user/password are not supported")
-
-	_, err = parseURL("127.0.0.1:123456")
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "invalid port number '123456' in numeric IPv4 address")
+	assert.Nil(t, err)
 
 	// valid URLs
 	url, err = parseURL("example.com")
@@ -48,18 +44,6 @@ func TestParseURL(t *testing.T) {
 	url, err = parseURL("example.com:5000/with/path")
 	assert.Nil(t, err)
 	assert.Equal(t, "example.com:5000/with/path", url)
-
-	url, err = parseURL("example.com:5000")
-	assert.Nil(t, err)
-	assert.Equal(t, "example.com:5000", url)
-
-	url, err = parseURL("172.30.0.1")
-	assert.Nil(t, err)
-	assert.Equal(t, "172.30.0.1", url)
-
-	url, err = parseURL("172.30.0.1:5000") // often used in OpenShift
-	assert.Nil(t, err)
-	assert.Equal(t, "172.30.0.1:5000", url)
 }
 
 func TestEmptyConfig(t *testing.T) {
@@ -92,8 +76,8 @@ blocked = true`)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(registries))
 
-	var reg *Registry
-	reg = FindRegistry("registry.com/image:tag", registries)
+	reg, err := FindRegistry(nil, "registry.com/image:tag")
+	assert.Nil(t, err)
 	assert.NotNil(t, reg)
 	assert.Equal(t, 2, len(reg.Mirrors))
 	assert.Equal(t, "mirror-1.registry.com", reg.Mirrors[0].URL)
@@ -137,6 +121,46 @@ url = "mirror-b.com"
 	assert.Contains(t, err.Error(), "invalid URL")
 }
 
+func TestRefMatchesPrefix(t *testing.T) {
+	for _, c := range []struct {
+		ref, prefix string
+		expected    bool
+	}{
+		// Prefix is a reference.Domain() value
+		{"docker.io", "docker.io", true},
+		{"docker.io", "example.com", false},
+		{"example.com:5000", "example.com:5000", true},
+		{"example.com:50000", "example.com:5000", false},
+		{"example.com:5000", "example.com", true}, // FIXME FIXME This is unintended and undocumented, don't rely on this behavior
+		{"example.com/foo", "example.com", true},
+		{"example.com/foo/bar", "example.com", true},
+		{"example.com/foo/bar:baz", "example.com", true},
+		{"example.com/foo/bar@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "example.com", true},
+		// Prefix is a reference.Named.Name() value or a repo namespace
+		{"docker.io", "docker.io/library", false},
+		{"docker.io/library", "docker.io/library", true},
+		{"example.com/library", "docker.io/library", false},
+		{"docker.io/libraryy", "docker.io/library", false},
+		{"docker.io/library/busybox", "docker.io/library", true},
+		{"docker.io", "docker.io/library/busybox", false},
+		{"docker.io/library/busybox", "docker.io/library/busybox", true},
+		{"example.com/library/busybox", "docker.io/library/busybox", false},
+		{"docker.io/library/busybox2", "docker.io/library/busybox", false},
+		// Prefix is a single image
+		{"example.com", "example.com/foo:bar", false},
+		{"example.com/foo", "example.com/foo:bar", false},
+		{"example.com/foo:bar", "example.com/foo:bar", true},
+		{"example.com/foo:bar2", "example.com/foo:bar", false},
+		{"example.com", "example.com/foo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
+		{"example.com/foo", "example.com/foo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
+		{"example.com/foo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "example.com/foo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true},
+		{"example.com/foo@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "example.com/foo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
+	} {
+		res := refMatchesPrefix(c.ref, c.prefix)
+		assert.Equal(t, c.expected, res, fmt.Sprintf("%s vs. %s", c.ref, c.prefix))
+	}
+}
+
 func TestFindRegistry(t *testing.T) {
 	testConfig = []byte(`
 [[registry]]
@@ -163,23 +187,41 @@ prefix = ""`)
 	assert.Nil(t, err)
 	assert.Equal(t, 5, len(registries))
 
-	var reg *Registry
-	reg = FindRegistry("simple-prefix.com/foo/bar:latest", registries)
+	reg, err := FindRegistry(nil, "simple-prefix.com/foo/bar:latest")
+	assert.Nil(t, err)
 	assert.NotNil(t, reg)
 	assert.Equal(t, "simple-prefix.com", reg.Prefix)
 	assert.Equal(t, reg.URL, "registry.com:5000")
 
-	reg = FindRegistry("complex-prefix.com:4000/with/path/and/beyond:tag", registries)
+	// path match
+	reg, err = FindRegistry(nil, "simple-prefix.com/")
+	assert.Nil(t, err)
+	assert.NotNil(t, reg)
+
+	// hostname match
+	reg, err = FindRegistry(nil, "simple-prefix.com")
+	assert.Nil(t, err)
+	assert.NotNil(t, reg)
+
+	// invalid match
+	reg, err = FindRegistry(nil, "simple-prefix.comx")
+	assert.Nil(t, err)
+	assert.Nil(t, reg)
+
+	reg, err = FindRegistry(nil, "complex-prefix.com:4000/with/path/and/beyond:tag")
+	assert.Nil(t, err)
 	assert.NotNil(t, reg)
 	assert.Equal(t, "complex-prefix.com:4000/with/path", reg.Prefix)
 	assert.Equal(t, "another-registry.com:5000", reg.URL)
 
-	reg = FindRegistry("no-prefix.com/foo:tag", registries)
+	reg, err = FindRegistry(nil, "no-prefix.com/foo:tag")
+	assert.Nil(t, err)
 	assert.NotNil(t, reg)
 	assert.Equal(t, "no-prefix.com", reg.Prefix)
 	assert.Equal(t, "no-prefix.com", reg.URL)
 
-	reg = FindRegistry("empty-prefix.com/foo:tag", registries)
+	reg, err = FindRegistry(nil, "empty-prefix.com/foo:tag")
+	assert.Nil(t, err)
 	assert.NotNil(t, reg)
 	assert.Equal(t, "empty-prefix.com", reg.Prefix)
 	assert.Equal(t, "empty-prefix.com", reg.URL)
@@ -217,7 +259,8 @@ unqualified-search = true
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(registries))
 
-	unqRegs := FindUnqualifiedSearchRegistries(registries)
+	unqRegs, err := FindUnqualifiedSearchRegistries(nil)
+	assert.Nil(t, err)
 	assertSearchRegistryURLsEqual(t, []string{"registry-a.com", "registry-c.com", "registry-d.com"}, unqRegs)
 }
 
@@ -317,11 +360,13 @@ registries = ["registry-d.com", "registry-e.com", "registry-a.com"]`)
 	assert.Nil(t, err)
 	assert.Equal(t, 5, len(registries))
 
-	unqRegs := FindUnqualifiedSearchRegistries(registries)
+	unqRegs, err := FindUnqualifiedSearchRegistries(nil)
+	assert.Nil(t, err)
 	assertSearchRegistryURLsEqual(t, []string{"registry-a.com", "registry-c.com", "registry-d.com"}, unqRegs)
 
 	// check if merging works
-	reg := FindRegistry("registry-a.com/bar/foo/barfoo:latest", registries)
+	reg, err := FindRegistry(nil, "registry-a.com/bar/foo/barfoo:latest")
+	assert.Nil(t, err)
 	assert.NotNil(t, reg)
 	assert.True(t, reg.Search)
 	assert.True(t, reg.Insecure)
@@ -395,4 +440,48 @@ insecure = true`)
 	registries, err = GetRegistries(ctx)
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(registries))
+}
+
+func TestInvalidateCache(t *testing.T) {
+	testConfig = []byte(`
+[[registry]]
+url = "registry.com"
+
+[[registry.mirror]]
+url = "mirror-1.registry.com"
+
+[[registry.mirror]]
+url = "mirror-2.registry.com"
+
+
+[[registry]]
+url = "blocked.registry.com"
+blocked = true
+
+
+[[registry]]
+url = "insecure.registry.com"
+insecure = true
+
+
+[[registry]]
+url = "untrusted.registry.com"
+insecure = true`)
+
+	ctx := &types.SystemContext{}
+
+	configCache = make(map[string][]Registry)
+	registries, err := GetRegistries(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(registries))
+	assertSearchRegistryURLsEqual(t, []string{"registry.com", "blocked.registry.com", "insecure.registry.com", "untrusted.registry.com"}, registries)
+
+	// invalidate the cache, make sure it's empty and reload
+	InvalidateCache()
+	assert.Equal(t, 0, len(configCache))
+
+	registries, err = GetRegistries(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(registries))
+	assertSearchRegistryURLsEqual(t, []string{"registry.com", "blocked.registry.com", "insecure.registry.com", "untrusted.registry.com"}, registries)
 }

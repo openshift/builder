@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/containers/storage/drivers"
 	"github.com/containers/storage/drivers/overlayutils"
@@ -29,6 +30,7 @@ import (
 	"github.com/containers/storage/pkg/parsers"
 	"github.com/containers/storage/pkg/system"
 	units "github.com/docker/go-units"
+	rsystem "github.com/opencontainers/runc/libcontainer/system"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -164,6 +166,10 @@ func Init(home string, options []string, uidMaps, gidMaps []idtools.IDMap) (grap
 		if err != nil {
 			os.Remove(filepath.Join(home, linkDir))
 			os.Remove(home)
+			patherr, ok := err.(*os.PathError)
+			if ok && patherr.Err == syscall.ENOSPC {
+				return nil, err
+			}
 			return nil, errors.Wrap(err, "kernel does not support overlay fs")
 		}
 	}
@@ -284,6 +290,12 @@ func supportsOverlay(home string, homeMagic graphdriver.FsMagic, rootUID, rootGI
 	exec.Command("modprobe", "overlay").Run()
 
 	layerDir, err := ioutil.TempDir(home, "compat")
+	if err != nil {
+		patherr, ok := err.(*os.PathError)
+		if ok && patherr.Err == syscall.ENOSPC {
+			return false, err
+		}
+	}
 	if err == nil {
 		// Check if reading the directory's contents populates the d_type field, which is required
 		// for proper operation of the overlay filesystem.
@@ -743,7 +755,9 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 
 	workDir := path.Join(dir, "work")
 	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", strings.Join(absLowers, ":"), diffDir, workDir)
-	if d.options.mountOptions != "" {
+	if len(options.Options) > 0 {
+		opts = fmt.Sprintf("%s,%s", strings.Join(options.Options, ","), opts)
+	} else if d.options.mountOptions != "" {
 		opts = fmt.Sprintf("%s,%s", d.options.mountOptions, opts)
 	}
 	mountData := label.FormatMountLabel(opts, options.MountLabel)
@@ -874,6 +888,7 @@ func (d *Driver) ApplyDiff(id string, idMappings *idtools.IDMappings, parent str
 		UIDMaps:        idMappings.UIDs(),
 		GIDMaps:        idMappings.GIDs(),
 		WhiteoutFormat: d.getWhiteoutFormat(),
+		InUserNS:       rsystem.RunningInUserNS(),
 	}); err != nil {
 		return 0, err
 	}

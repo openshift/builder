@@ -15,6 +15,7 @@ RUN INSTALL_PKGS=" \
 COPY imagecontent/policy.json /etc/containers/
 COPY imagecontent/registries.conf /etc/containers/
 COPY imagecontent/storage.conf /etc/containers/
+RUN mkdir /var/cache/blobs
 
 COPY openshift-builder /usr/bin
 RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \

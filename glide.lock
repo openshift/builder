@@ -1,5 +1,5 @@
-hash: 178ee381d8a978c1bb95cc7591706fb2a3de2b55642c9fb62d7f03f83b87b2f8
-updated: 2018-11-27T14:07:43.127548898-05:00
+hash: a2d41560bae11089032aaef05703c4451526a1d7286a2bf895d9504a8a45fa05
+updated: 2019-01-08T09:56:22.257698985-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -7,6 +7,8 @@ imports:
   - winterm
 - name: github.com/blang/semver
   version: b38d23b8782a487059e8fc8773e9a5b228a77cb6
+- name: github.com/boltdb/bolt
+  version: fd01fc79c553a8e99d512a07e8e0c63d4a3ccfc5
 - name: github.com/BurntSushi/toml
   version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - name: github.com/certifi/gocertifi
@@ -25,17 +27,17 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 412617652af33064d599feb86bdf90af342c686c
+  version: e7ca330f923701dba8859f5c014d0a9a3f7f0a49
   subpackages:
   - bind
   - chroot
   - docker
   - imagebuildah
+  - pkg/blobcache
   - unshare
   - util
 - name: github.com/containers/image
-  version: c15806b373f71526b451bcdd26996d7bdf6fb205
-  repo: https://github.com/nalind/image
+  version: f0cbc16b444d729362c78244c715b45bf4019b71
   subpackages:
   - copy
   - directory
@@ -54,6 +56,7 @@ imports:
   - oci/layout
   - openshift
   - ostree
+  - pkg/blobinfocache
   - pkg/compression
   - pkg/docker/config
   - pkg/strslice
@@ -74,11 +77,12 @@ imports:
   - pkg/rootless
   - pkg/secrets
 - name: github.com/containers/storage
-  version: c12292897a26de8bb20be9cfbee00a9d8ebad1b3
+  version: 2e0e1a581257fb1ab2b2298648bc7573d0b4f880
   subpackages:
   - drivers
   - drivers/aufs
   - drivers/btrfs
+  - drivers/copy
   - drivers/devmapper
   - drivers/overlay
   - drivers/overlayutils
@@ -241,7 +245,7 @@ imports:
   - compiler
   - extensions
 - name: github.com/gorilla/mux
-  version: 3d80bc801bb034e17cae38591335b3b1110f1c47
+  version: f3ff42f93a451d7ffb2ff11cb9485f3f88089c83
 - name: github.com/gregjones/httpcache
   version: 787624de3eb7bd915c329cba748687a3b22666a6
   subpackages:
@@ -260,6 +264,14 @@ imports:
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/json-iterator/go
   version: f2b4162afba35581b6d4a50d3b8f34e33c144682
+- name: github.com/klauspost/compress
+  version: 30be6041bed523c18e269a700ebd9c2ea9328574
+  subpackages:
+  - flate
+- name: github.com/klauspost/cpuid
+  version: c640019ed4bda023bac884990967336803e39e3a
+- name: github.com/klauspost/pgzip
+  version: 083b1c3f84dd6486588802e5ce295de3a7f41a8b
 - name: github.com/mailru/easyjson
   version: 2f5df55504ebc322e4d52d34df6a1f5b503bf26d
   subpackages:
@@ -320,7 +332,7 @@ imports:
   - specerror
   - validate
 - name: github.com/opencontainers/selinux
-  version: 6ba084dd09db3dfe49a839bab0bbe97fd9274d80
+  version: 51c6c0a5dbc675792e953298cb9871819d6f9bb8
   subpackages:
   - go-selinux
   - go-selinux/label
@@ -484,6 +496,10 @@ imports:
   - lex/httplex
   - proxy
   - websocket
+- name: golang.org/x/sync
+  version: 37e7f081c4d4c64e13b10787722085407fe5d15f
+  subpackages:
+  - semaphore
 - name: golang.org/x/sys
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
   subpackages:
