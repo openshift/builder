@@ -21,7 +21,7 @@ import (
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/idtools"
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/opencontainers/runtime-spec/specs-go"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
@@ -68,8 +68,7 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		SystemContext: &systemContext,
 		BlobDirectory: blobCacheDirectory,
 	}
-	_, err = buildah.Pull(context.TODO(), "docker://"+imageName, options)
-	return err
+	return buildah.Pull(context.TODO(), "docker://"+imageName, options)
 }
 
 func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation buildah.Isolation, contextDir string, optimization buildapiv1.ImageOptimizationPolicy, opts *docker.BuildImageOptions, blobCacheDirectory string) error {
