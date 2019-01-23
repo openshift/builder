@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,16 +12,15 @@ import (
 	"syscall"
 
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
+	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/libpod/image"
 	ann "github.com/containers/libpod/pkg/annotations"
-	"github.com/containers/libpod/pkg/apparmor"
 	"github.com/containers/libpod/pkg/inspect"
 	ns "github.com/containers/libpod/pkg/namespaces"
 	"github.com/containers/libpod/pkg/rootless"
 	cc "github.com/containers/libpod/pkg/spec"
 	"github.com/containers/libpod/pkg/util"
-	libpodVersion "github.com/containers/libpod/version"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/go-connections/nat"
 	"github.com/docker/go-units"
@@ -66,7 +66,7 @@ func createCmd(c *cli.Context) error {
 		rootless.SetSkipStorageSetup(true)
 	}
 
-	runtime, err := libpodruntime.GetContainerRuntime(c)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
@@ -128,7 +128,7 @@ func createContainer(c *cli.Context, runtime *libpod.Runtime) (*libpod.Container
 	var data *inspect.ImageData = nil
 
 	if rootfs == "" && !rootless.SkipStorageSetup() {
-		newImage, err := runtime.ImageRuntime().New(ctx, c.Args()[0], rtc.SignaturePolicyPath, "", os.Stderr, nil, image.SigningOptions{}, false, false)
+		newImage, err := runtime.ImageRuntime().New(ctx, c.Args()[0], rtc.SignaturePolicyPath, "", os.Stderr, nil, image.SigningOptions{}, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -145,37 +145,10 @@ func createContainer(c *cli.Context, runtime *libpod.Runtime) (*libpod.Container
 		return nil, nil, err
 	}
 
-	runtimeSpec, err := cc.CreateConfigToOCISpec(createConfig)
+	ctr, err := createContainerFromCreateConfig(runtime, createConfig, ctx, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	options, err := createConfig.GetContainerCreateOptions(runtime)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	became, ret, err := joinOrCreateRootlessUserNamespace(createConfig, runtime)
-	if err != nil {
-		return nil, nil, err
-	}
-	if became {
-		os.Exit(ret)
-	}
-
-	ctr, err := runtime.NewContainer(ctx, runtimeSpec, options...)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	createConfigJSON, err := json.Marshal(createConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := ctr.AddArtifact("create-config", createConfigJSON); err != nil {
-		return nil, nil, err
-	}
-
 	if cidFile != nil {
 		_, err = cidFile.WriteString(ctr.ID())
 		if err != nil {
@@ -188,83 +161,9 @@ func createContainer(c *cli.Context, runtime *libpod.Runtime) (*libpod.Container
 	return ctr, createConfig, nil
 }
 
-// Checks if a user-specified AppArmor profile is loaded, or loads the default profile if
-// AppArmor is enabled.
-// Any interaction with AppArmor requires root permissions.
-func loadAppArmor(config *cc.CreateConfig) error {
-	if rootless.IsRootless() {
-		noAAMsg := "AppArmor security is not available in rootless mode"
-		switch config.ApparmorProfile {
-		case "":
-			logrus.Warn(noAAMsg)
-		case "unconfined":
-		default:
-			return fmt.Errorf(noAAMsg)
-		}
-		return nil
-	}
-
-	if config.ApparmorProfile == "" && apparmor.IsEnabled() {
-		// Unless specified otherwise, make sure that the default AppArmor
-		// profile is installed.  To avoid redundantly loading the profile
-		// on each invocation, check if it's loaded before installing it.
-		// Suffix the profile with the current libpod version to allow
-		// loading the new, potentially updated profile after an update.
-		profile := fmt.Sprintf("%s-%s", apparmor.DefaultLibpodProfile, libpodVersion.Version)
-
-		loadProfile := func() error {
-			isLoaded, err := apparmor.IsLoaded(profile)
-			if err != nil {
-				return err
-			}
-			if !isLoaded {
-				err = apparmor.InstallDefault(profile)
-				if err != nil {
-					return err
-				}
-
-			}
-			return nil
-		}
-
-		if err := loadProfile(); err != nil {
-			switch err {
-			case apparmor.ErrApparmorUnsupported:
-				// do not set the profile when AppArmor isn't supported
-				logrus.Debugf("AppArmor is not supported: setting empty profile")
-			default:
-				return err
-			}
-		} else {
-			logrus.Infof("Sucessfully loaded AppAmor profile '%s'", profile)
-			config.ApparmorProfile = profile
-		}
-	} else if config.ApparmorProfile != "" && config.ApparmorProfile != "unconfined" {
-		if !apparmor.IsEnabled() {
-			return fmt.Errorf("Profile specified but AppArmor is disabled on the host")
-		}
-
-		isLoaded, err := apparmor.IsLoaded(config.ApparmorProfile)
-		if err != nil {
-			switch err {
-			case apparmor.ErrApparmorUnsupported:
-				return fmt.Errorf("Profile specified but AppArmor is not supported")
-			default:
-				return fmt.Errorf("Error checking if AppArmor profile is loaded: %v", err)
-			}
-		}
-		if !isLoaded {
-			return fmt.Errorf("The specified AppArmor profile '%s' is not loaded", config.ApparmorProfile)
-		}
-	}
-
-	return nil
-}
-
 func parseSecurityOpt(config *cc.CreateConfig, securityOpts []string) error {
 	var (
 		labelOpts []string
-		err       error
 	)
 
 	if config.PidMode.IsHost() {
@@ -274,7 +173,11 @@ func parseSecurityOpt(config *cc.CreateConfig, securityOpts []string) error {
 		if err != nil {
 			return errors.Wrapf(err, "container %q not found", config.PidMode.Container())
 		}
-		labelOpts = append(labelOpts, label.DupSecOpt(ctr.ProcessLabel())...)
+		secopts, err := label.DupSecOpt(ctr.ProcessLabel())
+		if err != nil {
+			return errors.Wrapf(err, "failed to duplicate label %q ", ctr.ProcessLabel())
+		}
+		labelOpts = append(labelOpts, secopts...)
 	}
 
 	if config.IpcMode.IsHost() {
@@ -284,7 +187,11 @@ func parseSecurityOpt(config *cc.CreateConfig, securityOpts []string) error {
 		if err != nil {
 			return errors.Wrapf(err, "container %q not found", config.IpcMode.Container())
 		}
-		labelOpts = append(labelOpts, label.DupSecOpt(ctr.ProcessLabel())...)
+		secopts, err := label.DupSecOpt(ctr.ProcessLabel())
+		if err != nil {
+			return errors.Wrapf(err, "failed to duplicate label %q ", ctr.ProcessLabel())
+		}
+		labelOpts = append(labelOpts, secopts...)
 	}
 
 	for _, opt := range securityOpts {
@@ -309,10 +216,6 @@ func parseSecurityOpt(config *cc.CreateConfig, securityOpts []string) error {
 		}
 	}
 
-	if err := loadAppArmor(config); err != nil {
-		return err
-	}
-
 	if config.SeccompProfilePath == "" {
 		if _, err := os.Stat(libpod.SeccompOverridePath); err == nil {
 			config.SeccompProfilePath = libpod.SeccompOverridePath
@@ -330,7 +233,7 @@ func parseSecurityOpt(config *cc.CreateConfig, securityOpts []string) error {
 		}
 	}
 	config.LabelOpts = labelOpts
-	return err
+	return nil
 }
 
 // isPortInPortBindings determines if an exposed host port is in user
@@ -370,13 +273,13 @@ func configureEntrypoint(c *cli.Context, data *inspect.ImageData) []string {
 		return []string{c.String("entrypoint")}
 	}
 	if data != nil {
-		return data.ContainerConfig.Entrypoint
+		return data.Config.Entrypoint
 	}
 	return entrypoint
 }
 
-func configurePod(c *cli.Context, runtime *libpod.Runtime, namespaces map[string]string) (map[string]string, error) {
-	pod, err := runtime.LookupPod(c.String("pod"))
+func configurePod(c *cli.Context, runtime *libpod.Runtime, namespaces map[string]string, podName string) (map[string]string, error) {
+	pod, err := runtime.LookupPod(podName)
 	if err != nil {
 		return namespaces, err
 	}
@@ -409,7 +312,12 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		inputCommand, command                                    []string
 		memoryLimit, memoryReservation, memorySwap, memoryKernel int64
 		blkioWeight                                              uint16
+		namespaces                                               map[string]string
 	)
+	if c.IsSet("restart") {
+		return nil, errors.Errorf("--restart option is not supported.\nUse systemd unit files for restarting containers")
+	}
+
 	idmappings, err := util.ParseIDMapping(c.StringSlice("uidmap"), c.StringSlice("gidmap"), c.String("subuidname"), c.String("subgidname"))
 	if err != nil {
 		return nil, err
@@ -483,7 +391,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 	tty := c.Bool("tty")
 
 	if c.Bool("detach") && c.Bool("rm") {
-		return nil, errors.Errorf("--rm and --detach can not be specified together")
+		return nil, errors.Errorf("--rm and --detach cannot be specified together")
 	}
 	if c.Int64("cpu-period") != 0 && c.Float64("cpus") > 0 {
 		return nil, errors.Errorf("--cpu-period and --cpus cannot be set together")
@@ -492,12 +400,21 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		return nil, errors.Errorf("--cpu-quota and --cpus cannot be set together")
 	}
 
+	// EXPOSED PORTS
+	var portBindings map[nat.Port][]nat.PortBinding
+	if data != nil {
+		portBindings, err = cc.ExposedPorts(c.StringSlice("expose"), c.StringSlice("publish"), c.Bool("publish-all"), data.Config.ExposedPorts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Kernel Namespaces
 	// TODO Fix handling of namespace from pod
 	// Instead of integrating here, should be done in libpod
 	// However, that also involves setting up security opts
 	// when the pod's namespace is integrated
-	namespaces := map[string]string{
+	namespaces = map[string]string{
 		"pid":  c.String("pid"),
 		"net":  c.String("net"),
 		"ipc":  c.String("ipc"),
@@ -505,8 +422,51 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		"uts":  c.String("uts"),
 	}
 
+	originalPodName := c.String("pod")
+	podName := strings.Replace(originalPodName, "new:", "", 1)
+	// after we strip out :new, make sure there is something left for a pod name
+	if len(podName) < 1 && c.IsSet("pod") {
+		return nil, errors.Errorf("new pod name must be at least one character")
+	}
 	if c.IsSet("pod") {
-		namespaces, err = configurePod(c, runtime, namespaces)
+		if strings.HasPrefix(originalPodName, "new:") {
+			if rootless.IsRootless() {
+				// To create a new pod, we must immediately create the userns.
+				became, ret, err := rootless.BecomeRootInUserNS()
+				if err != nil {
+					return nil, err
+				}
+				if became {
+					os.Exit(ret)
+				}
+			}
+			// pod does not exist; lets make it
+			var podOptions []libpod.PodCreateOption
+			podOptions = append(podOptions, libpod.WithPodName(podName), libpod.WithInfraContainer(), libpod.WithPodCgroups())
+			if len(portBindings) > 0 {
+				ociPortBindings, err := cc.NatToOCIPortBindings(portBindings)
+				if err != nil {
+					return nil, err
+				}
+				podOptions = append(podOptions, libpod.WithInfraContainerPorts(ociPortBindings))
+			}
+
+			podNsOptions, err := shared.GetNamespaceOptions(strings.Split(DefaultKernelNamespaces, ","))
+			if err != nil {
+				return nil, err
+			}
+			podOptions = append(podOptions, podNsOptions...)
+			// make pod
+			pod, err := runtime.NewPod(ctx, podOptions...)
+			if err != nil {
+				return nil, err
+			}
+			logrus.Debugf("pod %s created by new container request", pod.ID())
+
+			// The container now cannot have port bindings; so we reset the map
+			portBindings = make(map[nat.Port][]nat.PortBinding)
+		}
+		namespaces, err = configurePod(c, runtime, namespaces, podName)
 		if err != nil {
 			return nil, err
 		}
@@ -535,7 +495,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 	// Make sure if network is set to container namespace, port binding is not also being asked for
 	netMode := ns.NetworkMode(namespaces["net"])
 	if netMode.IsContainer() {
-		if len(c.StringSlice("publish")) > 0 || c.Bool("publish-all") {
+		if len(portBindings) > 0 {
 			return nil, errors.Errorf("cannot set port bindings on an existing container network namespace")
 		}
 	}
@@ -546,7 +506,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		if data == nil {
 			user = "0"
 		} else {
-			user = data.ContainerConfig.User
+			user = data.Config.User
 		}
 	}
 
@@ -554,7 +514,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 	stopSignal := syscall.SIGTERM
 	signalString := ""
 	if data != nil {
-		signalString = data.ContainerConfig.StopSignal
+		signalString = data.Config.StopSignal
 	}
 	if c.IsSet("stop-signal") {
 		signalString = c.String("stop-signal")
@@ -569,7 +529,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 	// ENVIRONMENT VARIABLES
 	env := defaultEnvVariables
 	if data != nil {
-		for _, e := range data.ContainerConfig.Env {
+		for _, e := range data.Config.Env {
 			split := strings.SplitN(e, "=", 2)
 			if len(split) > 1 {
 				env[split[0]] = split[1]
@@ -588,7 +548,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		return nil, errors.Wrapf(err, "unable to process labels")
 	}
 	if data != nil {
-		for key, val := range data.ContainerConfig.Labels {
+		for key, val := range data.Config.Labels {
 			if _, ok := labels[key]; !ok {
 				labels[key] = val
 			}
@@ -622,8 +582,8 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 	workDir := "/"
 	if c.IsSet("workdir") || c.IsSet("w") {
 		workDir = c.String("workdir")
-	} else if data != nil && data.ContainerConfig.WorkingDir != "" {
-		workDir = data.ContainerConfig.WorkingDir
+	} else if data != nil && data.Config.WorkingDir != "" {
+		workDir = data.Config.WorkingDir
 	}
 
 	entrypoint := configureEntrypoint(c, data)
@@ -635,22 +595,13 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 	if len(inputCommand) > 0 {
 		// User command overrides data CMD
 		command = append(command, inputCommand...)
-	} else if data != nil && len(data.ContainerConfig.Cmd) > 0 && !c.IsSet("entrypoint") {
+	} else if data != nil && len(data.Config.Cmd) > 0 && !c.IsSet("entrypoint") {
 		// If not user command, add CMD
-		command = append(command, data.ContainerConfig.Cmd...)
+		command = append(command, data.Config.Cmd...)
 	}
 
 	if data != nil && len(command) == 0 {
 		return nil, errors.Errorf("No command specified on command line or as CMD or ENTRYPOINT in this image")
-	}
-
-	// EXPOSED PORTS
-	var portBindings map[nat.Port][]nat.PortBinding
-	if data != nil {
-		portBindings, err = cc.ExposedPorts(c.StringSlice("expose"), c.StringSlice("publish"), c.Bool("publish-all"), data.ContainerConfig.ExposedPorts)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	// SHM Size
@@ -685,7 +636,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 
 	var ImageVolumes map[string]struct{}
 	if data != nil {
-		ImageVolumes = data.ContainerConfig.Volumes
+		ImageVolumes = data.Config.Volumes
 	}
 	var imageVolType = map[string]string{
 		"bind":   "",
@@ -746,7 +697,7 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		NetMode:        netMode,
 		UtsMode:        utsMode,
 		PidMode:        pidMode,
-		Pod:            c.String("pod"),
+		Pod:            podName,
 		Privileged:     c.Bool("privileged"),
 		Publish:        c.StringSlice("publish"),
 		PublishAll:     c.Bool("publish-all"),
@@ -797,6 +748,16 @@ func parseCreateOpts(ctx context.Context, c *cli.Context, runtime *libpod.Runtim
 		Syslog:      c.GlobalBool("syslog"),
 	}
 
+	if c.Bool("init") {
+		initPath := c.String("init-path")
+		if initPath == "" {
+			initPath = runtime.GetConfig().InitPath
+		}
+		if err := config.AddContainerInitBinary(initPath); err != nil {
+			return nil, err
+		}
+	}
+
 	if config.Privileged {
 		config.LabelOpts = label.DisableSecOpt()
 	} else {
@@ -843,11 +804,15 @@ func joinOrCreateRootlessUserNamespace(createConfig *cc.CreateConfig, runtime *l
 			if s != libpod.ContainerStateRunning && s != libpod.ContainerStatePaused {
 				continue
 			}
-			pid, err := prevCtr.PID()
+			data, err := ioutil.ReadFile(prevCtr.Config().ConmonPidFile)
 			if err != nil {
-				return false, -1, err
+				return false, -1, errors.Wrapf(err, "cannot read conmon PID file %q", prevCtr.Config().ConmonPidFile)
 			}
-			return rootless.JoinNS(uint(pid))
+			conmonPid, err := strconv.Atoi(string(data))
+			if err != nil {
+				return false, -1, errors.Wrapf(err, "cannot parse PID %q", data)
+			}
+			return rootless.JoinDirectUserAndMountNS(uint(conmonPid))
 		}
 	}
 
@@ -873,4 +838,37 @@ func joinOrCreateRootlessUserNamespace(createConfig *cc.CreateConfig, runtime *l
 		}
 	}
 	return rootless.BecomeRootInUserNS()
+}
+
+func createContainerFromCreateConfig(r *libpod.Runtime, createConfig *cc.CreateConfig, ctx context.Context, pod *libpod.Pod) (*libpod.Container, error) {
+	runtimeSpec, err := cc.CreateConfigToOCISpec(createConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	options, err := createConfig.GetContainerCreateOptions(r, pod)
+	if err != nil {
+		return nil, err
+	}
+	became, ret, err := joinOrCreateRootlessUserNamespace(createConfig, r)
+	if err != nil {
+		return nil, err
+	}
+	if became {
+		os.Exit(ret)
+	}
+
+	ctr, err := r.NewContainer(ctx, runtimeSpec, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	createConfigJSON, err := json.Marshal(createConfig)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctr.AddArtifact("create-config", createConfigJSON); err != nil {
+		return nil, err
+	}
+	return ctr, nil
 }

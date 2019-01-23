@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This command checks that the built commands can function together for
 # simple scenarios.  It does not require Docker so it can run in travis.
@@ -36,6 +36,9 @@ function find_tests() {
     fi
 }
 tests=( $(find_tests ${1:-.*}) )
+
+# indicate we are running an integration test
+export OS_INTEGRATION_TEST='true'
 
 # deconflict ports so we can run in parallel with other test suites
 export API_PORT=${API_PORT:-28443}
@@ -96,8 +99,6 @@ os::cmd::try_until_success "oc get service kubernetes --namespace default --conf
 os::cmd::try_until_success "oc login --server=${KUBERNETES_MASTER} --certificate-authority ${MASTER_CONFIG_DIR}/server-ca.crt -u test-user -p anything" $(( 160 * second )) 0.25
 os::test::junit::declare_suite_end
 os::log::debug "localup server health checks done at: $( date )"
-
-os::start::registry
 
 # NOTE: Do not add tests here, add them to test/cmd/*.
 # Tests should assume they run in an empty project, and should be reentrant if possible

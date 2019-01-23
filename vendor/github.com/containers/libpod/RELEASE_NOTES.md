@@ -1,5 +1,96 @@
 # Release Notes
 
+## 1.0.0
+### Features
+- The `podman exec` command now includes a `--workdir` option to set working directory for the executed command
+- The `podman create` and `podman run` commands now support the `--init` flag to use a minimal init process in the container
+- Added the `podman image sign` command to GPG sign images
+- The `podman run --device` flag now accepts directories, and will added any device nodes in the directory to the container
+- Added the `podman play kube` command to create pods and containers from Kubernetes pod YAML
+
+### Bugfixes
+- Fixed a bug where passing `podman create` or `podman run` volumes with an empty host or container path could cause a segfault
+- Fixed a bug where `storage.conf` was sometimes ignored for rootless containers
+- Fixed a bug where Podman run as root would error if CAP_SYS_RESOURCE was not available
+- Fixed a bug where Podman would fail to start containers after a system restart due to an out-of-date default Apparmor profile
+- Fixed a bug where Podman's bash completions were not working
+- Fixed a bug where `podman login` would use existing login credentials even if new credentials were provided
+- Fixed a bug where Podman could create some directories with the wrong permissions, breaking containers with user namespaces
+- Fixed a bug where `podman runlabel` was not properly setting container names when the `--name` was specified
+- Fixed a bug where `podman runlabel` sometimes included extra spaces in command output
+- Fixed a bug where `podman commit` was including invalid port numbers in created images when committing containers with published ports
+- Fixed a bug where `podman exec` was not honoring the container's environment variables
+- Fixed a bug where `podman run --device` would fail when a symlink to a device was specified
+- Fixed a bug where `podman build` was not properly picking up OCI runtime paths specified in `libpod.conf`
+- Fixed a bug where Podman would mount `/dev/shm` into the container read-only for read-only containers (`/dev/shm` should always be read-write)
+- Fixed a bug where Podman would ignore any mount whose container mountpoint was `/dev/shm`
+- Fixed a bug where `podman export` did not work with the default `fuse-overlayfs` storage driver
+- Fixed a bug where `podman inspect -f '{{ json .Config }}'` on images would not output anything (it now prints the image's config)
+- Fixed a bug where `podman rmi -fa` displayed the wrong error message when trying to remove images used by pod infra containers
+
+### Misc
+- Rootless containers now unconditionally use postrun cleanup processes, ensuring resources are freed when the container stops
+- A new version of Buildah is included for `podman build`, featuring improved build speed and numerous bugfixes
+- Pulling images has been parallelized, allowing individual layers to be pulled in parallel
+- The `podman start --attach` command now defaults the `sig-proxy` option to `true`, matching `podman create` and `podman run`
+- The `podman info` command now prints the path of the configuration file controlling container storage
+- Added `podman list` and `podman ls` as aliases for `podman ps`, and `podman container ps` and `podman container list` as aliases for `podman container ls`
+- Changed `podman generate kube` to generate Kubernetes service YAML in the same file as pod YAML, generating a single file instead of two
+- To improve compatability with the Docker command line, `podman inspect -f '{{ json .ContainerConfig }}'` on images is no longer valid; please use `podman inspect -f '{{ json .Config }}'` instead
+
+## 0.12.1.2
+### Bugfixes
+- Fixed a bug where an empty path for named volumes could make it impossible to create containers
+- Fixed a bug where containers using another container's network namespace would not also use the other container's /etc/hosts and /etc/resolv.conf
+- Fixed a bug where containers with `--rm` which failed to start were not removed
+- Fixed a potential race condition attempting to read `/etc/passwd` inside containers
+
+## 0.12.1.1
+### Features
+- Added the `podman generate kube` command to generate Kubernetes Pod and Service YAML for Podman containers and pods
+- The `podman pod stop` flag now accepts a `--timeout` flag to set the timeout for stopping containers in the pod
+
+### Bugfixes
+- Fixed a bug where rootless Podman would fail to start if the default OCI hooks directory is not present
+
+## 0.12.1
+### Features
+- Rootless Podman now creates the storage.conf, libpod.conf, and mounts.conf configuration files automatically in `~/.config/containers/` for ease of reconfiguration
+- The `podman pod create` command can expose ports in the pod's network namespace, allowing public services to be created in pods
+- The `podman container checkpoint` command can now keep containers running after they are checkpointed with the `--leave-running` flag
+- The `podman container checkpoint` and `podman container restore` commands now support the `--tcp-established` flag to checkpoint and restore containers with active TCP connections
+- The `podman version` command now has a `--format` flag to produce machine-readable output
+- Added the `podman container exists`, `podman pod exists`, and `podman image exists` commands to easily check for a container/pod/image, respectively, by name or ID
+- The `podman ps --pod` flag now has a short alias, `-p`
+- The `podman rmi` and `podman rm` commands now have a `--prune` flag to prune unused images and containers, respectively
+- The `podman ps` command now has a `--sync` flag to force a sync of Podman's state against the OCI runtime, resolving some state desync errors
+- Added the `podman volume` set of commands for creating and managing local-only named volumes
+
+### Bugfixes
+- Fixed a breaking change in rootless Podman where a change in default paths caused Podman to be unable to function on systems upgraded from 0.10.x or earlier
+- Fixed a bug where `podman exec` without `-t` would still use a terminal if the container was created with `-t`
+- Fixed a bug where container root propogation was not being properly adjusted if volumes with root propogation set were mounted into the container
+- Fixed a bug where `podman exec` could hold the container lock longer than necessary waiting for an exited container
+- Fixed a bug where rootless containers using `slirp4netns` for networking were reporting using `bridge` networking in `podman inspect`
+- Fixed a bug where `podman container restore -a` was attempting to restore all containers, including created and running ones. It will now only attempt to restore stopped and exited containers
+- Fixed a bug where rootless Podman detached containers were not being properly cleaned up
+- Fixed a bug where privileged containers were being mounted with incorrect (too restrictive) mount options such as `nodev`
+- Fixed a bug where `podman stop` would throw an error attempting to stop a container that had already stopped
+- Fixed a bug where `NOTIFY_SOCKET` was not properly being passed into Podman containers
+- Fixed a bug where `/dev/shm` was not properly mounted in rootless containers
+- Fixed a bug where rootless Podman would set up the CNI plugins for networking (despite not using them in rootless mode), potentially causing `inotify` related errors
+- Fixed a bug where Podman would error on numeric GIDs that do not exist in the container's `/etc/group`
+- Fixed a bug where containers in pods or created with `--net=container` were not mounting `/etc/resolv.conf` and `/etc/hosts`
+
+### Misc
+- `podman build` now defaults the `--force-rm` flag to `true`
+- Improved `podman runlabel` support for labels featuring arguments with whitespace
+- Containers without a network namespace will now use the host's `resolv.conf`
+- The `slirp4netns` network mode can now be used with containers running as root. It may be useful for container-in-container scenarios where the outer container does not have host networking set
+- Podman now uses `inotify` to wait for container exit files to be created, instead of polling. If `inotify` cannot be used, Podman will fall back to polling to check if the file has been created
+- The `podman logs` command now uses improved short-options handling, allowing its flags to be combined if desired (for example, `podman logs -lf` instead of `podman logs -l -f`)
+- Hardcoded OCI hooks directories used by Podman are now deprecated; they should instead be coded into the `libpod.conf` configuration file. They can be specified as an array via `hooks_dir`
+
 ## 0.11.1.1
 ### Bugfixes
 - Fixed a bug where Podman was not correctly adding firewall rules for containers, preventing them from accessing the network

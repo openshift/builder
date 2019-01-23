@@ -372,20 +372,40 @@ read the configuration from `config.json`.
 
   When the operator executes **oci-runtime-tool generate --privileged**, OCI will enable access to all devices on the host as well as disable some of the confinement mechanisms like AppArmor, SELinux, and seccomp from blocking access to privileged processes.  This gives the container processes nearly all the same access to the host as processes generating outside of a container on the host.
 
+**--process-cap-add**=[]
+  Add Linux capabilities to all 5 capability sets.
+  You can use this command to add multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-add CAP_FOWNER,CAP_FSETID
+
 **--process-cap-add-ambient**=[]
-  Add Linux ambient capabilities
+  Add Linux ambient capabilities.
+  You can use this command to add multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-add-ambient CAP_FOWNER,CAP_FSETID
 
 **--process-cap-add-bounding**=[]
-  Add Linux bounding capabilities
+  Add Linux bounding capabilities.
+  You can use this command to add multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-add-bounding CAP_FOWNER,CAP_FSETID
 
 **--process-cap-add-effective**=[]
-  Add Linux effective capabilities
+  Add Linux effective capabilities.
+  You can use this command to add multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-add-effective CAP_FOWNER,CAP_FSETID
 
 **--process-cap-add-inheritable**=[]
-  Add Linux inheritable capabilities
+  Add Linux inheritable capabilities.
+  You can use this command to add multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-add-inheritable CAP_FOWNER,CAP_FSETID
 
 **--process-cap-add-permitted**=[]
-  Add Linux permitted capabilities
+  Add Linux permitted capabilities.
+  You can use this command to add multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-add-permitted CAP_FOWNER,CAP_FSETID
+
+**--process-cap-drop**=[]
+  Drop Linux capabilities to all 5 capability sets.
+  You can use this command to drop multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-drop CAP_FOWNER,CAP_FSETID
 
 **--process-cap-drop-all**=true|false
   Drop all Linux capabilities
@@ -393,19 +413,29 @@ read the configuration from `config.json`.
   When combined with them, no matter what the options' order is, parse this option first.
 
 **--process-cap-drop-ambient**=[]
-  Drop Linux ambient capabilities
+  Drop Linux ambient capabilities.
+  You can use this command to drop multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-drop-ambient CAP_FOWNER,CAP_FSETID
 
 **--process-cap-drop-bounding**=[]
-  Drop Linux bounding capabilities
+  Drop Linux bounding capabilities.
+  You can use this command to drop multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-drop-bounding CAP_FOWNER,CAP_FSETID
 
 **--process-cap-drop-effective**=[]
-  Drop Linux effective capabilities
+  Drop Linux effective capabilities.
+  You can use this command to drop multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-drop-effective CAP_FOWNER,CAP_FSETID
 
 **--process-cap-drop-inheritable**=[]
-  Drop Linux inheritable capabilities
+  Drop Linux inheritable capabilities.
+  You can use this command to drop multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-drop-inheritable CAP_FOWNER,CAP_FSETID
 
 **--process-cap-drop-permitted**=[]
-  Drop Linux permitted capabilities
+  Drop Linux permitted capabilities.
+  You can use this command to drop multiple capabilities. Each value should be used ',' separated.
+  e.g. --process-cap-drop-permitted CAP_FOWNER,CAP_FSETID
 
 **--process-consolesize**=WIDTH:HEIGHT
   Specifies the console size in characters of the terminal. e.g. --process-consolesize=80:40
@@ -484,6 +514,30 @@ read the configuration from `config.json`.
   Override the default template with your own.
   Additional options will only adjust the relevant portions of your template.
   Templates are not validated for correctness, so the user should ensure that they are correct.
+
+**--vm-hypervisor-parameters**=""
+  Specifies an array of parameters to pass to the hypervisor.
+
+**--vm-hypervisor-path**=PATH
+  Specifies the path to the hypervisor binary that manages the container virtual machine.
+
+**--vm-image-format**=""
+  Set the format of the container virtual machine root image.
+
+**--vm-image-path**=PATH
+  Set path to the container virtual machine root image.
+
+**--vm-kernel-initrd**=""
+  Set path to an initial ramdisk to be used by the container virtual machine.
+
+**--vm-kernel-parameters**=""
+  Specifies an array of parameters to pass to the kernel.
+
+**--vm-kernel-path**=PATH
+  Set path to the kernel used to boot the container virtual machine.
+
+**--windows-devices**=[]
+  Specifies devices that MUST be available in the container.
 
 **--windows-hyperv-utilityVMPath**=PATH
   Specifies the path to the image used for the utility VM.

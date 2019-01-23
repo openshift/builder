@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/containers/buildah"
+	"github.com/containers/buildah/imagebuildah"
 	buildahcli "github.com/containers/buildah/pkg/cli"
 	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/buildah/util"
 	"github.com/containers/image/storage"
 	"github.com/containers/image/transports/alltransports"
-	"github.com/containers/storage/pkg/archive"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -53,6 +53,10 @@ var (
 			Usage: "Write the image ID to the file",
 		},
 		cli.BoolFlag{
+			Name:  "omit-timestamp",
+			Usage: "set created timestamp to epoch 0 to allow for deterministic builds",
+		},
+		cli.BoolFlag{
 			Name:  "quiet, q",
 			Usage: "don't output progress information when writing images",
 		},
@@ -78,7 +82,7 @@ var (
 			Usage: "Require HTTPS and verify certificates when accessing the registry",
 		},
 	}
-	commitDescription = "Writes a new image using the container's read-write layer and, if it is based\n   on an image, the layers of that image"
+	commitDescription = "Writes a new image using the container's read-write layer and, if it is based\n   on an image, the layers of that image."
 	commitCommand     = cli.Command{
 		Name:                   "commit",
 		Usage:                  "Create an image from a working container",
@@ -112,9 +116,9 @@ func commitCmd(c *cli.Context) error {
 		return err
 	}
 
-	compress := archive.Gzip
-	if c.Bool("disable-compression") {
-		compress = archive.Uncompressed
+	compress := imagebuildah.Uncompressed
+	if c.IsSet("disable-compression") && !c.Bool("disable-compression") {
+		compress = imagebuildah.Gzip
 	}
 	timestamp := time.Now().UTC()
 	if c.IsSet("reference-time") {
@@ -172,6 +176,7 @@ func commitCmd(c *cli.Context) error {
 		IIDFile:               c.String("iidfile"),
 		Squash:                c.Bool("squash"),
 		BlobDirectory:         c.String("blob-cache"),
+		OmitTimestamp:         c.Bool("omit-timestamp"),
 	}
 	if !c.Bool("quiet") {
 		options.ReportWriter = os.Stderr

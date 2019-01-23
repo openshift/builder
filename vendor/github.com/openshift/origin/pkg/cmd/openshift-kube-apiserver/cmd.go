@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 
-	"github.com/coreos/go-systemd/daemon"
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 
@@ -42,7 +41,7 @@ type OpenShiftKubeAPIServerServer struct {
 var longDescription = templates.LongDesc(`
 	Start the extended kube-apiserver with OpenShift security extensions`)
 
-func NewOpenShiftKubeAPIServerServerCommand(name, basename string, out, errout io.Writer) *cobra.Command {
+func NewOpenShiftKubeAPIServerServerCommand(name, basename string, out, errout io.Writer, stopCh <-chan struct{}) *cobra.Command {
 	options := &OpenShiftKubeAPIServerServer{Output: out}
 
 	cmd := &cobra.Command{
@@ -56,7 +55,7 @@ func NewOpenShiftKubeAPIServerServerCommand(name, basename string, out, errout i
 
 			serviceability.StartProfiler()
 
-			if err := options.StartAPIServer(); err != nil {
+			if err := options.RunAPIServer(stopCh); err != nil {
 				if kerrors.IsInvalid(err) {
 					if details := err.(*kerrors.StatusError).ErrStatus.Details; details != nil {
 						fmt.Fprintf(errout, "Invalid %s %s\n", details.Kind, details.Name)
@@ -88,18 +87,8 @@ func (o *OpenShiftKubeAPIServerServer) Validate() error {
 	return nil
 }
 
-// StartAPIServer calls RunAPIServer and then waits forever
-func (o *OpenShiftKubeAPIServerServer) StartAPIServer() error {
-	if err := o.RunAPIServer(); err != nil {
-		return err
-	}
-
-	go daemon.SdNotify(false, "READY=1")
-	select {}
-}
-
-// RunAPIServer takes the options and starts the etcd server
-func (o *OpenShiftKubeAPIServerServer) RunAPIServer() error {
+// RunAPIServer takes the options, starts the API server and runs until stopCh is closed or the initial listening fails
+func (o *OpenShiftKubeAPIServerServer) RunAPIServer(stopCh <-chan struct{}) error {
 	// try to decode into our new types first.  right now there is no validation, no file path resolution.  this unsticks the operator to start.
 	// TODO add those things
 	configContent, err := ioutil.ReadFile(o.ConfigFile)
@@ -110,7 +99,13 @@ func (o *OpenShiftKubeAPIServerServer) RunAPIServer() error {
 	utilruntime.Must(kubecontrolplanev1.Install(scheme))
 	codecs := serializer.NewCodecFactory(scheme)
 	obj, err := runtime.Decode(codecs.UniversalDecoder(kubecontrolplanev1.GroupVersion, configv1.GroupVersion, osinv1.GroupVersion), configContent)
-	if err == nil {
+	switch {
+	case runtime.IsMissingVersion(err): // fall through to legacy master config
+	case runtime.IsMissingKind(err): // fall through to legacy master config
+	case runtime.IsNotRegisteredError(err): // fall through to legacy master config
+	case err != nil:
+		return err
+	case err == nil:
 		// Resolve relative to CWD
 		absoluteConfigFile, err := api.MakeAbs(o.ConfigFile, "")
 		if err != nil {
@@ -124,7 +119,7 @@ func (o *OpenShiftKubeAPIServerServer) RunAPIServer() error {
 		}
 		configdefault.SetRecommendedKubeAPIServerConfigDefaults(config)
 
-		return RunOpenShiftKubeAPIServerServer(config)
+		return RunOpenShiftKubeAPIServerServer(config, stopCh)
 	}
 
 	// TODO this code disappears once the kube-core operator switches to external types
@@ -153,5 +148,5 @@ func (o *OpenShiftKubeAPIServerServer) RunAPIServer() error {
 		return err
 	}
 
-	return RunOpenShiftKubeAPIServerServer(kubeAPIServerConfig)
+	return RunOpenShiftKubeAPIServerServer(kubeAPIServerConfig, stopCh)
 }

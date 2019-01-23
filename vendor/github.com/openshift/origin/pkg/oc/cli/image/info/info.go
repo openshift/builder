@@ -1,6 +1,7 @@
 package info
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/manifestlist"
 	units "github.com/docker/go-units"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
@@ -47,6 +49,7 @@ func NewInfo(parentName string, streams genericclioptions.IOStreams) *cobra.Comm
 		`),
 		Run: func(cmd *cobra.Command, args []string) {
 			kcmdutil.CheckErr(o.Complete(cmd, args))
+			kcmdutil.CheckErr(o.Validate())
 			kcmdutil.CheckErr(o.Run())
 		},
 	}
@@ -74,6 +77,10 @@ func (o *InfoOptions) Complete(cmd *cobra.Command, args []string) error {
 	}
 	o.Images = args
 	return nil
+}
+
+func (o *InfoOptions) Validate() error {
+	return o.FilterOptions.Validate()
 }
 
 func (o *InfoOptions) Run() error {
@@ -107,9 +114,21 @@ func (o *InfoOptions) Run() error {
 			return err
 		}
 
-		srcManifest, srcDigest, _, err := imagemanifest.FirstManifest(ctx, src, repo, o.FilterOptions.Include)
+		srcManifest, srcDigest, _, err := imagemanifest.FirstManifest(ctx, src, repo, o.FilterOptions.IncludeAll)
 		if err != nil {
 			return fmt.Errorf("unable to read image %s: %v", location, err)
+		}
+
+		switch t := srcManifest.(type) {
+		case *manifestlist.DeserializedManifestList:
+			buf := &bytes.Buffer{}
+			w := tabwriter.NewWriter(buf, 0, 0, 1, ' ', 0)
+			fmt.Fprintf(w, "  OS\tDIGEST\n")
+			for _, manifest := range t.Manifests {
+				fmt.Fprintf(w, "  %s\t%s\n", imagemanifest.PlatformSpecString(manifest.Platform), manifest.Digest)
+			}
+			w.Flush()
+			return fmt.Errorf("the image is a manifest list and contains multiple images - use --filter-by-os to select from:\n\n%s\n", buf.String())
 		}
 
 		imageConfig, layers, err := imagemanifest.ManifestToImageConfig(ctx, srcManifest, repo.Blobs(ctx), location)

@@ -2,11 +2,13 @@ package node
 
 import (
 	"fmt"
-	"reflect"
 	"time"
+
+	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"github.com/golang/glog"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -18,14 +20,13 @@ import (
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
-	"github.com/openshift/library-go/pkg/operator/staticpod/controller/common"
 )
 
 const nodeControllerWorkQueueKey = "key"
 
-// NodeController watches for new master nodes and adds them to the list for an operator
+// NodeController watches for new master nodes and adds them to the node status list in the operator config status.
 type NodeController struct {
-	operatorConfigClient common.OperatorClient
+	operatorConfigClient v1helpers.StaticPodOperatorClient
 	eventRecorder        events.Recorder
 
 	nodeListerSynced cache.InformerSynced
@@ -35,8 +36,9 @@ type NodeController struct {
 	queue workqueue.RateLimitingInterface
 }
 
+// NewNodeController creates a new node controller.
 func NewNodeController(
-	operatorConfigClient common.OperatorClient,
+	operatorConfigClient v1helpers.StaticPodOperatorClient,
 	kubeInformersClusterScoped informers.SharedInformerFactory,
 	eventRecorder events.Recorder,
 ) *NodeController {
@@ -56,7 +58,7 @@ func NewNodeController(
 }
 
 func (c NodeController) sync() error {
-	_, originalOperatorStatus, resourceVersion, err := c.operatorConfigClient.Get()
+	_, originalOperatorStatus, resourceVersion, err := c.operatorConfigClient.GetStaticPodOperatorState()
 	if err != nil {
 		return err
 	}
@@ -102,11 +104,12 @@ func (c NodeController) sync() error {
 		c.eventRecorder.Eventf("MasterNodeObserved", "Observed new master node %s", node.Name)
 		newTargetNodeStates = append(newTargetNodeStates, operatorv1.NodeStatus{NodeName: node.Name})
 	}
-	operatorStatus.NodeStatuses = newTargetNodeStates
 
-	if !reflect.DeepEqual(originalOperatorStatus, operatorStatus) {
-		_, updateError := c.operatorConfigClient.UpdateStatus(resourceVersion, operatorStatus)
-		return updateError
+	operatorStatus.NodeStatuses = newTargetNodeStates
+	if !equality.Semantic.DeepEqual(originalOperatorStatus, operatorStatus) {
+		if _, updateError := c.operatorConfigClient.UpdateStaticPodOperatorStatus(resourceVersion, operatorStatus); updateError != nil {
+			return updateError
+		}
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package createconfig
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -143,6 +144,36 @@ func fmPtr(i int64) *os.FileMode { fm := os.FileMode(i); return &fm }
 // CreateBlockIO returns a LinuxBlockIO struct from a CreateConfig
 func (c *CreateConfig) CreateBlockIO() (*spec.LinuxBlockIO, error) {
 	return c.createBlockIO()
+}
+
+// AddContainerInitBinary adds the init binary specified by path iff the
+// container will run in a private PID namespace that is not shared with the
+// host or another pre-existing container, where an init-like process is
+// already running.
+//
+// Note that AddContainerInitBinary prepends "/dev/init" "--" to the command
+// to execute the bind-mounted binary as PID 1.
+func (c *CreateConfig) AddContainerInitBinary(path string) error {
+	if path == "" {
+		return fmt.Errorf("please specify a path to the container-init binary")
+	}
+	if !c.PidMode.IsPrivate() {
+		return fmt.Errorf("cannot add init binary as PID 1 (PID namespace isn't private)")
+	}
+	if c.Systemd {
+		return fmt.Errorf("cannot use container-init binary with systemd")
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return errors.Wrap(err, "container-init binary not found on the host")
+	}
+	c.Command = append([]string{"/dev/init", "--"}, c.Command...)
+	c.Mounts = append(c.Mounts, spec.Mount{
+		Destination: "/dev/init",
+		Type:        "bind",
+		Source:      path,
+		Options:     []string{"bind", "ro"},
+	})
+	return nil
 }
 
 func processOptions(options []string) []string {
@@ -310,10 +341,9 @@ func (c *CreateConfig) createExitCommand() []string {
 }
 
 // GetContainerCreateOptions takes a CreateConfig and returns a slice of CtrCreateOptions
-func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]libpod.CtrCreateOption, error) {
+func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime, pod *libpod.Pod) ([]libpod.CtrCreateOption, error) {
 	var options []libpod.CtrCreateOption
 	var portBindings []ocicni.PortMapping
-	var pod *libpod.Pod
 	var err error
 
 	if c.Interactive {
@@ -327,12 +357,14 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 		logrus.Debugf("appending name %s", c.Name)
 		options = append(options, libpod.WithName(c.Name))
 	}
-	if c.Pod != "" {
-		logrus.Debugf("adding container to pod %s", c.Pod)
-		pod, err = runtime.LookupPod(c.Pod)
-		if err != nil {
-			return nil, errors.Wrapf(err, "unable to add container to pod %s", c.Pod)
+	if c.Pod != "" || pod != nil {
+		if pod == nil {
+			pod, err = runtime.LookupPod(c.Pod)
+			if err != nil {
+				return nil, errors.Wrapf(err, "unable to add container to pod %s", c.Pod)
+			}
 		}
+		logrus.Debugf("adding container to pod %s", c.Pod)
 		options = append(options, runtime.WithPod(pod))
 	}
 	if len(c.PortBindings) > 0 {
@@ -390,12 +422,8 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 		}
 		options = append(options, libpod.WithNetNSFrom(connectedCtr))
 	} else if !c.NetMode.IsHost() && !c.NetMode.IsNone() {
-		isRootless := rootless.IsRootless()
-		postConfigureNetNS := isRootless || (len(c.IDMappings.UIDMap) > 0 || len(c.IDMappings.GIDMap) > 0) && !c.UsernsMode.IsHost()
-		if isRootless && len(portBindings) > 0 {
-			return nil, errors.New("port bindings are not yet supported by rootless containers")
-		}
-		options = append(options, libpod.WithNetNS(portBindings, postConfigureNetNS, networks))
+		postConfigureNetNS := c.NetMode.IsSlirp4netns() || (len(c.IDMappings.UIDMap) > 0 || len(c.IDMappings.GIDMap) > 0) && !c.UsernsMode.IsHost()
+		options = append(options, libpod.WithNetNS(portBindings, postConfigureNetNS, string(c.NetMode), networks))
 	}
 
 	if c.PidMode.IsContainer() {
@@ -487,7 +515,9 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 	if c.CgroupParent != "" {
 		options = append(options, libpod.WithCgroupParent(c.CgroupParent))
 	}
-	if c.Detach {
+	// For a rootless container always cleanup the storage/network as they
+	// run in a different namespace thus not reusable when we restart.
+	if c.Detach || rootless.IsRootless() {
 		options = append(options, libpod.WithExitCommand(c.createExitCommand()))
 	}
 
@@ -496,8 +526,13 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 
 // CreatePortBindings iterates ports mappings and exposed ports into a format CNI understands
 func (c *CreateConfig) CreatePortBindings() ([]ocicni.PortMapping, error) {
+	return NatToOCIPortBindings(c.PortBindings)
+}
+
+// NatToOCIPortBindings iterates a nat.portmap slice and creates []ocicni portmapping slice
+func NatToOCIPortBindings(ports nat.PortMap) ([]ocicni.PortMapping, error) {
 	var portBindings []ocicni.PortMapping
-	for containerPb, hostPb := range c.PortBindings {
+	for containerPb, hostPb := range ports {
 		var pm ocicni.PortMapping
 		pm.ContainerPort = int32(containerPb.Int())
 		for _, i := range hostPb {

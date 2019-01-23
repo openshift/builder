@@ -111,6 +111,7 @@ var _ = Describe("Podman rmi", func() {
 	})
 
 	It("podman rmi image that is a parent of another image", func() {
+		SkipIfRemote()
 		session := podmanTest.Podman([]string{"rmi", "-fa"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
@@ -148,6 +149,7 @@ var _ = Describe("Podman rmi", func() {
 	})
 
 	It("podman rmi image that is created from another named imaged", func() {
+		SkipIfRemote()
 		session := podmanTest.Podman([]string{"rmi", "-fa"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
@@ -183,6 +185,7 @@ var _ = Describe("Podman rmi", func() {
 	})
 
 	It("podman rmi with cached images", func() {
+		SkipIfRemote()
 		session := podmanTest.Podman([]string{"rmi", "-fa"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
@@ -249,5 +252,27 @@ var _ = Describe("Podman rmi", func() {
 		session2 := podmanTest.Podman([]string{"rmi", "-fa"})
 		session2.WaitWithDefaultTimeout()
 		Expect(session2.ExitCode()).To(Equal(0))
+	})
+
+	It("podman rmi -a with parent|child images", func() {
+		SkipIfRemote()
+		dockerfile := `FROM docker.io/library/alpine:latest AS base
+RUN touch /1
+ENV LOCAL=/1
+RUN find $LOCAL
+FROM base
+RUN find $LOCAL
+
+`
+		podmanTest.BuildImage(dockerfile, "test", "true")
+		session := podmanTest.Podman([]string{"rmi", "-a"})
+		session.WaitWithDefaultTimeout()
+		fmt.Println(session.OutputToString())
+		Expect(session.ExitCode()).To(Equal(0))
+
+		images := podmanTest.Podman([]string{"images", "--all"})
+		images.WaitWithDefaultTimeout()
+		Expect(images.ExitCode()).To(Equal(0))
+		Expect(len(images.OutputToStringArray())).To(Equal(0))
 	})
 })

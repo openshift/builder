@@ -2,7 +2,6 @@ package build
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -34,6 +33,8 @@ import (
 	buildv1client "github.com/openshift/client-go/build/clientset/versioned"
 	buildv1informer "github.com/openshift/client-go/build/informers/externalversions/build/v1"
 	buildv1lister "github.com/openshift/client-go/build/listers/build/v1"
+	configv1informer "github.com/openshift/client-go/config/informers/externalversions/config/v1"
+	configv1lister "github.com/openshift/client-go/config/listers/config/v1"
 	imagev1informer "github.com/openshift/client-go/image/informers/externalversions/image/v1"
 	imagev1lister "github.com/openshift/client-go/image/listers/image/v1"
 	"github.com/openshift/origin/pkg/api/imagereferencemutators"
@@ -126,53 +127,62 @@ type BuildController struct {
 	buildLister       buildv1lister.BuildLister
 	buildConfigGetter buildv1lister.BuildConfigLister
 	buildDeleter      buildmanualclient.BuildDeleter
+	configLister      configv1lister.BuildLister
 	podClient         ktypedclient.PodsGetter
 	configMapClient   ktypedclient.ConfigMapsGetter
 	kubeClient        kubernetes.Interface
 
-	buildQueue       workqueue.RateLimitingInterface
-	imageStreamQueue *resourceTriggerQueue
-	buildConfigQueue workqueue.RateLimitingInterface
+	buildQueue            workqueue.RateLimitingInterface
+	imageStreamQueue      *resourceTriggerQueue
+	buildConfigQueue      workqueue.RateLimitingInterface
+	controllerConfigQueue workqueue.RateLimitingInterface
 
-	buildStore       buildv1lister.BuildLister
-	secretStore      v1lister.SecretLister
-	podStore         v1lister.PodLister
-	imageStreamStore imagev1lister.ImageStreamLister
+	buildStore                    buildv1lister.BuildLister
+	secretStore                   v1lister.SecretLister
+	podStore                      v1lister.PodLister
+	imageStreamStore              imagev1lister.ImageStreamLister
+	openShiftConfigConfigMapStore v1lister.ConfigMapLister
 
 	podInformer   cache.SharedIndexInformer
 	buildInformer cache.SharedIndexInformer
 
-	buildStoreSynced       func() bool
-	podStoreSynced         func() bool
-	secretStoreSynced      func() bool
-	imageStreamStoreSynced func() bool
+	buildStoreSynced            cache.InformerSynced
+	controllerConfigStoreSynced cache.InformerSynced
+	podStoreSynced              cache.InformerSynced
+	secretStoreSynced           cache.InformerSynced
+	imageStreamStoreSynced      cache.InformerSynced
+	configMapStoreSynced        cache.InformerSynced
 
-	runPolicies    []policy.RunPolicy
-	createStrategy buildPodCreationStrategy
-	buildDefaults  builddefaults.BuildDefaults
-	buildOverrides buildoverrides.BuildOverrides
+	runPolicies              []policy.RunPolicy
+	createStrategy           buildPodCreationStrategy
+	buildDefaults            builddefaults.BuildDefaults
+	buildOverrides           buildoverrides.BuildOverrides
+	internalRegistryHostname string
 
 	recorder                record.EventRecorder
-	additionalTrustedCAPath string
-	additionalTrustedCAData []byte
+	registryConfData        string
+	signaturePolicyData     string
+	additionalTrustedCAData map[string]string
 }
 
 // BuildControllerParams is the set of parameters needed to
 // create a new BuildController
 type BuildControllerParams struct {
-	BuildInformer           buildv1informer.BuildInformer
-	BuildConfigInformer     buildv1informer.BuildConfigInformer
-	ImageStreamInformer     imagev1informer.ImageStreamInformer
-	PodInformer             kubeinformers.PodInformer
-	SecretInformer          kubeinformers.SecretInformer
-	KubeClient              kubernetes.Interface
-	BuildClient             buildv1client.Interface
-	DockerBuildStrategy     *strategy.DockerBuildStrategy
-	SourceBuildStrategy     *strategy.SourceBuildStrategy
-	CustomBuildStrategy     *strategy.CustomBuildStrategy
-	BuildDefaults           builddefaults.BuildDefaults
-	BuildOverrides          buildoverrides.BuildOverrides
-	AdditionalTrustedCAPath string
+	BuildInformer                    buildv1informer.BuildInformer
+	BuildConfigInformer              buildv1informer.BuildConfigInformer
+	ControllerConfigInformer         configv1informer.BuildInformer
+	ImageStreamInformer              imagev1informer.ImageStreamInformer
+	PodInformer                      kubeinformers.PodInformer
+	SecretInformer                   kubeinformers.SecretInformer
+	OpenshiftConfigConfigMapInformer kubeinformers.ConfigMapInformer
+	KubeClient                       kubernetes.Interface
+	BuildClient                      buildv1client.Interface
+	DockerBuildStrategy              *strategy.DockerBuildStrategy
+	SourceBuildStrategy              *strategy.SourceBuildStrategy
+	CustomBuildStrategy              *strategy.CustomBuildStrategy
+	BuildDefaults                    builddefaults.BuildDefaults
+	BuildOverrides                   buildoverrides.BuildOverrides
+	InternalRegistryHostname         string
 }
 
 // NewBuildController creates a new BuildController.
@@ -184,34 +194,37 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 	buildLister := params.BuildInformer.Lister()
 	buildConfigGetter := params.BuildConfigInformer.Lister()
 	c := &BuildController{
-		buildPatcher:      buildClient,
-		buildLister:       buildLister,
-		buildConfigGetter: buildConfigGetter,
-		buildDeleter:      buildClient,
-		secretStore:       params.SecretInformer.Lister(),
-		podClient:         params.KubeClient.CoreV1(),
-		configMapClient:   params.KubeClient.CoreV1(),
-		kubeClient:        params.KubeClient,
-		podInformer:       params.PodInformer.Informer(),
-		podStore:          params.PodInformer.Lister(),
-		buildInformer:     params.BuildInformer.Informer(),
-		buildStore:        params.BuildInformer.Lister(),
-		imageStreamStore:  params.ImageStreamInformer.Lister(),
+		buildPatcher:                  buildClient,
+		buildLister:                   buildLister,
+		buildConfigGetter:             buildConfigGetter,
+		buildDeleter:                  buildClient,
+		configLister:                  params.ControllerConfigInformer.Lister(),
+		secretStore:                   params.SecretInformer.Lister(),
+		podClient:                     params.KubeClient.CoreV1(),
+		configMapClient:               params.KubeClient.CoreV1(),
+		openShiftConfigConfigMapStore: params.OpenshiftConfigConfigMapInformer.Lister(),
+		kubeClient:                    params.KubeClient,
+		podInformer:                   params.PodInformer.Informer(),
+		podStore:                      params.PodInformer.Lister(),
+		buildInformer:                 params.BuildInformer.Informer(),
+		buildStore:                    params.BuildInformer.Lister(),
+		imageStreamStore:              params.ImageStreamInformer.Lister(),
 		createStrategy: &typeBasedFactoryStrategy{
 			dockerBuildStrategy: params.DockerBuildStrategy,
 			sourceBuildStrategy: params.SourceBuildStrategy,
 			customBuildStrategy: params.CustomBuildStrategy,
 		},
-		buildDefaults:  params.BuildDefaults,
-		buildOverrides: params.BuildOverrides,
+		buildDefaults:            params.BuildDefaults,
+		buildOverrides:           params.BuildOverrides,
+		internalRegistryHostname: params.InternalRegistryHostname,
 
-		buildQueue:       workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
-		imageStreamQueue: newResourceTriggerQueue(),
-		buildConfigQueue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		buildQueue:            workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		imageStreamQueue:      newResourceTriggerQueue(),
+		buildConfigQueue:      workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		controllerConfigQueue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 
-		recorder:                eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "build-controller"}),
-		runPolicies:             policy.GetAllRunPolicies(buildLister, buildClient),
-		additionalTrustedCAPath: params.AdditionalTrustedCAPath,
+		recorder:    eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "build-controller"}),
+		runPolicies: policy.GetAllRunPolicies(buildLister, buildClient),
 	}
 
 	c.podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -227,11 +240,23 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		AddFunc:    c.imageStreamAdded,
 		UpdateFunc: c.imageStreamUpdated,
 	})
+	params.ControllerConfigInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.controllerConfigAdded,
+		UpdateFunc: c.controllerConfigUpdated,
+		DeleteFunc: c.controllerConfigDeleted,
+	})
+	params.OpenshiftConfigConfigMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.configMapAdded,
+		UpdateFunc: c.configMapUpdated,
+		DeleteFunc: c.configMapDeleted,
+	})
 
 	c.buildStoreSynced = c.buildInformer.HasSynced
 	c.podStoreSynced = c.podInformer.HasSynced
 	c.secretStoreSynced = params.SecretInformer.Informer().HasSynced
 	c.imageStreamStoreSynced = params.ImageStreamInformer.Informer().HasSynced
+	c.controllerConfigStoreSynced = params.ControllerConfigInformer.Informer().HasSynced
+	c.configMapStoreSynced = params.OpenshiftConfigConfigMapInformer.Informer().HasSynced
 
 	return c
 }
@@ -241,23 +266,36 @@ func (bc *BuildController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer bc.buildQueue.ShutDown()
 	defer bc.buildConfigQueue.ShutDown()
-
-	// Read additionalCA data, if it exists
-	if len(bc.additionalTrustedCAPath) > 0 {
-		caData, err := bc.readBuildCAData()
-		if err != nil {
-			glog.Warningf("Failed to read additional CA bundle %s: %v", bc.additionalTrustedCAPath, err)
-		}
-		bc.additionalTrustedCAData = caData
-	}
+	defer bc.controllerConfigQueue.ShutDown()
 
 	// Wait for the controller stores to sync before starting any work in this controller.
-	if !cache.WaitForCacheSync(stopCh, bc.buildStoreSynced, bc.podStoreSynced, bc.secretStoreSynced, bc.imageStreamStoreSynced) {
+	if !cache.WaitForCacheSync(stopCh,
+		bc.buildStoreSynced,
+		bc.podStoreSynced,
+		bc.secretStoreSynced,
+		bc.imageStreamStoreSynced,
+		bc.configMapStoreSynced) {
 		utilruntime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 		return
 	}
 
+	// Integration tests currently do not support cache sync for operator-installed custom resource definitions
+	if os.Getenv("OS_INTEGRATION_TEST") != "true" {
+		if !cache.WaitForCacheSync(stopCh, bc.controllerConfigStoreSynced) {
+			utilruntime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
+			return
+		}
+	}
+
+	// Sync build controller config on start up.
+	if err := bc.handleControllerConfig(); err != nil {
+		utilruntime.HandleError(fmt.Errorf("error syncing build controller config: %v", err))
+	}
+
 	glog.Infof("Starting build controller")
+
+	// Only need one worker to manage config
+	go wait.Until(bc.controllerConfigWorker, time.Second, stopCh)
 
 	for i := 0; i < workers; i++ {
 		go wait.Until(bc.buildWorker, time.Second, stopCh)
@@ -504,7 +542,7 @@ func (bc *BuildController) createPodSpec(build *buildv1.Build, includeAdditional
 	build.Status.Message = ""
 
 	// Invoke the strategy to create a build pod.
-	podSpec, err := bc.createStrategy.CreateBuildPod(build, includeAdditionalCA)
+	podSpec, err := bc.createStrategy.CreateBuildPod(build, bc.additionalTrustedCAData, bc.internalRegistryHostname)
 	if err != nil {
 		if strategy.IsFatal(err) {
 			return nil, &strategy.FatalError{Reason: fmt.Sprintf("failed to create a build pod spec for build %s/%s: %v", build.Namespace, build.Name, err)}
@@ -957,13 +995,24 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		}
 		glog.V(4).Infof("Recognised pod %s/%s as belonging to build %s", build.Namespace, buildPod.Name, buildDesc(build))
 		// Check if the existing pod has the CA ConfigMap properly attached
-		hasCAMap, err := bc.findBuildCAConfigMap(build, existingPod)
+		hasCAMap, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildapihelpers.GetBuildCAConfigMapName(build))
 		if err != nil {
 			return update, fmt.Errorf("could not find certificate authority for build: %v", err)
 		}
 		if !hasCAMap {
 			// Create the CA ConfigMap to mount certificate authorities to the existing build pod
 			update, err = bc.createBuildCAConfigMap(build, existingPod, update)
+			if err != nil {
+				return update, err
+			}
+		}
+		hasRegistryConf, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildapihelpers.GetBuildSystemConfigMapName(build))
+		if err != nil {
+			return update, fmt.Errorf("could not find registry config for build: %v", err)
+		}
+		if !hasRegistryConf {
+			// Create the registry config ConfigMap to mount the regsitry config to the existing build pod
+			update, err = bc.createBuildSystemConfConfigMap(build, existingPod, update)
 			if err != nil {
 				return update, err
 			}
@@ -975,6 +1024,11 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		update, err = bc.createBuildCAConfigMap(build, pod, update)
 		if err != nil {
 			return update, err
+		}
+		// Create the registry config ConfigMap to mount the registry configuration into the build pod
+		update, err = bc.createBuildSystemConfConfigMap(build, pod, update)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -1435,52 +1489,219 @@ func (bc *BuildController) createBuildCAConfigMap(build *buildv1.Build, buildPod
 // The returned ConfigMap has an owner reference to the provided pod, ensuring proper
 // garbage collection.
 func (bc *BuildController) createBuildCAConfigMapSpec(build *buildv1.Build, buildPod *corev1.Pod) *corev1.ConfigMap {
+	// Create a ConfigMap with the `inject-cabundle` annotation, which tells the service cert signing controller
+	// to add the service-ca.crt entry to this map.
+	// See https://github.com/openshift/service-serving-cert-signer
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: buildapihelpers.GetBuildCAConfigMapName(build),
+			OwnerReferences: []metav1.OwnerReference{
+				makeBuildPodOwnerRef(buildPod),
+			},
 			Annotations: map[string]string{
 				"service.alpha.openshift.io/inject-cabundle": "true",
 			},
-			OwnerReferences: []metav1.OwnerReference{
-				makeBuildCAOwnerRef(buildPod),
-			},
 		},
+		Data: bc.additionalTrustedCAData,
 	}
-	if len(bc.additionalTrustedCAData) > 0 {
-		cm.Data = map[string]string{
-			buildutil.AdditionalTrustedCAKey: string(bc.additionalTrustedCAData),
-		}
+
+	if cm.Data == nil {
+		cm.Data = make(map[string]string)
 	}
+
 	return cm
 }
 
-// readBuildCAData reads the additional trusted CA data from the provided path.
-func (bc *BuildController) readBuildCAData() ([]byte, error) {
-	_, err := os.Stat(bc.additionalTrustedCAPath)
-	if err != nil {
-		return nil, err
-	}
-	pemData, err := ioutil.ReadFile(bc.additionalTrustedCAPath)
-	if err != nil {
-		return nil, err
-	}
-	return pemData, nil
-}
-
-// findBuildCAConfigMap finds the ConfigMap containing the certificate authorities for the build.
-// The ConfigMap must exist and contain an owner reference to the build pod to be valid.
-func (bc *BuildController) findBuildCAConfigMap(build *buildv1.Build, buildPod *corev1.Pod) (bool, error) {
-	name := buildapihelpers.GetBuildCAConfigMapName(build)
-	cm, err := bc.configMapClient.ConfigMaps(build.Namespace).Get(name, metav1.GetOptions{})
+// findOwnedConfigMap finds the ConfigMap with the given name and namespace, and owned by the provided pod.
+func (bc *BuildController) findOwnedConfigMap(owner *corev1.Pod, namespace string, name string) (bool, error) {
+	cm, err := bc.configMapClient.ConfigMaps(namespace).Get(name, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		return false, nil
 	} else if err != nil {
 		return false, err
 	}
-	if hasRef := hasBuildCAOwnerRef(buildPod, cm); !hasRef {
-		return true, fmt.Errorf("build CA configMap %s is not owned by build pod %s", cm.Name, buildPod.Name)
+	if hasRef := hasBuildPodOwnerRef(owner, cm); !hasRef {
+		return true, fmt.Errorf("configMap %s/%s is not owned by build pod %s/%s", cm.Namespace, cm.Name, owner.Namespace, owner.Name)
 	}
 	return true, nil
+}
+
+func (bc *BuildController) createBuildSystemConfConfigMap(build *buildv1.Build, buildPod *corev1.Pod, update *buildUpdate) (*buildUpdate, error) {
+	configMapSpec := bc.createBuildSystemConfigMapSpec(build, buildPod)
+	configMap, err := bc.configMapClient.ConfigMaps(build.Namespace).Create(configMapSpec)
+	if err != nil {
+		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build system config configMap: %v", err)
+		update.setReason("CannotCreateBuildSysConfigMap")
+		update.setMessage(buildutil.StatusMessageCannotCreateBuildSysConfigMap)
+		return update, fmt.Errorf("failed to create build system config configMap: %v", err)
+	}
+	glog.V(4).Infof("Created build system config configMap %s/%s for build %s", build.Namespace, configMap.Name, buildDesc(build))
+	return update, nil
+}
+
+func (bc *BuildController) createBuildSystemConfigMapSpec(build *buildv1.Build, buildPod *corev1.Pod) *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: buildapihelpers.GetBuildSystemConfigMapName(build),
+			OwnerReferences: []metav1.OwnerReference{
+				makeBuildPodOwnerRef(buildPod),
+			},
+		},
+		Data: make(map[string]string),
+	}
+	if len(bc.registryConfData) > 0 {
+		cm.Data[buildutil.RegistryConfKey] = bc.registryConfData
+	}
+	if len(bc.signaturePolicyData) > 0 {
+		cm.Data[buildutil.SignaturePolicyKey] = bc.signaturePolicyData
+	}
+	return cm
+}
+
+func (bc *BuildController) controllerConfigWorker() {
+	for {
+		if quit := bc.controllerConfigWork(); quit {
+			return
+		}
+	}
+}
+
+func (bc *BuildController) controllerConfigWork() bool {
+	key, quit := bc.controllerConfigQueue.Get()
+	if quit {
+		return true
+	}
+	defer bc.controllerConfigQueue.Done(key)
+
+	err := bc.handleControllerConfig()
+	bc.handleControllerConfigError(err, key)
+	return false
+}
+
+// handleControllerConfig synchronizes the build controller config in the cluster
+// `build.config.openshift.io` instance and any referenced data in the `openshift-config` namespace.
+func (bc *BuildController) handleControllerConfig() error {
+	config, err := bc.configLister.Get("cluster")
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if config == nil {
+		bc.additionalTrustedCAData = nil
+		bc.buildDefaults.DefaultProxy = nil
+		return nil
+	}
+	bc.buildDefaults.DefaultProxy = config.Spec.BuildDefaults.DefaultProxy
+	if len(config.Spec.AdditionalTrustedCA.Name) == 0 {
+		bc.additionalTrustedCAData = nil
+		return nil
+	}
+	additionalCA, err := bc.openShiftConfigConfigMapStore.ConfigMaps("openshift-config").Get(config.Spec.AdditionalTrustedCA.Name)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if additionalCA == nil {
+		bc.additionalTrustedCAData = nil
+		return nil
+	}
+	bc.additionalTrustedCAData = additionalCA.Data
+	return nil
+}
+
+func (bc *BuildController) handleControllerConfigError(err error, key interface{}) {
+	if err != nil {
+		glog.V(2).Infof("Failed to update controller config: %v", err)
+	}
+	bc.controllerConfigQueue.Forget(key)
+}
+
+func (bc *BuildController) controllerConfigAdded(obj interface{}) {
+	bc.controllerConfigChanged()
+}
+
+func (bc *BuildController) controllerConfigUpdated(old, cur interface{}) {
+	bc.controllerConfigChanged()
+}
+
+func (bc *BuildController) controllerConfigDeleted(obj interface{}) {
+	bc.controllerConfigChanged()
+}
+
+func (bc *BuildController) controllerConfigChanged() {
+	bc.controllerConfigQueue.Add("openshift-config")
+}
+
+func (bc *BuildController) configMapAdded(obj interface{}) {
+	configMap, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		utilruntime.HandleError(fmt.Errorf("object was not a configMap: %+v", obj))
+		return
+	}
+	if configMap == nil {
+		return
+	}
+	config, err := bc.configLister.Get("cluster")
+	if err != nil && !errors.IsNotFound(err) {
+		utilruntime.HandleError(fmt.Errorf("could not get cluster build controller config: %v", err))
+		return
+	}
+	if config == nil {
+		return
+	}
+	if configMap.Name != config.Spec.AdditionalTrustedCA.Name {
+		return
+	}
+	bc.controllerConfigChanged()
+}
+
+func (bc *BuildController) configMapUpdated(old, curr interface{}) {
+	configMap, ok := curr.(*corev1.ConfigMap)
+	if !ok {
+		utilruntime.HandleError(fmt.Errorf("object was not a configMap: %+v", curr))
+		return
+	}
+	if configMap == nil {
+		return
+	}
+	config, err := bc.configLister.Get("cluster")
+	if err != nil && !errors.IsNotFound(err) {
+		utilruntime.HandleError(fmt.Errorf("could not get cluster build controller config: %v", err))
+		return
+	}
+	if config == nil {
+		return
+	}
+	if configMap.Name != config.Spec.AdditionalTrustedCA.Name {
+		return
+	}
+	bc.controllerConfigChanged()
+}
+
+func (bc *BuildController) configMapDeleted(obj interface{}) {
+	configMap, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone: %+v", obj))
+			return
+		}
+		configMap, ok = tombstone.Obj.(*corev1.ConfigMap)
+		if !ok {
+			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a configMap: %+v", obj))
+			return
+		}
+	}
+	config, err := bc.configLister.Get("cluster")
+	if err != nil && !errors.IsNotFound(err) {
+		utilruntime.HandleError(fmt.Errorf("could not get cluster build controller config: %v", err))
+		return
+	}
+	if config == nil {
+		return
+	}
+	if configMap.Name != config.Spec.AdditionalTrustedCA.Name {
+		return
+	}
+	bc.controllerConfigChanged()
 }
 
 // isBuildPod returns true if the given pod is a build pod
@@ -1604,7 +1825,7 @@ func getBuildName(pod metav1.Object) string {
 	return pod.GetAnnotations()[buildutil.BuildAnnotation]
 }
 
-func makeBuildCAOwnerRef(buildPod *corev1.Pod) metav1.OwnerReference {
+func makeBuildPodOwnerRef(buildPod *corev1.Pod) metav1.OwnerReference {
 	return metav1.OwnerReference{
 		APIVersion: "v1",
 		Kind:       "Pod",
@@ -1613,8 +1834,8 @@ func makeBuildCAOwnerRef(buildPod *corev1.Pod) metav1.OwnerReference {
 	}
 }
 
-func hasBuildCAOwnerRef(buildPod *corev1.Pod, caMap *corev1.ConfigMap) bool {
-	ref := makeBuildCAOwnerRef(buildPod)
+func hasBuildPodOwnerRef(buildPod *corev1.Pod, caMap *corev1.ConfigMap) bool {
+	ref := makeBuildPodOwnerRef(buildPod)
 	for _, owner := range caMap.OwnerReferences {
 		if reflect.DeepEqual(ref, owner) {
 			return true

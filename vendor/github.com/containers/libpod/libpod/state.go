@@ -1,5 +1,15 @@
 package libpod
 
+// DBConfig is a set of Libpod runtime configuration settings that are saved
+// in a State when it is first created, and can subsequently be retrieved.
+type DBConfig struct {
+	LibpodRoot  string
+	LibpodTmp   string
+	StorageRoot string
+	StorageTmp  string
+	GraphDriver string
+}
+
 // State is a storage backend for libpod's current state.
 // A State is only initialized once per instance of libpod.
 // As such, initialization methods for State implementations may safely assume
@@ -20,6 +30,22 @@ type State interface {
 
 	// Refresh clears container and pod states after a reboot
 	Refresh() error
+
+	// GetDBConfig retrieves several paths configured within the database
+	// when it was created - namely, Libpod root and tmp dirs, c/storage
+	// root and tmp dirs, and c/storage graph driver.
+	// This is not implemented by the in-memory state, as it has no need to
+	// validate runtime configuration.
+	GetDBConfig() (*DBConfig, error)
+
+	// ValidateDBConfig validates the config in the given Runtime struct
+	// against paths stored in the configured database.
+	// Libpod root and tmp dirs and c/storage root and tmp dirs and graph
+	// driver are validated.
+	// This is not implemented by the in-memory state, as it has no need to
+	// validate runtime configuration that may change over multiple runs of
+	// the program.
+	ValidateDBConfig(runtime *Runtime) error
 
 	// SetNamespace() sets the namespace for the store, and will determine
 	// what containers are retrieved with container and pod retrieval calls.
@@ -127,4 +153,27 @@ type State interface {
 	// If a namespace has been set, only pods in that namespace will be
 	// returned.
 	AllPods() ([]*Pod, error)
+
+	// Volume accepts full name of volume
+	// If the volume doesn't exist, an error will be returned
+	Volume(volName string) (*Volume, error)
+	// HasVolume returns true if volName exists in the state,
+	// otherwise it returns false
+	HasVolume(volName string) (bool, error)
+	// VolumeInUse goes through the container dependencies of a volume
+	// and checks if the volume is being used by any container. If it is
+	// a slice of container IDs using the volume is returned
+	VolumeInUse(volume *Volume) ([]string, error)
+	// AddVolume adds the specified volume to state. The volume's name
+	// must be unique within the list of existing volumes
+	AddVolume(volume *Volume) error
+	// RemoveVolCtrDep updates the list of container dependencies that the
+	// volume has. It either deletes the dependent container ID from
+	// the sub-bucket
+	RemoveVolCtrDep(volume *Volume, ctrID string) error
+	// RemoveVolume removes the specified volume.
+	// Only volumes that have no container dependencies can be removed
+	RemoveVolume(volume *Volume) error
+	// AllVolumes returns all the volumes available in the state
+	AllVolumes() ([]*Volume, error)
 }

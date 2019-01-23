@@ -20,7 +20,9 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
 
+	"github.com/openshift/library-go/pkg/serviceability"
 	"github.com/openshift/origin/pkg/cmd/flagtypes"
+	"github.com/openshift/origin/pkg/monitor"
 	testginkgo "github.com/openshift/origin/pkg/test/ginkgo"
 	exutil "github.com/openshift/origin/test/extended/util"
 )
@@ -28,6 +30,7 @@ import (
 func main() {
 	logs.InitLogs()
 	defer logs.FlushLogs()
+	defer serviceability.Profile(os.Getenv("OPENSHIFT_PROFILE")).Stop()
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
@@ -45,15 +48,14 @@ func main() {
 	suites := staticSuites
 
 	suiteOpt := &testginkgo.Options{
-		DetectFlakes: 6,
-		Suites:       suites,
+		Suites: suites,
 	}
 	cmd := &cobra.Command{
 		Use:   "run SUITE",
 		Short: "Run a test suite",
 		Long: templates.LongDesc(`
 		Run a test suite against an OpenShift server
-		
+
 		This command will run one of the following suites against a cluster identified by the current
 		KUBECONFIG file. See the suite description for more on what actions the suite will take.
 
@@ -100,6 +102,7 @@ func main() {
 	cmd.Flags().StringVarP(&suiteOpt.TestFile, "file", "f", suiteOpt.TestFile, "Create a suite from the newline-delimited test names in this file.")
 	cmd.Flags().StringVarP(&suiteOpt.OutFile, "output-file", "o", suiteOpt.OutFile, "Write all test output to this file.")
 	cmd.Flags().DurationVar(&suiteOpt.Timeout, "timeout", suiteOpt.Timeout, "Set the maximum time a test can run before being aborted. This is read from the suite by default, but will be 10 minutes otherwise.")
+	cmd.Flags().BoolVar(&suiteOpt.IncludeSuccessOutput, "include-success", suiteOpt.IncludeSuccessOutput, "Print output from successful tests.")
 	root.AddCommand(cmd)
 
 	testOpt := &testginkgo.TestOptions{
@@ -125,6 +128,25 @@ func main() {
 		},
 	}
 	cmd.Flags().BoolVar(&testOpt.DryRun, "dry-run", testOpt.DryRun, "Print the test to run without executing them.")
+	root.AddCommand(cmd)
+
+	monitorOpt := &monitor.Options{
+		Out:    os.Stdout,
+		ErrOut: os.Stderr,
+	}
+	cmd = &cobra.Command{
+		Use:   "run-monitor",
+		Short: "Continuously verify the cluster is functional",
+		Long: templates.LongDesc(`
+		Run a continuous verification process
+
+		`),
+
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return monitorOpt.Run()
+		},
+	}
 	root.AddCommand(cmd)
 
 	pflag.CommandLine = pflag.NewFlagSet("empty", pflag.ExitOnError)

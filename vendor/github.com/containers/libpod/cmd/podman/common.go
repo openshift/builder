@@ -11,6 +11,7 @@ import (
 
 	"github.com/containers/buildah"
 	"github.com/containers/libpod/libpod"
+	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/storage"
 	"github.com/fatih/camelcase"
 	"github.com/pkg/errors"
@@ -26,6 +27,10 @@ var (
 	LatestPodFlag = cli.BoolFlag{
 		Name:  "latest, l",
 		Usage: "act on the latest pod podman is aware of",
+	}
+	WorkDirFlag = cli.StringFlag{
+		Name:  "workdir, w",
+		Usage: "Working directory inside the container",
 	}
 )
 
@@ -159,6 +164,13 @@ func getAllOrLatestContainers(c *cli.Context, runtime *libpod.Runtime, filterSta
 // getContext returns a non-nil, empty context
 func getContext() context.Context {
 	return context.TODO()
+}
+
+func getDefaultNetwork() string {
+	if rootless.IsRootless() {
+		return "slirp4netns"
+	}
+	return "bridge"
 }
 
 // Common flags shared between commands
@@ -313,6 +325,15 @@ var createFlags = []cli.Flag{
 		Value: "bind",
 	},
 	cli.BoolFlag{
+		Name:  "init",
+		Usage: "Run an init binary inside the container that forwards signals and reaps processes",
+	},
+	cli.StringFlag{
+		Name: "init-path",
+		// Do not use  the Value field for setting the default value to determine user input (i.e., non-empty string)
+		Usage: fmt.Sprintf("Path to the container-init binary (default: %q)", libpod.DefaultInitPath),
+	},
+	cli.BoolFlag{
 		Name:  "interactive, i",
 		Usage: "Keep STDIN open even if not attached",
 	},
@@ -372,7 +393,7 @@ var createFlags = []cli.Flag{
 	cli.StringFlag{
 		Name:  "net, network",
 		Usage: "Connect a container to a network",
-		Value: "bridge",
+		Value: getDefaultNetwork(),
 	},
 	cli.BoolFlag{
 		Name:  "oom-kill-disable",
@@ -413,6 +434,10 @@ var createFlags = []cli.Flag{
 	cli.BoolFlag{
 		Name:  "read-only",
 		Usage: "Make containers root filesystem read-only",
+	},
+	cli.StringFlag{
+		Name:  "restart",
+		Usage: "Restart is not supported.  Please use a systemd unit file for restart",
 	},
 	cli.BoolFlag{
 		Name:  "rm",
@@ -501,10 +526,7 @@ var createFlags = []cli.Flag{
 		Name:  "volumes-from",
 		Usage: "Mount volumes from the specified container(s) (default [])",
 	},
-	cli.StringFlag{
-		Name:  "workdir, w",
-		Usage: "Working `directory inside the container",
-	},
+	WorkDirFlag,
 }
 
 func getFormat(c *cli.Context) (string, error) {

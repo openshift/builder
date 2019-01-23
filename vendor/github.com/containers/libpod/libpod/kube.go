@@ -2,12 +2,16 @@ package libpod
 
 import (
 	"fmt"
+	"math/rand"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/containers/libpod/pkg/lookup"
 	"github.com/containers/libpod/pkg/util"
 	"github.com/cri-o/ocicni/pkg/ocicni"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
@@ -15,23 +19,139 @@ import (
 	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// InspectForKube takes a slice of libpod containers and generates
+// GenerateForKube takes a slice of libpod containers and generates
 // one v1.Pod description that includes just a single container.
-func (c *Container) InspectForKube() (*v1.Pod, error) {
+func (c *Container) GenerateForKube() (*v1.Pod, error) {
 	// Generate the v1.Pod yaml description
 	return simplePodWithV1Container(c)
 }
 
-// simplePodWithV1Container is a function used by inspect when kube yaml needs to be generated
-// for a single container.  we "insert" that container description in a pod.
-func simplePodWithV1Container(ctr *Container) (*v1.Pod, error) {
-	var containers []v1.Container
-	result, err := containerToV1Container(ctr)
+// GenerateForKube takes a slice of libpod containers and generates
+// one v1.Pod description
+func (p *Pod) GenerateForKube() (*v1.Pod, []v1.ServicePort, error) {
+	// Generate the v1.Pod yaml description
+	var (
+		servicePorts []v1.ServicePort
+		ports        []v1.ContainerPort
+	)
+
+	allContainers, err := p.allContainers()
+	if err != nil {
+		return nil, servicePorts, err
+	}
+	// If the pod has no containers, no sense to generate YAML
+	if len(allContainers) == 0 {
+		return nil, servicePorts, errors.Errorf("pod %s has no containers", p.ID())
+	}
+	// If only an infra container is present, makes no sense to generate YAML
+	if len(allContainers) == 1 && p.HasInfraContainer() {
+		return nil, servicePorts, errors.Errorf("pod %s only has an infra container", p.ID())
+	}
+
+	if p.HasInfraContainer() {
+		infraContainer, err := p.getInfraContainer()
+		if err != nil {
+			return nil, servicePorts, err
+		}
+
+		ports, err = ocicniPortMappingToContainerPort(infraContainer.config.PortMappings)
+		if err != nil {
+			return nil, servicePorts, err
+		}
+		servicePorts = containerPortsToServicePorts(ports)
+	}
+	pod, err := p.podWithContainers(allContainers, ports)
+	return pod, servicePorts, err
+}
+
+func (p *Pod) getInfraContainer() (*Container, error) {
+	infraID, err := p.InfraContainerID()
 	if err != nil {
 		return nil, err
 	}
-	containers = append(containers, result)
+	return p.runtime.LookupContainer(infraID)
+}
 
+// GenerateKubeServiceFromV1Pod creates a v1 service object from a v1 pod object
+func GenerateKubeServiceFromV1Pod(pod *v1.Pod, servicePorts []v1.ServicePort) v1.Service {
+	service := v1.Service{}
+	selector := make(map[string]string)
+	selector["app"] = pod.Labels["app"]
+	ports := servicePorts
+	if len(ports) == 0 {
+		ports = containersToServicePorts(pod.Spec.Containers)
+	}
+	serviceSpec := v1.ServiceSpec{
+		Ports:    ports,
+		Selector: selector,
+		Type:     v1.ServiceTypeNodePort,
+	}
+	service.Spec = serviceSpec
+	service.ObjectMeta = pod.ObjectMeta
+	tm := v12.TypeMeta{
+		Kind:       "Service",
+		APIVersion: pod.TypeMeta.APIVersion,
+	}
+	service.TypeMeta = tm
+	return service
+}
+
+// containerPortsToServicePorts takes a slice of containerports and generates a
+// slice of service ports
+func containerPortsToServicePorts(containerPorts []v1.ContainerPort) []v1.ServicePort {
+	var sps []v1.ServicePort
+	for _, cp := range containerPorts {
+		nodePort := 30000 + rand.Intn(32767-30000+1)
+		servicePort := v1.ServicePort{
+			Protocol: cp.Protocol,
+			Port:     cp.ContainerPort,
+			NodePort: int32(nodePort),
+			Name:     strconv.Itoa(int(cp.ContainerPort)),
+		}
+		sps = append(sps, servicePort)
+	}
+	return sps
+}
+
+// containersToServicePorts takes a slice of v1.Containers and generates an
+// inclusive list of serviceports to expose
+func containersToServicePorts(containers []v1.Container) []v1.ServicePort {
+	var sps []v1.ServicePort
+	// Without the call to rand.Seed, a program will produce the same sequence of pseudo-random numbers
+	// for each execution. Legal nodeport range is 30000-32767
+	rand.Seed(time.Now().UnixNano())
+
+	for _, ctr := range containers {
+		sps = append(sps, containerPortsToServicePorts(ctr.Ports)...)
+	}
+	return sps
+}
+
+func (p *Pod) podWithContainers(containers []*Container, ports []v1.ContainerPort) (*v1.Pod, error) {
+	var (
+		podContainers []v1.Container
+	)
+	first := true
+	for _, ctr := range containers {
+		if !ctr.IsInfra() {
+			result, err := containerToV1Container(ctr)
+			if err != nil {
+				return nil, err
+			}
+			// We add the original port declarations from the libpod infra container
+			// to the first kubernetes container description because otherwise we loose
+			// the original container/port bindings.
+			if first && len(ports) > 0 {
+				result.Ports = ports
+				first = false
+			}
+			podContainers = append(podContainers, result)
+		}
+	}
+	return addContainersToPodObject(podContainers, p.Name()), nil
+}
+
+func addContainersToPodObject(containers []v1.Container, podName string) *v1.Pod {
 	tm := v12.TypeMeta{
 		Kind:       "Pod",
 		APIVersion: "v1",
@@ -39,10 +159,10 @@ func simplePodWithV1Container(ctr *Container) (*v1.Pod, error) {
 
 	// Add a label called "app" with the containers name as a value
 	labels := make(map[string]string)
-	labels["app"] = removeUnderscores(ctr.Name())
+	labels["app"] = removeUnderscores(podName)
 	om := v12.ObjectMeta{
 		// The name of the pod is container_name-libpod
-		Name:   fmt.Sprintf("%s-libpod", removeUnderscores(ctr.Name())),
+		Name:   fmt.Sprintf("%s", removeUnderscores(podName)),
 		Labels: labels,
 		// CreationTimestamp seems to be required, so adding it; in doing so, the timestamp
 		// will reflect time this is run (not container create time) because the conversion
@@ -57,7 +177,20 @@ func simplePodWithV1Container(ctr *Container) (*v1.Pod, error) {
 		ObjectMeta: om,
 		Spec:       ps,
 	}
-	return &p, nil
+	return &p
+}
+
+// simplePodWithV1Container is a function used by inspect when kube yaml needs to be generated
+// for a single container.  we "insert" that container description in a pod.
+func simplePodWithV1Container(ctr *Container) (*v1.Pod, error) {
+	var containers []v1.Container
+	result, err := containerToV1Container(ctr)
+	if err != nil {
+		return nil, err
+	}
+	containers = append(containers, result)
+	return addContainersToPodObject(containers, ctr.Name()), nil
+
 }
 
 // containerToV1Container converts information we know about a libpod container
@@ -215,20 +348,69 @@ func libpodMountsToKubeVolumeMounts(c *Container) ([]v1.VolumeMount, error) {
 	return vms, nil
 }
 
+func determineCapAddDropFromCapabilities(defaultCaps, containerCaps []string) *v1.Capabilities {
+	var (
+		drop []v1.Capability
+		add  []v1.Capability
+	)
+	// Find caps in the defaultCaps but not in the container's
+	// those indicate a dropped cap
+	for _, capability := range defaultCaps {
+		if !util.StringInSlice(capability, containerCaps) {
+			cap := v1.Capability(capability)
+			drop = append(drop, cap)
+		}
+	}
+	// Find caps in the container but not in the defaults; those indicate
+	// an added cap
+	for _, capability := range containerCaps {
+		if !util.StringInSlice(capability, defaultCaps) {
+			cap := v1.Capability(capability)
+			add = append(add, cap)
+		}
+	}
+
+	return &v1.Capabilities{
+		Add:  add,
+		Drop: drop,
+	}
+}
+
+func capAddDrop(caps *specs.LinuxCapabilities) (*v1.Capabilities, error) {
+	g, err := generate.New("linux")
+	if err != nil {
+		return nil, err
+	}
+	// Combine all the default capabilities into a slice
+	defaultCaps := append(g.Config.Process.Capabilities.Ambient, g.Config.Process.Capabilities.Bounding...)
+	defaultCaps = append(defaultCaps, g.Config.Process.Capabilities.Effective...)
+	defaultCaps = append(defaultCaps, g.Config.Process.Capabilities.Inheritable...)
+	defaultCaps = append(defaultCaps, g.Config.Process.Capabilities.Permitted...)
+
+	// Combine all the container's capabilities into a slic
+	containerCaps := append(caps.Ambient, caps.Bounding...)
+	containerCaps = append(containerCaps, caps.Effective...)
+	containerCaps = append(containerCaps, caps.Inheritable...)
+	containerCaps = append(containerCaps, caps.Permitted...)
+
+	calculatedCaps := determineCapAddDropFromCapabilities(defaultCaps, containerCaps)
+	return calculatedCaps, nil
+}
+
 // generateKubeSecurityContext generates a securityContext based on the existing container
 func generateKubeSecurityContext(c *Container) (*v1.SecurityContext, error) {
 	priv := c.Privileged()
 	ro := c.IsReadOnly()
 	allowPrivEscalation := !c.Spec().Process.NoNewPrivileges
 
-	// TODO enable use of capabilities when we can figure out how to extract cap-add|remove
-	//caps := v1.Capabilities{
-	//	//Add: c.config.Spec.Process.Capabilities
-	//}
+	newCaps, err := capAddDrop(c.config.Spec.Process.Capabilities)
+	if err != nil {
+		return nil, err
+	}
+
 	sc := v1.SecurityContext{
-		// TODO enable use of capabilities when we can figure out how to extract cap-add|remove
-		//Capabilities: &caps,
-		Privileged: &priv,
+		Capabilities: newCaps,
+		Privileged:   &priv,
 		// TODO How do we know if selinux were passed into podman
 		//SELinuxOptions:
 		// RunAsNonRoot is an optional parameter; our first implementations should be root only; however
@@ -240,7 +422,7 @@ func generateKubeSecurityContext(c *Container) (*v1.SecurityContext, error) {
 
 	if c.User() != "" {
 		// It is *possible* that
-		logrus.Debug("Looking in container for user: %s", c.User())
+		logrus.Debugf("Looking in container for user: %s", c.User())
 		u, err := lookup.GetUser(c.state.Mountpoint, c.User())
 		if err != nil {
 			return nil, err

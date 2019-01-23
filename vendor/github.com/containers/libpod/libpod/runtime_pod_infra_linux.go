@@ -50,7 +50,11 @@ func (r *Runtime) makeInfraContainer(ctx context.Context, p *Pod, imgName, imgID
 
 	// Since user namespace sharing is not implemented, we only need to check if it's rootless
 	networks := make([]string, 0)
-	options = append(options, WithNetNS(p.config.InfraContainer.PortBindings, isRootless, networks))
+	netmode := "bridge"
+	if isRootless {
+		netmode = "slirp4netns"
+	}
+	options = append(options, WithNetNS(p.config.InfraContainer.PortBindings, isRootless, netmode, networks))
 
 	return r.newContainer(ctx, g.Config, options...)
 }
@@ -63,7 +67,7 @@ func (r *Runtime) createInfraContainer(ctx context.Context, p *Pod) (*Container,
 		return nil, ErrRuntimeStopped
 	}
 
-	newImage, err := r.ImageRuntime().New(ctx, r.config.InfraImage, "", "", nil, nil, image.SigningOptions{}, false, false)
+	newImage, err := r.ImageRuntime().New(ctx, r.config.InfraImage, "", "", nil, nil, image.SigningOptions{}, false)
 	if err != nil {
 		return nil, err
 	}

@@ -337,10 +337,9 @@ func copyEnvVarSlice(in []corev1.EnvVar) []corev1.EnvVar {
 
 // setupContainersConfigs sets up volumes for mounting the node's configuration which governs which
 // registries it knows about, whether or not they should be accessed with TLS, and signature policies.
-func setupContainersConfigs(pod *corev1.Pod, container *corev1.Container) {
-	configDir := ConfigMapBuildSystemConfigsMountPath
-	optional := true
-	volumeName := apihelpers.GetName("build-system-configs", "build", kvalidation.DNS1123LabelMaxLength)
+func setupContainersConfigs(build *buildv1.Build, pod *corev1.Pod) {
+	const volumeName = "build-system-configs"
+	const configDir = ConfigMapBuildSystemConfigsMountPath
 	exists := false
 	for _, v := range pod.Spec.Volumes {
 		if v.Name == volumeName {
@@ -349,38 +348,63 @@ func setupContainersConfigs(pod *corev1.Pod, container *corev1.Container) {
 		}
 	}
 	if !exists {
+		cmSource := &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: buildapihelpers.GetBuildSystemConfigMapName(build),
+			},
+		}
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
 			corev1.Volume{
 				Name: volumeName,
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "build-system-configs",
-						},
-						Optional: &optional,
-					},
+					ConfigMap: cmSource,
 				},
 			},
 		)
+		containers := make([]corev1.Container, len(pod.Spec.Containers))
+		for i, c := range pod.Spec.Containers {
+			containers[i] = updateConfigsForContainer(c, volumeName, configDir)
+		}
+		pod.Spec.Containers = containers
+		if len(pod.Spec.InitContainers) > 0 {
+			initContainers := make([]corev1.Container, len(pod.Spec.InitContainers))
+			for i, c := range pod.Spec.InitContainers {
+				initContainers[i] = updateConfigsForContainer(c, volumeName, configDir)
+			}
+			pod.Spec.InitContainers = initContainers
+		}
 	}
+}
 
-	container.VolumeMounts = append(container.VolumeMounts,
+func updateConfigsForContainer(c corev1.Container, volumeName string, configDir string) corev1.Container {
+	c.VolumeMounts = append(c.VolumeMounts,
 		corev1.VolumeMount{
 			Name:      volumeName,
 			MountPath: configDir,
 			ReadOnly:  true,
 		},
 	)
-
+	// registries.conf is the primary registry config file mounted in by OpenShift
 	registriesConfPath := filepath.Join(configDir, "registries.conf")
+
+	// policy.json sets image policies for buildah (allowed repositories for image pull/push, etc.)
+	signaturePolicyPath := filepath.Join(configDir, "policy.json")
+
+	// registries.d is a directory used by buildah to support multiple registries.conf files
+	// currently not created/managed by OpenShift
 	registriesDirPath := filepath.Join(configDir, "registries.d")
-	signaturePolicyPath := filepath.Join(configDir, "signature-policy.json")
+
+	// storage.conf configures storage policies for buildah
+	// currently not created/managed by OpenShift
 	storageConfPath := filepath.Join(configDir, "storage.conf")
 
-	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_CONF_PATH", Value: registriesConfPath})
-	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_DIR_PATH", Value: registriesDirPath})
-	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_SIGNATURE_POLICY_PATH", Value: signaturePolicyPath})
-	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_STORAGE_CONF_PATH", Value: storageConfPath})
+	// Setup environment variables for buildah
+	// If these paths do not exist in the build container, buildah falls back to sane defaults.
+	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_CONF_PATH", Value: registriesConfPath})
+	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_DIR_PATH", Value: registriesDirPath})
+	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_SIGNATURE_POLICY_PATH", Value: signaturePolicyPath})
+	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_STORAGE_CONF_PATH", Value: storageConfPath})
+	return c
 }
 
 // setupContainersStorage creates a volume that we'll use for holding images and working
@@ -448,7 +472,7 @@ func setupContainersNodeStorage(pod *corev1.Pod, container *corev1.Container) {
 }
 
 // setupBuildCAs mounts certificate authorities for the build from a predetermined ConfigMap.
-func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, includeAdditionalCA bool) {
+func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, additionalCAs map[string]string, internalRegistryHost string) {
 	casExist := false
 	for _, v := range pod.Spec.Volumes {
 		if v.Name == "build-ca-bundles" {
@@ -458,15 +482,31 @@ func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, includeAdditionalCA bo
 	}
 
 	if !casExist {
+		// Mount the service signing CA key for the internal registry.
+		// This will be injected into the referenced ConfigMap via the openshift/service-ca-operator, and block
+		// creation of the build pod until it exists.
+		//
+		// See https://github.com/openshift/service-serving-cert-signer
 		cmSource := &corev1.ConfigMapVolumeSource{
 			LocalObjectReference: corev1.LocalObjectReference{
 				Name: buildapihelpers.GetBuildCAConfigMapName(build),
 			},
+			Items: []corev1.KeyToPath{
+				{
+					Key:  buildutil.ServiceCAKey,
+					Path: fmt.Sprintf("certs.d/%s/ca.crt", internalRegistryHost),
+				},
+			},
 		}
-		if includeAdditionalCA {
+
+		// Mount any additional trusted certificates via their keys.
+		// Each key should be the hostname that the CA certificate applies to
+		// This will be mounted to certs.d/<domain>/ca.crt so that it can be copied
+		// to /etc/docker/certs.d
+		for key := range additionalCAs {
 			cmSource.Items = append(cmSource.Items, corev1.KeyToPath{
-				Key:  buildutil.AdditionalTrustedCAKey,
-				Path: buildutil.AdditionalTrustedCAKey,
+				Key:  key,
+				Path: fmt.Sprintf("certs.d/%s/ca.crt", key),
 			})
 		}
 		pod.Spec.Volumes = append(pod.Spec.Volumes,

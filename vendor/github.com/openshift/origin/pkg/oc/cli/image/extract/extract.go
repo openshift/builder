@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/user"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -56,12 +55,10 @@ var (
 
 		  [<index>] - select the layer at the provided index (zero-indexed)
 		  [<from_index>,<to_index>] - select layers by index, exclusive
-		  [~<prefix>] - select the layer with the matching prefix or return an error
+		  [~<prefix>] - select the layer with the matching digest prefix or return an error
 
 		Negative indices are counted from the end of the list, e.g. [-1] selects the last
-		layer.
-
-		Experimental: This command is under active development and may change without notice.`)
+		layer.`)
 
 	example = templates.Examples(`
 # Extract the busybox image into the current directory
@@ -99,10 +96,11 @@ type TarEntryFunc func(*tar.Header, LayerInfo, io.Reader) (cont bool, err error)
 type Options struct {
 	Mappings []Mapping
 
+	Files []string
 	Paths []string
 
-	OnlyFiles         bool
-	RemovePermissions bool
+	OnlyFiles           bool
+	PreservePermissions bool
 
 	FilterOptions imagemanifest.FilterOptions
 
@@ -128,7 +126,7 @@ type Options struct {
 
 func NewOptions(streams genericclioptions.IOStreams) *Options {
 	return &Options{
-		Paths: []string{"/:."},
+		Paths: []string{},
 
 		IOStreams:      streams,
 		MaxPerRegistry: 1,
@@ -146,6 +144,7 @@ func New(name string, streams genericclioptions.IOStreams) *cobra.Command {
 		Example: fmt.Sprintf(example, name+" extract"),
 		Run: func(c *cobra.Command, args []string) {
 			kcmdutil.CheckErr(o.Complete(c, args))
+			kcmdutil.CheckErr(o.Validate())
 			kcmdutil.CheckErr(o.Run())
 		},
 	}
@@ -157,7 +156,9 @@ func New(name string, streams genericclioptions.IOStreams) *cobra.Command {
 	flag.BoolVar(&o.DryRun, "dry-run", o.DryRun, "Print the actions that would be taken and exit without writing any contents.")
 	flag.BoolVar(&o.Insecure, "insecure", o.Insecure, "Allow pull operations to registries to be made over HTTP")
 
+	flag.StringSliceVar(&o.Files, "file", o.Files, "Extract the specified files to the current directory.")
 	flag.StringSliceVar(&o.Paths, "path", o.Paths, "Extract only part of an image. Must be SRC:DST where SRC is the path within the image and DST a local directory. If not specified the default is to extract everything to the current directory.")
+	flag.BoolVarP(&o.PreservePermissions, "preserve-ownership", "p", o.PreservePermissions, "Preserve the permissions of extracted files.")
 	flag.BoolVar(&o.OnlyFiles, "only-files", o.OnlyFiles, "Only extract regular files and directories from the image.")
 	flag.BoolVar(&o.AllLayers, "all-layers", o.AllLayers, "For dry-run mode, process from lowest to highest layer and don't omit duplicate files.")
 
@@ -185,11 +186,24 @@ type Mapping struct {
 	ConditionFn func(m *Mapping, dgst digest.Digest, imageConfig *docker10.DockerImageConfig) (bool, error)
 }
 
-func parseMappings(images, paths []string, requireEmpty bool) ([]Mapping, error) {
+func parseMappings(images, paths, files []string, requireEmpty bool) ([]Mapping, error) {
 	layerFilter := regexp.MustCompile(`^(.*)\[([^\]]*)\](.*)$`)
 
 	var mappings []Mapping
+
+	// convert paths and files to mappings for each image
 	for _, image := range images {
+		for _, arg := range files {
+			if strings.HasSuffix(arg, "/") {
+				return nil, fmt.Errorf("invalid file: %s must not end with a slash", arg)
+			}
+			mappings = append(mappings, Mapping{
+				Image: image,
+				From:  strings.TrimPrefix(arg, "/"),
+				To:    ".",
+			})
+		}
+
 		for _, arg := range paths {
 			parts := strings.SplitN(arg, ":", 2)
 			var mapping Mapping
@@ -198,17 +212,6 @@ func parseMappings(images, paths []string, requireEmpty bool) ([]Mapping, error)
 				mapping = Mapping{Image: image, From: parts[0], To: parts[1]}
 			default:
 				return nil, fmt.Errorf("--paths must be of the form SRC:DST")
-			}
-			if matches := layerFilter.FindStringSubmatch(mapping.Image); len(matches) > 0 {
-				if len(matches[1]) == 0 || len(matches[2]) == 0 || len(matches[3]) != 0 {
-					return nil, fmt.Errorf("layer selectors must be of the form IMAGE[\\d:\\d]")
-				}
-				mapping.Image = matches[1]
-				var err error
-				mapping.LayerFilter, err = parseLayerFilter(matches[2])
-				if err != nil {
-					return nil, err
-				}
 			}
 			if len(mapping.From) > 0 {
 				mapping.From = strings.TrimPrefix(mapping.From, "/")
@@ -239,17 +242,36 @@ func parseMappings(images, paths []string, requireEmpty bool) ([]Mapping, error)
 					}
 				}
 			}
-			src, err := imagereference.Parse(mapping.Image)
-			if err != nil {
-				return nil, err
-			}
-			if len(src.Tag) == 0 && len(src.ID) == 0 {
-				return nil, fmt.Errorf("source image must point to an image ID or image tag")
-			}
-			mapping.ImageRef = src
 			mappings = append(mappings, mapping)
 		}
 	}
+
+	// extract layer filter and set the ref
+	for i := range mappings {
+		mapping := &mappings[i]
+
+		if matches := layerFilter.FindStringSubmatch(mapping.Image); len(matches) > 0 {
+			if len(matches[1]) == 0 || len(matches[2]) == 0 || len(matches[3]) != 0 {
+				return nil, fmt.Errorf("layer selectors must be of the form IMAGE[\\d:\\d]")
+			}
+			mapping.Image = matches[1]
+			var err error
+			mapping.LayerFilter, err = parseLayerFilter(matches[2])
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		src, err := imagereference.Parse(mapping.Image)
+		if err != nil {
+			return nil, err
+		}
+		if len(src.Tag) == 0 && len(src.ID) == 0 {
+			return nil, fmt.Errorf("source image must point to an image ID or image tag")
+		}
+		mapping.ImageRef = src
+	}
+
 	return mappings, nil
 }
 
@@ -262,26 +284,26 @@ func (o *Options) Complete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("you must specify at least one image to extract as an argument")
 	}
 
+	if len(o.Paths) == 0 && len(o.Files) == 0 {
+		o.Paths = append(o.Paths, "/:.")
+	}
+
 	var err error
-	o.Mappings, err = parseMappings(args, o.Paths, !o.Confirm && !o.DryRun)
+	o.Mappings, err = parseMappings(args, o.Paths, o.Files, !o.Confirm && !o.DryRun)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (o *Options) Run() error {
-	preserveOwnership := false
-	u, err := user.Current()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: Could not load current user information: %v\n", err)
+func (o *Options) Validate() error {
+	if len(o.Mappings) == 0 {
+		return fmt.Errorf("you must specify one or more paths or files")
 	}
-	if u != nil {
-		if uid, err := strconv.Atoi(u.Uid); err == nil && uid == 0 {
-			preserveOwnership = true
-		}
-	}
+	return o.FilterOptions.Validate()
+}
 
+func (o *Options) Run() error {
 	rt, err := rest.TransportFor(&rest.Config{})
 	if err != nil {
 		return err
@@ -304,11 +326,20 @@ func (o *Options) Run() error {
 			q.Try(func() error {
 				repo, err := fromContext.Repository(ctx, from.DockerClientDefaults().RegistryURL(), from.RepositoryName(), o.Insecure)
 				if err != nil {
-					return err
+					return fmt.Errorf("unable to connect to image repository %s: %v", from.Exact(), err)
 				}
 
 				srcManifest, srcDigest, location, err := imagemanifest.FirstManifest(ctx, from, repo, o.FilterOptions.Include)
 				if err != nil {
+					if imagemanifest.IsImageForbidden(err) {
+						var msg string
+						if len(o.Mappings) == 1 {
+							msg = "image does not exist or you don't have permission to access the repository"
+						} else {
+							msg = fmt.Sprintf("image %q does not exist or you don't have permission to access the repository", from)
+						}
+						return imagemanifest.NewImageForbidden(msg, err)
+					}
 					if imagemanifest.IsImageNotFound(err) {
 						var msg string
 						if len(o.Mappings) == 1 {
@@ -361,10 +392,8 @@ func (o *Options) Run() error {
 						return fmt.Errorf("unable to filter layers for %s: %v", from, err)
 					}
 				}
-				if o.RemovePermissions {
+				if !o.PreservePermissions {
 					alter = append(alter, removePermissions{})
-				} else if !preserveOwnership {
-					alter = append(alter, writableDirectories{})
 				}
 
 				var byEntry TarEntryFunc = o.TarEntryCallback
@@ -422,16 +451,20 @@ func (o *Options) Run() error {
 
 						options := &archive.TarOptions{
 							AlterHeaders: alter,
-							Chown:        preserveOwnership,
+							Chown:        o.PreservePermissions,
 						}
 
 						if byEntry != nil {
-							return layerByEntry(r, options, info, byEntry, o.AllLayers, alreadySeen)
+							cont, err := layerByEntry(r, options, info, byEntry, o.AllLayers, alreadySeen)
+							if err != nil {
+								err = fmt.Errorf("unable to iterate over layer %s from %s: %v", layer.Digest, from.Exact(), err)
+							}
+							return cont, err
 						}
 
 						glog.V(4).Infof("Extracting layer %s with options %#v", layer.Digest, options)
 						if _, err := archive.ApplyLayer(mapping.To, r, options); err != nil {
-							return false, err
+							return false, fmt.Errorf("unable to extract layer %s from %s: %v", layer.Digest, from.Exact(), err)
 						}
 						return true, nil
 					}()

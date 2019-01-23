@@ -186,9 +186,13 @@
 // test/extended/testdata/roles/empty-role.yaml
 // test/extended/testdata/roles/policy-clusterroles.yaml
 // test/extended/testdata/roles/policy-roles.yaml
+// test/extended/testdata/router-common.yaml
 // test/extended/testdata/router-config-manager.yaml
 // test/extended/testdata/router-http-echo-server.yaml
 // test/extended/testdata/router-metrics.yaml
+// test/extended/testdata/router-override-domains.yaml
+// test/extended/testdata/router-override.yaml
+// test/extended/testdata/router-scoped.yaml
 // test/extended/testdata/run_policy/parallel-bc.yaml
 // test/extended/testdata/run_policy/serial-bc.yaml
 // test/extended/testdata/run_policy/serial-latest-only-bc.yaml
@@ -198,10 +202,11 @@
 // test/extended/testdata/s2i-dropcaps/rootable-ruby/assemble
 // test/extended/testdata/sample-image-stream.json
 // test/extended/testdata/samplepipeline-withenvs.yaml
-// test/extended/testdata/scoped-router.yaml
 // test/extended/testdata/service-serving-cert/nginx-serving-cert.conf
 // test/extended/testdata/signer-buildconfig.yaml
+// test/extended/testdata/templates/templateinstance_badobject.yaml
 // test/extended/testdata/templates/templateinstance_objectkinds.yaml
+// test/extended/testdata/templates/templateinstance_readiness.yaml
 // test/extended/testdata/templates/templateservicebroker_bind.yaml
 // test/extended/testdata/test-cli-debug.yaml
 // test/extended/testdata/test-env-pod.json
@@ -658,14 +663,13 @@ items:
     source:
       type: Git
       git:
-        uri: 'https://github.com/sclorg/s2i-php-container'
-      contextDir: 7.0/test/test-app
+        uri: 'https://github.com/sclorg/nodejs-ex'
     strategy:
       type: Source
       sourceStrategy:
         from:
           kind: DockerImage
-          name: centos/php-70-centos7
+          name: docker.io/openshift/test-build-simples2i:latest
     resources: {}
     postCommit: {}
     nodeSelector: null
@@ -691,15 +695,7 @@ items:
         containers:
         - image:
           imagePullPolicy: Always
-          readinessProbe:
-            httpGet:
-              port: 8080
           name: mys2itest
-          ports:
-          - containerPort: 8080
-            protocol: TCP
-          - containerPort: 8888
-            protocol: TCP
           terminationMessagePath: /dev/termination-log
         dnsPolicy: ClusterFirst
         restartPolicy: Always
@@ -945,17 +941,11 @@ metadata:
 spec:
   successfulBuildsHistoryLimit: 2
   source:
-    type: Git
-    git:
-      uri: 'https://github.com/sclorg/cakephp-ex.git'
+    dockerfile: |
+      FROM busybox
+      RUN touch /php-file
   strategy:
-    type: Source
-    sourceStrategy:
-      from:
-        kind: ImageStreamTag
-        namespace: openshift
-        name: 'php:7.0'
-`)
+    dockerStrategy: {}`)
 
 func testExtendedTestdataBuildsBuildPruningSuccessfulBuildConfigYamlBytes() ([]byte, error) {
 	return _testExtendedTestdataBuildsBuildPruningSuccessfulBuildConfigYaml, nil
@@ -1004,7 +994,10 @@ func testExtendedTestdataBuildsBuildPruningSuccessfulPipelineYaml() (*asset, err
 
 var _testExtendedTestdataBuildsBuildQuotaS2iBinAssemble = []byte(`#!/bin/sh
 
-
+# Seeing issues w/ buildah log output being intermingled with the container
+# output, so adding a sleep in an attempt to let the buildah log output
+# stop before the container output starts
+sleep 10
 echo -n MEMORY= && cat /sys/fs/cgroup/memory/memory.limit_in_bytes
 echo -n MEMORYSWAP= && cat /sys/fs/cgroup/memory/memory.memsw.limit_in_bytes
 
@@ -1068,7 +1061,7 @@ func testExtendedTestdataBuildsBuildQuotaDockerfile() (*asset, error) {
 	return a, nil
 }
 
-var _testExtendedTestdataBuildsBuildSecretsDockerfile = []byte(`FROM centos/ruby-22-centos7
+var _testExtendedTestdataBuildsBuildSecretsDockerfile = []byte(`FROM docker.io/busybox
 
 USER root
 ADD ./secret-dir /secrets
@@ -1362,7 +1355,7 @@ var _testExtendedTestdataBuildsBuildSecretsTestDockerBuildJson = []byte(`{
       "dockerStrategy": {
         "from": {
           "kind": "DockerImage",
-          "name": "centos/ruby-22-centos7"
+          "name": "docker.io/busybox:latest"
         },
         "env": [
           {
@@ -1467,7 +1460,7 @@ var _testExtendedTestdataBuildsBuildSecretsTestS2iBuildJson = []byte(`{
       "sourceStrategy": {
         "from": {
           "kind": "DockerImage",
-          "name": "centos/ruby-22-centos7"
+          "name": "docker.io/centos/ruby-22-centos7"
         },
         "env": [
           {
@@ -1583,7 +1576,7 @@ func testExtendedTestdataBuildsBuildTimingDockerfile() (*asset, error) {
 	return a, nil
 }
 
-var _testExtendedTestdataBuildsBuildTimingS2iBinaryDirS2iBinAssemble = []byte(`#!/bin/bash
+var _testExtendedTestdataBuildsBuildTimingS2iBinaryDirS2iBinAssemble = []byte(`#!/bin/sh
 
 `)
 
@@ -1602,7 +1595,7 @@ func testExtendedTestdataBuildsBuildTimingS2iBinaryDirS2iBinAssemble() (*asset, 
 	return a, nil
 }
 
-var _testExtendedTestdataBuildsBuildTimingS2iBinaryDirS2iBinRun = []byte(`#!/bin/bash
+var _testExtendedTestdataBuildsBuildTimingS2iBinaryDirS2iBinRun = []byte(`#!/bin/sh
 
 `)
 
@@ -1680,7 +1673,7 @@ var _testExtendedTestdataBuildsBuildTimingTestDockerBuildJson = []byte(`{
         "forcePull": true,
         "from": {
           "kind": "DockerImage",
-          "name": "centos/ruby-22-centos7"
+          "name": "docker.io/busybox:latest"
         },
         "env": [
           {
@@ -1759,7 +1752,7 @@ var _testExtendedTestdataBuildsBuildTimingTestS2iBuildJson = []byte(`{
       "sourceStrategy": {
         "from": {
           "kind": "DockerImage",
-          "name": "centos/ruby-22-centos7"
+          "name": "docker.io/openshift/test-build-simples2i:latest"
         },
         "env": [
           {
@@ -2075,7 +2068,7 @@ spec:
     sourceStrategy:
       from:
         kind: DockerImage
-        name: centos/ruby-23-centos7:latest
+        name: docker.io/openshift/test-build-simples2i:latest
 `)
 
 func testExtendedTestdataBuildsStatusfailFailedassembleYamlBytes() ([]byte, error) {
@@ -2270,7 +2263,7 @@ spec:
     sourceStrategy:
       from:
         kind: DockerImage
-        name: centos/ruby-23-centos7:latest
+        name: docker.io/openshift/test-build-simples2i:latest
     type: Source
 `)
 
@@ -2305,7 +2298,7 @@ spec:
     sourceStrategy:
       from:
         kind: DockerImage
-        name: centos/ruby-23-centos7:latest
+        name: docker.io/openshift/test-build-simples2i:latest
     type: Source
 `)
 
@@ -2357,9 +2350,8 @@ objects:
         - name: BUILD_LOGLEVEL
           value: "5"
         from:
-          kind: ImageStreamTag
-          name: ruby:latest
-          namespace: openshift
+          kind: DockerImage
+          name: docker.io/openshift/test-build-simples2i:latest
       type: Source
     # this test specifically does a push, to help exercise the code that sets
     # environment variables on build pods (i.e., by having a source secret and
@@ -2631,7 +2623,7 @@ items:
           value: 127.0.0.1:3128
         from:
           kind: DockerImage
-          name: centos/ruby-22-centos7
+          name: docker.io/openshift/test-build-simples2i:latest
 - kind: BuildConfig
   apiVersion: v1
   metadata:
@@ -2653,7 +2645,7 @@ items:
       sourceStrategy:
         from:
           kind: DockerImage
-          name: centos/ruby-22-centos7
+          name: docker.io/openshift/test-build-simples2i:latest
         env:
         - name: SOME_HTTP_PROXY
           value: https://envuser:password@proxy3.com
@@ -2680,7 +2672,7 @@ items:
       dockerStrategy:
         from:
           kind: DockerImage
-          name: centos/ruby-22-centos7
+          name: docker.io/centos/ruby-22-centos7
         env:
         - name: SOME_HTTP_PROXY
           value: https://envuser:password@proxy3.com
@@ -2727,7 +2719,7 @@ var _testExtendedTestdataBuildsTestBuildRevisionJson = []byte(`{
           "sourceStrategy": {
             "from": {
               "kind": "DockerImage",
-              "name": "centos/ruby-22-centos7"
+              "name": "docker.io/openshift/test-build-simples2i:latest"
             }
           }
         },
@@ -2946,7 +2938,7 @@ items:
       dockerStrategy:
         from:
           kind: DockerImage
-          name: centos/ruby-22-centos7
+          name: docker.io/busybox:latest
     resources: {}
     postCommit: {}
     nodeSelector: 
@@ -2972,7 +2964,7 @@ items:
       dockerStrategy:
         from:
           kind: DockerImage
-          name: centos/ruby-22-centos7
+          name: docker.io/busybox:latest
         buildArgs:
         - name: foo
           value: default
@@ -3116,14 +3108,14 @@ var _testExtendedTestdataBuildsTestCdsDockerbuildJson = []byte(`{
     "triggers":[],
     "source":{
       "type":"Dockerfile",
-      "dockerfile":"FROM centos:7\nRUN sleep 10m"
+      "dockerfile":"FROM docker.io/busybox:latest\nRUN sleep 10m"
     },
     "strategy":{
       "type":"Docker",
       "dockerStrategy":{
         "from":{
           "kind":"DockerImage",
-          "name":"centos/ruby-22-centos7"
+          "name":"docker.io/busybox:latest"
         }
       }
     }
@@ -3180,7 +3172,7 @@ var _testExtendedTestdataBuildsTestCdsSourcebuildJson = []byte(`{
           "sourceStrategy": {
             "from": {
               "kind": "DockerImage",
-              "name": "centos/ruby-22-centos7"
+              "name": "docker.io/busybox:latest"
             }
           }
         }
@@ -3375,7 +3367,7 @@ func testExtendedTestdataBuildsTestContextBuildJson() (*asset, error) {
 	return a, nil
 }
 
-var _testExtendedTestdataBuildsTestDockerAppDockerfile = []byte(`FROM docker-registry.default.svc:5000/openshift/nodejs
+var _testExtendedTestdataBuildsTestDockerAppDockerfile = []byte(`FROM image-registry.openshift-image-registry.svc:5000/openshift/nodejs
 RUN touch /tmp/foo`)
 
 func testExtendedTestdataBuildsTestDockerAppDockerfileBytes() ([]byte, error) {
@@ -3420,14 +3412,14 @@ var _testExtendedTestdataBuildsTestDockerBuildPullsecretJson = []byte(`{
     },
     "spec": {
       "source": {
-        "dockerfile": "FROM centos:7"
+        "dockerfile": "FROM docker.io/busybox:latest"
       },
       "strategy": {
         "type": "Docker",
         "dockerStrategy": {
           "from": {
             "kind": "DockerImage",
-            "name": "centos:7"
+            "name": "docker.io/busybox:latest"
           }
         }
       },
@@ -3450,7 +3442,7 @@ var _testExtendedTestdataBuildsTestDockerBuildPullsecretJson = []byte(`{
     },
     "spec": {
       "source": {
-        "dockerfile": "FROM centos:7"
+        "dockerfile": "FROM docker.io/busybox:latest"
       },
       "strategy": {
         "type": "Docker",
@@ -3494,18 +3486,17 @@ var _testExtendedTestdataBuildsTestDockerBuildJson = []byte(`{
   "spec":{
     "triggers":[],
     "source":{
-      "type":"Git",
-      "git":{
-        "uri":"https://github.com/sclorg/s2i-ruby-container"
+      "git": {
+        "uri":"https://github.com/sclorg/nodejs-ex"        
       },
-      "contextDir":"2.3"
+      "dockerfile": "FROM docker.io/busybox:latest"
     },
     "strategy":{
       "type":"Docker",
       "dockerStrategy":{
         "from":{
           "kind":"DockerImage",
-          "name":"centos/s2i-base-centos7"
+          "name":"docker.io/busybox:latest"
         }
       }
     },
@@ -3561,9 +3552,7 @@ var _testExtendedTestdataBuildsTestDockerNoOutputnameJson = []byte(`{
     "triggers": [],
     "source": {
       "type": "Git",
-      "git": {
-        "uri": "https://github.com/openshift/ruby-hello-world"
-      }
+      "dockerfile": "FROM docker.io/busybox:latest"
     },
     "strategy": {
       "type": "Docker",
@@ -3576,7 +3565,7 @@ var _testExtendedTestdataBuildsTestDockerNoOutputnameJson = []byte(`{
         ],
         "from": {
           "kind": "DockerImage",
-          "name": "centos/ruby-22-centos7"
+          "name": "docker.io/busybox:latest"
         }
       }
     }
@@ -4122,7 +4111,7 @@ var _testExtendedTestdataBuildsTestNosrcBuildJson = []byte(`{
           "sourceStrategy": {
             "from": {
               "kind": "DockerImage",
-              "name": "centos/ruby-22-centos7"
+              "name": "docker.io/openshift/test-build-simples2i:latest"
             }
           }
         }
@@ -4174,8 +4163,14 @@ var _testExtendedTestdataBuildsTestS2iBuildQuotaJson = []byte(`{
       "sourceStrategy": {
         "from": {
           "kind":"DockerImage",
-          "name":"centos/ruby-22-centos7"
-        }
+          "name":"docker.io/openshift/test-build-simples2i:latest"
+        },
+        "env": [
+          {
+            "name": "BUILD_LOGLEVEL",
+            "value": "6"
+          }
+        ]
       }
     }
   }
@@ -4211,9 +4206,8 @@ var _testExtendedTestdataBuildsTestS2iBuildJson = []byte(`{
     "source": {
       "type": "Git",
       "git": {
-        "uri":"https://github.com/sclorg/s2i-ruby-container"
-      },
-      "contextDir": "2.3/test/puma-test-app"
+        "uri":"https://github.com/sclorg/nodejs-ex"        
+      }
     },
     "strategy": {
       "type": "Source",
@@ -4226,7 +4220,7 @@ var _testExtendedTestdataBuildsTestS2iBuildJson = []byte(`{
         ],
         "from": {
           "kind": "DockerImage",
-          "name": "centos/ruby-23-centos7"
+          "name": "docker.io/openshift/test-build-simples2i:latest"
         }
       }
     },
@@ -4297,7 +4291,7 @@ var _testExtendedTestdataBuildsTestS2iNoOutputnameJson = []byte(`{
         ],
         "from": {
           "kind": "DockerImage",
-          "name": "centos/ruby-22-centos7"
+          "name": "docker.io/openshift/test-build-simples2i:latest"
         }
       }
     }
@@ -4437,14 +4431,13 @@ spec:
   source:
     type: Git
     git:
-      uri: 'https://github.com/sclorg/s2i-php-container'
-    contextDir: 7.0/test/test-app
+      uri: 'https://github.com/sclorg/nodejs-ex'
   strategy:
     type: Source
     sourceStrategy:
       from:
         kind: DockerImage
-        name: centos/php-70-centos7
+        name: docker.io/openshift/test-build-simples2i:latest
       env:
         - name: BUILD_LOGLEVEL
           value: "5"
@@ -4574,14 +4567,13 @@ spec:
   source:
     type: Git
     git:
-      uri: 'https://github.com/sclorg/s2i-php-container'
-    contextDir: 7.0/test/test-app
+      uri: 'https://github.com/sclorg/nodejs-ex'
   strategy:
     type: Source
     sourceStrategy:
       from:
         kind: DockerImage
-        name: centos/php-70-centos7
+        name: docker.io/openshift/test-build-simples2i:latest
       env:
         - name: BUILD_LOGLEVEL
           value: "5"
@@ -10327,6 +10319,131 @@ func testExtendedTestdataRolesPolicyRolesYaml() (*asset, error) {
 	return a, nil
 }
 
+var _testExtendedTestdataRouterCommonYaml = []byte(`apiVersion: v1
+kind: Template
+parameters:
+objects:
+
+# ensure the router can access routes and endpoints
+- apiVersion: v1
+  kind: RoleBinding
+  metadata:
+    name: system-router
+  subjects:
+  - kind: ServiceAccount
+    name: default
+  roleRef:
+    name: system:router
+
+# two routes that differ only by their labels and names
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: route-1
+    labels:
+      test: router
+      select: first
+  spec:
+    host: first.example.com
+    path: /Letter
+    to:
+      name: endpoints
+    ports:
+    - targetPort: 8080
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: route-2
+    labels:
+      test: router
+      select: second
+  spec:
+    host: second.example.com
+    path: /Letter
+    to:
+      name: endpoints
+    ports:
+    - targetPort: http
+
+# routes that contain overridden domains
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: route-override-domain-1
+    labels:
+      test: router
+      select: override-domains
+  spec:
+    host: y.a.null.ptr
+    path: /Letter
+    to:
+      name: endpoints
+    ports:
+    - targetPort: 8080
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: route-override-domain-2
+    labels:
+      test: router
+      select: override-domains
+  spec:
+    host: main.void.str
+    path: /Letter
+    to:
+      name: endpoints
+    ports:
+    - targetPort: 8080
+
+# a service to be routed to
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: endpoints
+    labels:
+      test: router
+  spec:
+    selector:
+      test: router
+      endpoints: router
+    ports:
+    - port: 8080
+# a pod that serves a response
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: endpoint-1
+    labels:
+      test: router
+      endpoints: router
+  spec:
+    terminationGracePeriodSeconds: 1
+    containers:
+    - name: test
+      image: openshift/hello-openshift
+      # image: openshift/deployment-example:v1
+      ports:
+      - containerPort: 8080
+        name: http
+      - containerPort: 100
+        protocol: UDP
+`)
+
+func testExtendedTestdataRouterCommonYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataRouterCommonYaml, nil
+}
+
+func testExtendedTestdataRouterCommonYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataRouterCommonYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/router-common.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _testExtendedTestdataRouterConfigManagerYaml = []byte(`apiVersion: v1
 kind: Template
 parameters:
@@ -10813,6 +10930,179 @@ func testExtendedTestdataRouterMetricsYaml() (*asset, error) {
 	return a, nil
 }
 
+var _testExtendedTestdataRouterOverrideDomainsYaml = []byte(`apiVersion: v1
+kind: Template
+parameters:
+- name: IMAGE
+  value: openshift/origin-haproxy-router:latest
+- name: SCOPE
+  value: '["--name=test-scoped", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--labels=select=first"]'
+objects:
+
+# a router that overrides domains
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: router-override-domains
+    labels:
+      test: router-override-domains
+  spec:
+    terminationGracePeriodSeconds: 1
+    containers:
+    - name: router
+      image: ${IMAGE}
+      imagePullPolicy: IfNotPresent
+      env:
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      args: ["--name=test-override-domains", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--override-domains=null.ptr,void.str", "--hostname-template=${name}-${namespace}.apps.veto.test"]
+      hostNetwork: false
+      ports:
+      - containerPort: 80
+      - containerPort: 443
+      - containerPort: 1936
+        name: stats
+        protocol: TCP
+      readinessProbe:
+        initialDelaySeconds: 10
+        httpGet:
+          path: /healthz/ready
+          port: 1936
+    serviceAccountName: default
+`)
+
+func testExtendedTestdataRouterOverrideDomainsYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataRouterOverrideDomainsYaml, nil
+}
+
+func testExtendedTestdataRouterOverrideDomainsYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataRouterOverrideDomainsYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/router-override-domains.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataRouterOverrideYaml = []byte(`apiVersion: v1
+kind: Template
+parameters:
+- name: IMAGE
+  value: openshift/origin-haproxy-router:latest
+- name: SCOPE
+  value: '["--name=test-scoped", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--labels=select=first"]'
+objects:
+
+# a router that overrides host
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: router-override
+    labels:
+      test: router-override
+  spec:
+    terminationGracePeriodSeconds: 1
+    containers:
+    - name: router
+      image: ${IMAGE}
+      imagePullPolicy: IfNotPresent
+      env:
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      args: ["--name=test-override", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--override-hostname", "--hostname-template=${name}-${namespace}.myapps.mycompany.com"]
+      hostNetwork: false
+      ports:
+      - containerPort: 80
+      - containerPort: 443
+      - containerPort: 1936
+        name: stats
+        protocol: TCP
+      readinessProbe:
+        initialDelaySeconds: 10
+        httpGet:
+          path: /healthz/ready
+          port: 1936
+    serviceAccountName: default
+`)
+
+func testExtendedTestdataRouterOverrideYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataRouterOverrideYaml, nil
+}
+
+func testExtendedTestdataRouterOverrideYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataRouterOverrideYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/router-override.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataRouterScopedYaml = []byte(`apiVersion: v1
+kind: Template
+parameters:
+- name: IMAGE
+  value: openshift/origin-haproxy-router:latest
+- name: SCOPE
+  value: '["--name=test-scoped", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--labels=select=first"]'
+objects:
+# a scoped router
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: router-scoped
+    labels:
+      test: router-scoped
+  spec:
+    terminationGracePeriodSeconds: 1
+    containers:
+    - name: router
+      image: ${IMAGE}
+      imagePullPolicy: IfNotPresent
+      env:
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      args: "${{SCOPE}}"
+      hostNetwork: false
+      ports:
+      - containerPort: 80
+      - containerPort: 443
+      - containerPort: 1936
+        name: stats
+        protocol: TCP
+      readinessProbe:
+        initialDelaySeconds: 10
+        httpGet:
+          path: /healthz/ready
+          port: 1936
+    serviceAccountName: default
+`)
+
+func testExtendedTestdataRouterScopedYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataRouterScopedYaml, nil
+}
+
+func testExtendedTestdataRouterScopedYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataRouterScopedYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/router-scoped.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _testExtendedTestdataRun_policyParallelBcYaml = []byte(`---
   kind: "List"
   apiVersion: "v1"
@@ -11186,219 +11476,6 @@ func testExtendedTestdataSamplepipelineWithenvsYaml() (*asset, error) {
 	return a, nil
 }
 
-var _testExtendedTestdataScopedRouterYaml = []byte(`apiVersion: v1
-kind: Template
-parameters:
-- name: IMAGE
-  value: openshift/origin-haproxy-router:latest
-- name: SCOPE
-  value: '["--name=test-scoped", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--labels=select=first"]'
-objects:
-# a scoped router
-- apiVersion: v1
-  kind: Pod
-  metadata:
-    name: router-scoped
-    labels:
-      test: router-scoped
-  spec:
-    terminationGracePeriodSeconds: 1
-    containers:
-    - name: router
-      image: ${IMAGE}
-      imagePullPolicy: IfNotPresent
-      env:
-      - name: POD_NAMESPACE
-        valueFrom:
-          fieldRef:
-            fieldPath: metadata.namespace
-      args: "${{SCOPE}}"
-      hostNetwork: false
-      ports:
-      - containerPort: 80
-      - containerPort: 443
-      - containerPort: 1936
-        name: stats
-        protocol: TCP
-    serviceAccountName: default
-
-# a router that overrides host
-- apiVersion: v1
-  kind: Pod
-  metadata:
-    name: router-override
-    labels:
-      test: router-override
-  spec:
-    terminationGracePeriodSeconds: 1
-    containers:
-    - name: router
-      image: ${IMAGE}
-      imagePullPolicy: IfNotPresent
-      env:
-      - name: POD_NAMESPACE
-        valueFrom:
-          fieldRef:
-            fieldPath: metadata.namespace
-      args: ["--name=test-override", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--override-hostname", "--hostname-template=${name}-${namespace}.myapps.mycompany.com"]
-      hostNetwork: false
-      ports:
-      - containerPort: 80
-      - containerPort: 443
-      - containerPort: 1936
-        name: stats
-        protocol: TCP
-    serviceAccountName: default
-
-# a router that overrides domains
-- apiVersion: v1
-  kind: Pod
-  metadata:
-    name: router-override-domains
-    labels:
-      test: router-override-domains
-  spec:
-    terminationGracePeriodSeconds: 1
-    containers:
-    - name: router
-      image: ${IMAGE}
-      imagePullPolicy: IfNotPresent
-      env:
-      - name: POD_NAMESPACE
-        valueFrom:
-          fieldRef:
-            fieldPath: metadata.namespace
-      args: ["--name=test-override-domains", "--namespace=$(POD_NAMESPACE)", "--loglevel=4", "--override-domains=null.ptr,void.str", "--hostname-template=${name}-${namespace}.apps.veto.test"]
-      hostNetwork: false
-      ports:
-      - containerPort: 80
-      - containerPort: 443
-      - containerPort: 1936
-        name: stats
-        protocol: TCP
-    serviceAccountName: default
-
-
-# ensure the router can access routes and endpoints
-- apiVersion: v1
-  kind: RoleBinding
-  metadata:
-    name: system-router
-  subjects:
-  - kind: ServiceAccount
-    name: default
-  roleRef:
-    name: system:router
-
-# two routes that differ only by their labels and names
-- apiVersion: v1
-  kind: Route
-  metadata:
-    name: route-1
-    labels:
-      test: router
-      select: first
-  spec:
-    host: first.example.com
-    path: /Letter
-    to:
-      name: endpoints
-    ports:
-    - targetPort: 8080
-- apiVersion: v1
-  kind: Route
-  metadata:
-    name: route-2
-    labels:
-      test: router
-      select: second
-  spec:
-    host: second.example.com
-    path: /Letter
-    to:
-      name: endpoints
-    ports:
-    - targetPort: http
-
-# routes that contain overridden domains
-- apiVersion: v1
-  kind: Route
-  metadata:
-    name: route-override-domain-1
-    labels:
-      test: router
-      select: override-domains
-  spec:
-    host: y.a.null.ptr
-    path: /Letter
-    to:
-      name: endpoints
-    ports:
-    - targetPort: 8080
-- apiVersion: v1
-  kind: Route
-  metadata:
-    name: route-override-domain-2
-    labels:
-      test: router
-      select: override-domains
-  spec:
-    host: main.void.str
-    path: /Letter
-    to:
-      name: endpoints
-    ports:
-    - targetPort: 8080
-
-# a service to be routed to
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: endpoints
-    labels:
-      test: router
-  spec:
-    selector:
-      test: router
-      endpoints: router
-    ports:
-    - port: 8080
-# a pod that serves a response
-- apiVersion: v1
-  kind: Pod
-  metadata:
-    name: endpoint-1
-    labels:
-      test: router
-      endpoints: router
-  spec:
-    terminationGracePeriodSeconds: 1
-    containers:
-    - name: test
-      image: openshift/hello-openshift
-      # image: openshift/deployment-example:v1
-      ports:
-      - containerPort: 8080
-        name: http
-      - containerPort: 100
-        protocol: UDP
-`)
-
-func testExtendedTestdataScopedRouterYamlBytes() ([]byte, error) {
-	return _testExtendedTestdataScopedRouterYaml, nil
-}
-
-func testExtendedTestdataScopedRouterYaml() (*asset, error) {
-	bytes, err := testExtendedTestdataScopedRouterYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "test/extended/testdata/scoped-router.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
 var _testExtendedTestdataServiceServingCertNginxServingCertConf = []byte(`server {
     listen   443;
 
@@ -11525,6 +11602,54 @@ func testExtendedTestdataSignerBuildconfigYaml() (*asset, error) {
 	return a, nil
 }
 
+var _testExtendedTestdataTemplatesTemplateinstance_badobjectYaml = []byte(`kind: List
+apiVersion: v1
+items:
+- kind: TemplateInstance
+  apiVersion: template.openshift.io/v1
+  metadata:
+    name: invalidtemplateinstance
+  spec:
+    template:
+      kind: Template
+      apiVersion: v1
+      metadata:
+        name: template
+      objects:
+      - kind: Deployment
+        apiVersion: apps/v1
+        metadata:
+          name: "invalidname!@#$%^&*"
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              key: value
+          template:
+            metadata:
+              labels:
+                key: value
+            spec:
+              containers:
+              - name: hello-openshift
+                image: openshift/hello-openshift
+`)
+
+func testExtendedTestdataTemplatesTemplateinstance_badobjectYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataTemplatesTemplateinstance_badobjectYaml, nil
+}
+
+func testExtendedTestdataTemplatesTemplateinstance_badobjectYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataTemplatesTemplateinstance_badobjectYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/templates/templateinstance_badobject.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _testExtendedTestdataTemplatesTemplateinstance_objectkindsYaml = []byte(`kind: List
 apiVersion: v1
 items:
@@ -11600,6 +11725,130 @@ func testExtendedTestdataTemplatesTemplateinstance_objectkindsYaml() (*asset, er
 	}
 
 	info := bindataFileInfo{name: "test/extended/testdata/templates/templateinstance_objectkinds.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataTemplatesTemplateinstance_readinessYaml = []byte(`kind: Template
+apiVersion: v1
+metadata:
+  name: simple-example
+  annotations:
+objects:
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: "${NAME}"
+    annotations:
+      description: Exposes and load balances the application pods
+  spec:
+    ports:
+    - name: web
+      port: 8080
+      targetPort: 8080
+    selector:
+      name: "${NAME}"
+- kind: Route
+  apiVersion: v1
+  metadata:
+    name: "${NAME}"
+  spec:
+    host: "${APPLICATION_DOMAIN}"
+    to:
+      kind: Service
+      name: "${NAME}"
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    name: "${NAME}"
+    annotations:
+      description: Keeps track of changes in the application image
+- kind: BuildConfig
+  apiVersion: v1
+  metadata:
+    name: "${NAME}"
+    annotations:
+      description: Defines how to build the application
+      template.alpha.openshift.io/wait-for-ready: 'true'
+  spec:
+    source:
+      type: Git
+      git:
+        uri: ${SOURCE_REPOSITORY_URL}
+    strategy:
+      type: Source
+      sourceStrategy:
+        from:
+          kind: DockerImage
+          name: docker.io/openshift/test-build-simples2i:latest
+    output:
+      to:
+        kind: ImageStreamTag
+        name: "${NAME}:latest"
+    triggers:
+    - type: ConfigChange
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: "${NAME}"
+    annotations:
+      description: Defines how to deploy the application server
+      template.alpha.openshift.io/wait-for-ready: 'true'
+  spec:
+    strategy:
+      type: Rolling
+    triggers:
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+        - simple-example
+        from:
+          kind: ImageStreamTag
+          name: "${NAME}:latest"
+    - type: ConfigChange
+    replicas: 1
+    selector:
+      name: "${NAME}"
+    template:
+      metadata:
+        name: "${NAME}"
+        labels:
+          name: "${NAME}"
+      spec:
+        containers:
+        - name: simple-example
+          image: " "
+          ports:
+          - containerPort: 8080
+parameters:
+- name: NAME
+  displayName: Name
+  description: The name assigned to all of the frontend objects defined in this template.
+  required: true
+  value: simple-example
+- name: SOURCE_REPOSITORY_URL
+  displayName: sourceurl
+  required: true
+  value: https://github.com/sclorg/nodejs-ex
+- name: APPLICATION_DOMAIN
+  displayName: Application Hostname
+  description: The exposed hostname that will route to the Node.js service, if left
+    blank a value will be defaulted.
+  value: ''
+`)
+
+func testExtendedTestdataTemplatesTemplateinstance_readinessYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataTemplatesTemplateinstance_readinessYaml, nil
+}
+
+func testExtendedTestdataTemplatesTemplateinstance_readinessYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataTemplatesTemplateinstance_readinessYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/templates/templateinstance_readiness.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -32670,9 +32919,13 @@ var _bindata = map[string]func() (*asset, error){
 	"test/extended/testdata/roles/empty-role.yaml": testExtendedTestdataRolesEmptyRoleYaml,
 	"test/extended/testdata/roles/policy-clusterroles.yaml": testExtendedTestdataRolesPolicyClusterrolesYaml,
 	"test/extended/testdata/roles/policy-roles.yaml": testExtendedTestdataRolesPolicyRolesYaml,
+	"test/extended/testdata/router-common.yaml": testExtendedTestdataRouterCommonYaml,
 	"test/extended/testdata/router-config-manager.yaml": testExtendedTestdataRouterConfigManagerYaml,
 	"test/extended/testdata/router-http-echo-server.yaml": testExtendedTestdataRouterHttpEchoServerYaml,
 	"test/extended/testdata/router-metrics.yaml": testExtendedTestdataRouterMetricsYaml,
+	"test/extended/testdata/router-override-domains.yaml": testExtendedTestdataRouterOverrideDomainsYaml,
+	"test/extended/testdata/router-override.yaml": testExtendedTestdataRouterOverrideYaml,
+	"test/extended/testdata/router-scoped.yaml": testExtendedTestdataRouterScopedYaml,
 	"test/extended/testdata/run_policy/parallel-bc.yaml": testExtendedTestdataRun_policyParallelBcYaml,
 	"test/extended/testdata/run_policy/serial-bc.yaml": testExtendedTestdataRun_policySerialBcYaml,
 	"test/extended/testdata/run_policy/serial-latest-only-bc.yaml": testExtendedTestdataRun_policySerialLatestOnlyBcYaml,
@@ -32682,10 +32935,11 @@ var _bindata = map[string]func() (*asset, error){
 	"test/extended/testdata/s2i-dropcaps/rootable-ruby/assemble": testExtendedTestdataS2iDropcapsRootableRubyAssemble,
 	"test/extended/testdata/sample-image-stream.json": testExtendedTestdataSampleImageStreamJson,
 	"test/extended/testdata/samplepipeline-withenvs.yaml": testExtendedTestdataSamplepipelineWithenvsYaml,
-	"test/extended/testdata/scoped-router.yaml": testExtendedTestdataScopedRouterYaml,
 	"test/extended/testdata/service-serving-cert/nginx-serving-cert.conf": testExtendedTestdataServiceServingCertNginxServingCertConf,
 	"test/extended/testdata/signer-buildconfig.yaml": testExtendedTestdataSignerBuildconfigYaml,
+	"test/extended/testdata/templates/templateinstance_badobject.yaml": testExtendedTestdataTemplatesTemplateinstance_badobjectYaml,
 	"test/extended/testdata/templates/templateinstance_objectkinds.yaml": testExtendedTestdataTemplatesTemplateinstance_objectkindsYaml,
+	"test/extended/testdata/templates/templateinstance_readiness.yaml": testExtendedTestdataTemplatesTemplateinstance_readinessYaml,
 	"test/extended/testdata/templates/templateservicebroker_bind.yaml": testExtendedTestdataTemplatesTemplateservicebroker_bindYaml,
 	"test/extended/testdata/test-cli-debug.yaml": testExtendedTestdataTestCliDebugYaml,
 	"test/extended/testdata/test-env-pod.json": testExtendedTestdataTestEnvPodJson,
@@ -33163,9 +33417,13 @@ var _bintree = &bintree{nil, map[string]*bintree{
 					"policy-clusterroles.yaml": &bintree{testExtendedTestdataRolesPolicyClusterrolesYaml, map[string]*bintree{}},
 					"policy-roles.yaml": &bintree{testExtendedTestdataRolesPolicyRolesYaml, map[string]*bintree{}},
 				}},
+				"router-common.yaml": &bintree{testExtendedTestdataRouterCommonYaml, map[string]*bintree{}},
 				"router-config-manager.yaml": &bintree{testExtendedTestdataRouterConfigManagerYaml, map[string]*bintree{}},
 				"router-http-echo-server.yaml": &bintree{testExtendedTestdataRouterHttpEchoServerYaml, map[string]*bintree{}},
 				"router-metrics.yaml": &bintree{testExtendedTestdataRouterMetricsYaml, map[string]*bintree{}},
+				"router-override-domains.yaml": &bintree{testExtendedTestdataRouterOverrideDomainsYaml, map[string]*bintree{}},
+				"router-override.yaml": &bintree{testExtendedTestdataRouterOverrideYaml, map[string]*bintree{}},
+				"router-scoped.yaml": &bintree{testExtendedTestdataRouterScopedYaml, map[string]*bintree{}},
 				"run_policy": &bintree{nil, map[string]*bintree{
 					"parallel-bc.yaml": &bintree{testExtendedTestdataRun_policyParallelBcYaml, map[string]*bintree{}},
 					"serial-bc.yaml": &bintree{testExtendedTestdataRun_policySerialBcYaml, map[string]*bintree{}},
@@ -33181,13 +33439,14 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				}},
 				"sample-image-stream.json": &bintree{testExtendedTestdataSampleImageStreamJson, map[string]*bintree{}},
 				"samplepipeline-withenvs.yaml": &bintree{testExtendedTestdataSamplepipelineWithenvsYaml, map[string]*bintree{}},
-				"scoped-router.yaml": &bintree{testExtendedTestdataScopedRouterYaml, map[string]*bintree{}},
 				"service-serving-cert": &bintree{nil, map[string]*bintree{
 					"nginx-serving-cert.conf": &bintree{testExtendedTestdataServiceServingCertNginxServingCertConf, map[string]*bintree{}},
 				}},
 				"signer-buildconfig.yaml": &bintree{testExtendedTestdataSignerBuildconfigYaml, map[string]*bintree{}},
 				"templates": &bintree{nil, map[string]*bintree{
+					"templateinstance_badobject.yaml": &bintree{testExtendedTestdataTemplatesTemplateinstance_badobjectYaml, map[string]*bintree{}},
 					"templateinstance_objectkinds.yaml": &bintree{testExtendedTestdataTemplatesTemplateinstance_objectkindsYaml, map[string]*bintree{}},
+					"templateinstance_readiness.yaml": &bintree{testExtendedTestdataTemplatesTemplateinstance_readinessYaml, map[string]*bintree{}},
 					"templateservicebroker_bind.yaml": &bintree{testExtendedTestdataTemplatesTemplateservicebroker_bindYaml, map[string]*bintree{}},
 				}},
 				"test-cli-debug.yaml": &bintree{testExtendedTestdataTestCliDebugYaml, map[string]*bintree{}},

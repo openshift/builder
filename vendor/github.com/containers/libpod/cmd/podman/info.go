@@ -1,11 +1,13 @@
 package main
 
 import (
-	"runtime"
+	"fmt"
+	rt "runtime"
 
 	"github.com/containers/libpod/cmd/podman/formats"
-	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
+	"github.com/containers/libpod/libpod/adapter"
+	"github.com/containers/libpod/version"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
@@ -38,8 +40,9 @@ func infoCmd(c *cli.Context) error {
 		return err
 	}
 	info := map[string]interface{}{}
+	remoteClientInfo := map[string]interface{}{}
 
-	runtime, err := libpodruntime.GetRuntime(c)
+	runtime, err := adapter.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
@@ -49,8 +52,14 @@ func infoCmd(c *cli.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "error getting info")
 	}
+	if runtime.Remote {
+		remoteClientInfo["RemoteAPI Version"] = version.RemoteAPIVersion
+		remoteClientInfo["Podman Version"] = version.Version
+		remoteClientInfo["OS Arch"] = fmt.Sprintf("%s/%s", rt.GOOS, rt.GOARCH)
+		infoArr = append(infoArr, libpod.InfoData{Type: "client", Data: remoteClientInfo})
+	}
 
-	if c.Bool("debug") {
+	if !runtime.Remote && c.Bool("debug") {
 		debugInfo := debugInfo(c)
 		infoArr = append(infoArr, libpod.InfoData{Type: "debug", Data: debugInfo})
 	}
@@ -78,8 +87,8 @@ func infoCmd(c *cli.Context) error {
 // top-level "debug" info
 func debugInfo(c *cli.Context) map[string]interface{} {
 	info := map[string]interface{}{}
-	info["compiler"] = runtime.Compiler
-	info["go version"] = runtime.Version()
+	info["compiler"] = rt.Compiler
+	info["go version"] = rt.Version()
 	info["podman version"] = c.App.Version
 	version, _ := libpod.GetVersion()
 	info["git commit"] = version.GitCommit

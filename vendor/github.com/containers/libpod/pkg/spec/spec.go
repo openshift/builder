@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/containers/libpod/pkg/rootless"
+	"github.com/containers/storage/pkg/mount"
 	"github.com/docker/docker/daemon/caps"
-	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/go-units"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
@@ -52,6 +52,8 @@ func CreateConfigToOCISpec(config *CreateConfig) (*spec.Spec, error) { //nolint
 	if err != nil {
 		return nil, err
 	}
+	// Remove the default /dev/shm mount to ensure we overwrite it
+	g.RemoveMount("/dev/shm")
 	g.HostSpecific = true
 	addCgroup := true
 	canMountSys := true
@@ -235,8 +237,8 @@ func CreateConfigToOCISpec(config *CreateConfig) (*spec.Spec, error) { //nolint
 			}
 		}
 	} else {
-		for _, device := range config.Devices {
-			if err := addDevice(&g, device); err != nil {
+		for _, devicePath := range config.Devices {
+			if err := devicesFromPath(&g, devicePath); err != nil {
 				return nil, err
 			}
 		}
@@ -250,6 +252,7 @@ func CreateConfigToOCISpec(config *CreateConfig) (*spec.Spec, error) { //nolint
 	}
 	// SECURITY OPTS
 	g.SetProcessNoNewPrivileges(config.NoNewPrivs)
+
 	g.SetProcessApparmorProfile(config.ApparmorProfile)
 
 	blockAccessToKernelFilesystems(config, &g)
@@ -373,6 +376,10 @@ func CreateConfigToOCISpec(config *CreateConfig) (*spec.Spec, error) { //nolint
 }
 
 func blockAccessToKernelFilesystems(config *CreateConfig, g *generate.Generator) {
+	if config.PidMode.IsHost() && rootless.IsRootless() {
+		return
+	}
+
 	if !config.Privileged {
 		for _, mp := range []string{
 			"/proc/acpi",
@@ -452,6 +459,9 @@ func addNetNS(config *CreateConfig, g *generate.Generator) error {
 		return g.AddOrReplaceLinuxNamespace(spec.NetworkNamespace, NS(string(netMode)))
 	} else if IsPod(string(netMode)) {
 		logrus.Debug("Using pod netmode, unless pod is not sharing")
+		return nil
+	} else if netMode.IsSlirp4netns() {
+		logrus.Debug("Using slirp4netns netmode")
 		return nil
 	} else if netMode.IsUserDefined() {
 		logrus.Debug("Using user defined netmode")

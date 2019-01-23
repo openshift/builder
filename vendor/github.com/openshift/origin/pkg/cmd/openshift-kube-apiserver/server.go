@@ -6,7 +6,6 @@ import (
 	"github.com/golang/glog"
 
 	"k8s.io/apimachinery/pkg/util/sets"
-	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/admission"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/kubernetes/cmd/kube-apiserver/app"
@@ -15,6 +14,7 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac/bootstrappolicy"
 
 	kubecontrolplanev1 "github.com/openshift/api/kubecontrolplane/v1"
+	"github.com/openshift/origin/pkg/admission/customresourcevalidation/customresourcevalidationregistration"
 	originadmission "github.com/openshift/origin/pkg/apiserver/admission"
 	"github.com/openshift/origin/pkg/cmd/openshift-kube-apiserver/openshiftkubeapiserver"
 	"k8s.io/kubernetes/pkg/kubeapiserver/options"
@@ -23,7 +23,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/client/metrics/prometheus"
 )
 
-func RunOpenShiftKubeAPIServerServer(kubeAPIServerConfig *kubecontrolplanev1.KubeAPIServerConfig) error {
+func RunOpenShiftKubeAPIServerServer(kubeAPIServerConfig *kubecontrolplanev1.KubeAPIServerConfig, stopCh <-chan struct{}) error {
 	// Allow privileged containers
 	capabilities.Initialize(capabilities.Capabilities{
 		AllowPrivileged: true,
@@ -37,11 +37,14 @@ func RunOpenShiftKubeAPIServerServer(kubeAPIServerConfig *kubecontrolplanev1.Kub
 	bootstrappolicy.ClusterRoles = bootstrappolicy.OpenshiftClusterRoles
 	bootstrappolicy.ClusterRoleBindings = bootstrappolicy.OpenshiftClusterRoleBindings
 
-	options.AllOrderedPlugins = originadmission.KubeAdmissionPlugins
+	options.AllOrderedPlugins = append([]string{}, originadmission.KubeAdmissionPlugins...)
+	options.AllOrderedPlugins = append(options.AllOrderedPlugins, customresourcevalidationregistration.AllCustomResourceValidators...)
+
 	kubeRegisterAdmission := options.RegisterAllAdmissionPlugins
 	options.RegisterAllAdmissionPlugins = func(plugins *admission.Plugins) {
 		kubeRegisterAdmission(plugins)
 		originadmission.RegisterOpenshiftKubeAdmissionPlugins(plugins)
+		customresourcevalidationregistration.RegisterCustomResourceValidation(plugins)
 	}
 	kubeDefaultOffAdmission := options.DefaultOffAdmissionPlugins
 	options.DefaultOffAdmissionPlugins = func() sets.String {
@@ -55,7 +58,7 @@ func RunOpenShiftKubeAPIServerServer(kubeAPIServerConfig *kubecontrolplanev1.Kub
 	app.OpenShiftKubeAPIServerConfigPatch = configPatchFn
 	app.OpenShiftKubeAPIServerServerPatch = serverPatchContext.PatchServer
 
-	cmd := app.NewAPIServerCommand(utilwait.NeverStop)
+	cmd := app.NewAPIServerCommand(stopCh)
 	args, err := openshiftkubeapiserver.ConfigToFlags(kubeAPIServerConfig)
 	if err != nil {
 		return err

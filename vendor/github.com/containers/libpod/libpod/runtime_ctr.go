@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/storage"
+	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/storage/pkg/stringid"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -48,7 +48,7 @@ func (r *Runtime) newContainer(ctx context.Context, rSpec *spec.Spec, options ..
 
 	ctr := new(Container)
 	ctr.config = new(ContainerConfig)
-	ctr.state = new(containerState)
+	ctr.state = new(ContainerState)
 
 	ctr.config.ID = stringid.GenerateNonCryptoID()
 
@@ -60,16 +60,9 @@ func (r *Runtime) newContainer(ctx context.Context, rSpec *spec.Spec, options ..
 
 	ctr.state.BindMounts = make(map[string]string)
 
-	// Path our lock file will reside at
-	lockPath := filepath.Join(r.lockDir, ctr.config.ID)
-	// Grab a lockfile at the given path
-	lock, err := storage.GetLockfile(lockPath)
-	if err != nil {
-		return nil, errors.Wrapf(err, "error creating lockfile for new container")
-	}
-	ctr.lock = lock
-
 	ctr.config.StopTimeout = CtrRemoveTimeout
+
+	ctr.config.OCIRuntime = r.config.OCIRuntime
 
 	// Set namespace based on current runtime namespace
 	// Do so before options run so they can override it
@@ -83,6 +76,19 @@ func (r *Runtime) newContainer(ctx context.Context, rSpec *spec.Spec, options ..
 			return nil, errors.Wrapf(err, "error running container create option")
 		}
 	}
+
+	// Allocate a lock for the container
+	lock, err := r.lockManager.AllocateLock()
+	if err != nil {
+		return nil, errors.Wrapf(err, "error allocating lock for new container")
+	}
+	ctr.lock = lock
+	ctr.config.LockID = ctr.lock.ID()
+	logrus.Debugf("Allocated lock %d for container %s", ctr.lock.ID(), ctr.ID())
+
+	ctr.valid = true
+	ctr.state.State = ContainerStateConfigured
+	ctr.runtime = r
 
 	ctr.valid = true
 	ctr.state.State = ContainerStateConfigured
@@ -154,10 +160,33 @@ func (r *Runtime) newContainer(ctx context.Context, rSpec *spec.Spec, options ..
 		}
 	}()
 
+	if rootless.IsRootless() && ctr.config.ConmonPidFile == "" {
+		ctr.config.ConmonPidFile = filepath.Join(ctr.state.RunDir, "conmon.pid")
+	}
+
+	// Go through the volume mounts and check for named volumes
+	// If the named volme already exists continue, otherwise create
+	// the storage for the named volume.
+	for i, vol := range ctr.config.Spec.Mounts {
+		if vol.Source[0] != '/' && isNamedVolume(vol.Source) {
+			volInfo, err := r.state.Volume(vol.Source)
+			if err != nil {
+				newVol, err := r.newVolume(ctx, WithVolumeName(vol.Source))
+				if err != nil {
+					logrus.Errorf("error creating named volume %q: %v", vol.Source, err)
+				}
+				ctr.config.Spec.Mounts[i].Source = newVol.MountPoint()
+				continue
+			}
+			ctr.config.Spec.Mounts[i].Source = volInfo.MountPoint()
+		}
+	}
+
 	if ctr.config.LogPath == "" {
 		ctr.config.LogPath = filepath.Join(ctr.config.StaticDir, "ctr.log")
 	}
-	if ctr.config.ShmDir == "" {
+
+	if !MountExists(ctr.config.Spec.Mounts, "/dev/shm") && ctr.config.ShmDir == "" {
 		if ctr.state.UserNSRoot == "" {
 			ctr.config.ShmDir = filepath.Join(ctr.bundlePath(), "shm")
 		} else {
@@ -170,6 +199,7 @@ func (r *Runtime) newContainer(ctx context.Context, rSpec *spec.Spec, options ..
 		}
 		ctr.config.Mounts = append(ctr.config.Mounts, ctr.config.ShmDir)
 	}
+
 	// Add the container to the state
 	// TODO: May be worth looking into recovering from name/ID collisions here
 	if ctr.config.Pod != "" {
@@ -354,6 +384,15 @@ func (r *Runtime) removeContainer(ctx context.Context, c *Container, force bool)
 		}
 	}
 
+	// Deallocate the container's lock
+	if err := c.lock.Free(); err != nil {
+		if cleanupErr == nil {
+			cleanupErr = err
+		} else {
+			logrus.Errorf("free container lock: %v", err)
+		}
+	}
+
 	return cleanupErr
 }
 
@@ -473,4 +512,12 @@ func (r *Runtime) GetLatestContainer() (*Container, error) {
 		}
 	}
 	return ctrs[lastCreatedIndex], nil
+}
+
+// Check if volName is a named volume and not one of the default mounts we add to containers
+func isNamedVolume(volName string) bool {
+	if volName != "proc" && volName != "tmpfs" && volName != "devpts" && volName != "shm" && volName != "mqueue" && volName != "sysfs" && volName != "cgroup" {
+		return true
+	}
+	return false
 }

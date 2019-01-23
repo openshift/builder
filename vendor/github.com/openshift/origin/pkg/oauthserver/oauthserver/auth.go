@@ -26,8 +26,8 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	oauthapi "github.com/openshift/api/oauth/v1"
+	osinv1 "github.com/openshift/api/osin/v1"
 	oauthclient "github.com/openshift/client-go/oauth/clientset/versioned/typed/oauth/v1"
-	configapi "github.com/openshift/origin/pkg/cmd/server/apis/config"
 	"github.com/openshift/origin/pkg/oauth/urls"
 	"github.com/openshift/origin/pkg/oauthserver"
 	"github.com/openshift/origin/pkg/oauthserver/api"
@@ -35,6 +35,7 @@ import (
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/challenger/placeholderchallenger"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/allowanypassword"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/basicauthpassword"
+	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/bootstrap"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/denypassword"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/htpasswd"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/keystonepassword"
@@ -42,6 +43,7 @@ import (
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/redirector"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/request/basicauthrequest"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/request/headerrequest"
+	"github.com/openshift/origin/pkg/oauthserver/config"
 	"github.com/openshift/origin/pkg/oauthserver/ldaputil"
 	"github.com/openshift/origin/pkg/oauthserver/oauth/external"
 	"github.com/openshift/origin/pkg/oauthserver/oauth/external/github"
@@ -56,6 +58,7 @@ import (
 	"github.com/openshift/origin/pkg/oauthserver/server/errorpage"
 	"github.com/openshift/origin/pkg/oauthserver/server/grant"
 	"github.com/openshift/origin/pkg/oauthserver/server/login"
+	"github.com/openshift/origin/pkg/oauthserver/server/logout"
 	"github.com/openshift/origin/pkg/oauthserver/server/selectprovider"
 	"github.com/openshift/origin/pkg/oauthserver/server/tokenrequest"
 	"github.com/openshift/origin/pkg/oauthserver/userregistry/identitymapper"
@@ -64,6 +67,7 @@ import (
 
 const (
 	openShiftLoginPrefix         = "/login"
+	openShiftLogoutPrefix        = "/logout"
 	openShiftApproveSubpath      = "approve"
 	openShiftOAuthCallbackPrefix = "/oauth2callback"
 	openShiftWebConsoleClientID  = "openshift-web-console"
@@ -140,8 +144,13 @@ func (c *OAuthServerConfig) WithOAuth(handler http.Handler) (http.Handler, error
 	)
 	server.Install(mux, urls.OpenShiftOAuthAPIPrefix)
 
-	tokenRequestEndpoints := tokenrequest.NewEndpoints(c.ExtraOAuthConfig.Options.MasterPublicURL, c.getOsinOAuthClient)
+	tokenRequestEndpoints := tokenrequest.NewEndpoints(c.ExtraOAuthConfig.Options.MasterPublicURL, openShiftLogoutPrefix, c.getOsinOAuthClient, c.ExtraOAuthConfig.OAuthAccessTokenClient)
 	tokenRequestEndpoints.Install(mux, urls.OpenShiftOAuthAPIPrefix)
+
+	if session := c.ExtraOAuthConfig.SessionAuth; session != nil {
+		logoutHandler := logout.NewLogout(session)
+		logoutHandler.Install(mux, openShiftLogoutPrefix)
+	}
 
 	return mux, nil
 }
@@ -269,7 +278,7 @@ func (c *OAuthServerConfig) getAuthorizeAuthenticationHandlers(mux oauthserver.M
 // getGrantHandler returns the object that handles approving or rejecting grant requests
 func (c *OAuthServerConfig) getGrantHandler(mux oauthserver.Mux, auth authenticator.Request, clientregistry api.OAuthClientGetter, authregistry oauthclient.OAuthClientAuthorizationInterface) (handlers.GrantHandler, error) {
 	// check that the global default strategy is something we honor
-	if !configapi.ValidGrantHandlerTypes.Has(string(c.ExtraOAuthConfig.Options.GrantConfig.Method)) {
+	if !config.ValidGrantHandlerTypes.Has(string(c.ExtraOAuthConfig.Options.GrantConfig.Method)) {
 		return nil, fmt.Errorf("No grant handler found that matches %v.  The OAuth server cannot start!", c.ExtraOAuthConfig.Options.GrantConfig.Method)
 	}
 
@@ -290,7 +299,13 @@ func (c *OAuthServerConfig) getAuthenticationFinalizer() osinserver.AuthorizeHan
 	if c.ExtraOAuthConfig.SessionAuth != nil {
 		// The session needs to know the authorize flow is done so it can invalidate the session
 		return osinserver.AuthorizeHandlerFunc(func(ar *osin.AuthorizeRequest, resp *osin.Response, w http.ResponseWriter) (bool, error) {
-			if err := c.ExtraOAuthConfig.SessionAuth.InvalidateAuthentication(w, ar.HttpRequest); err != nil {
+			user, ok := ar.UserData.(kuser.Info)
+			if !ok {
+				glog.Errorf("the provided user data is not a user.Info object: %#v", user)
+				user = &kuser.DefaultInfo{} // set non-nil so we always try to invalidate
+			}
+
+			if err := c.ExtraOAuthConfig.SessionAuth.InvalidateAuthentication(w, user); err != nil {
 				glog.V(5).Infof("error invaliding cookie session: %v", err)
 			}
 			// do not fail the OAuth flow if we cannot invalidate the cookie
@@ -315,7 +330,7 @@ func (c *OAuthServerConfig) getAuthenticationHandler(mux oauthserver.Mux, errorH
 	multiplePasswordProviders := false
 	passwordProviderCount := 0
 	for _, identityProvider := range c.ExtraOAuthConfig.Options.IdentityProviders {
-		if configapi.IsPasswordAuthenticator(identityProvider) && identityProvider.UseAsLogin {
+		if config.IsPasswordAuthenticator(identityProvider) && identityProvider.UseAsLogin {
 			passwordProviderCount++
 			if passwordProviderCount > 1 {
 				multiplePasswordProviders = true
@@ -331,7 +346,7 @@ func (c *OAuthServerConfig) getAuthenticationHandler(mux oauthserver.Mux, errorH
 		}
 
 		// TODO: refactor handler building per type
-		if configapi.IsPasswordAuthenticator(identityProvider) {
+		if config.IsPasswordAuthenticator(identityProvider) {
 			passwordAuth, err := c.getPasswordAuthenticator(identityProvider)
 			if err != nil {
 				return nil, err
@@ -381,7 +396,7 @@ func (c *OAuthServerConfig) getAuthenticationHandler(mux oauthserver.Mux, errorH
 				// For now, all password challenges share a single basic challenger, since they'll all respond to any basic credentials
 				challengers["basic-challenge"] = passwordchallenger.NewBasicAuthChallenger("openshift")
 			}
-		} else if configapi.IsOAuthIdentityProvider(identityProvider) {
+		} else if config.IsOAuthIdentityProvider(identityProvider) {
 			oauthProvider, err := c.getOAuthProvider(identityProvider)
 			if err != nil {
 				return nil, err
@@ -415,7 +430,7 @@ func (c *OAuthServerConfig) getAuthenticationHandler(mux oauthserver.Mux, errorH
 				// For now, all password challenges share a single basic challenger, since they'll all respond to any basic credentials
 				challengers["basic-challenge"] = passwordchallenger.NewBasicAuthChallenger("openshift")
 			}
-		} else if requestHeaderProvider, isRequestHeader := identityProvider.Provider.(*configapi.RequestHeaderIdentityProvider); isRequestHeader {
+		} else if requestHeaderProvider, isRequestHeader := identityProvider.Provider.Object.(*osinv1.RequestHeaderIdentityProvider); isRequestHeader {
 			// We might be redirecting to an external site, we need to fully resolve the request URL to the public master
 			baseRequestURL, err := url.Parse(urls.OpenShiftOAuthAuthorizeURL(c.ExtraOAuthConfig.Options.MasterPublicURL))
 			if err != nil {
@@ -446,47 +461,52 @@ func (c *OAuthServerConfig) getAuthenticationHandler(mux oauthserver.Mux, errorH
 
 	selectProvider := selectprovider.NewSelectProvider(selectProviderRenderer, c.ExtraOAuthConfig.Options.AlwaysShowProviderSelection)
 
+	// the bootstrap user IDP is always set as the first one when sessions are enabled
+	if c.ExtraOAuthConfig.Options.SessionConfig != nil {
+		selectProvider = selectprovider.NewBootstrapSelectProvider(selectProvider, c.ExtraOAuthConfig.BootstrapUserDataGetter)
+	}
+
 	authHandler := handlers.NewUnionAuthenticationHandler(challengers, redirectors, errorHandler, selectProvider)
 	return authHandler, nil
 }
 
-func (c *OAuthServerConfig) getOAuthProvider(identityProvider configapi.IdentityProvider) (external.Provider, error) {
-	switch provider := identityProvider.Provider.(type) {
-	case *configapi.GitHubIdentityProvider:
+func (c *OAuthServerConfig) getOAuthProvider(identityProvider osinv1.IdentityProvider) (external.Provider, error) {
+	switch provider := identityProvider.Provider.Object.(type) {
+	case *osinv1.GitHubIdentityProvider:
 		transport, err := transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
-		clientSecret, err := configapi.ResolveStringValue(provider.ClientSecret)
+		clientSecret, err := config.ResolveStringValue(provider.ClientSecret)
 		if err != nil {
 			return nil, err
 		}
 		return github.NewProvider(identityProvider.Name, provider.ClientID, clientSecret, provider.Hostname, transport, provider.Organizations, provider.Teams), nil
 
-	case *configapi.GitLabIdentityProvider:
+	case *osinv1.GitLabIdentityProvider:
 		transport, err := transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
-		clientSecret, err := configapi.ResolveStringValue(provider.ClientSecret)
+		clientSecret, err := config.ResolveStringValue(provider.ClientSecret)
 		if err != nil {
 			return nil, err
 		}
 		return gitlab.NewProvider(identityProvider.Name, provider.URL, provider.ClientID, clientSecret, transport, provider.Legacy)
 
-	case *configapi.GoogleIdentityProvider:
-		clientSecret, err := configapi.ResolveStringValue(provider.ClientSecret)
+	case *osinv1.GoogleIdentityProvider:
+		clientSecret, err := config.ResolveStringValue(provider.ClientSecret)
 		if err != nil {
 			return nil, err
 		}
 		return google.NewProvider(identityProvider.Name, provider.ClientID, clientSecret, provider.HostedDomain)
 
-	case *configapi.OpenIDIdentityProvider:
+	case *osinv1.OpenIDIdentityProvider:
 		transport, err := transportFor(provider.CA, "", "")
 		if err != nil {
 			return nil, err
 		}
-		clientSecret, err := configapi.ResolveStringValue(provider.ClientSecret)
+		clientSecret, err := config.ResolveStringValue(provider.ClientSecret)
 		if err != nil {
 			return nil, err
 		}
@@ -522,26 +542,26 @@ func (c *OAuthServerConfig) getOAuthProvider(identityProvider configapi.Identity
 
 }
 
-func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider configapi.IdentityProvider) (authenticator.Password, error) {
+func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider osinv1.IdentityProvider) (authenticator.Password, error) {
 	identityMapper, err := identitymapper.NewIdentityUserMapper(c.ExtraOAuthConfig.IdentityClient, c.ExtraOAuthConfig.UserClient, c.ExtraOAuthConfig.UserIdentityMappingClient, identitymapper.MappingMethodType(identityProvider.MappingMethod))
 	if err != nil {
 		return nil, err
 	}
 
-	switch provider := identityProvider.Provider.(type) {
-	case *configapi.AllowAllPasswordIdentityProvider:
+	switch provider := identityProvider.Provider.Object.(type) {
+	case *osinv1.AllowAllPasswordIdentityProvider:
 		return allowanypassword.New(identityProvider.Name, identityMapper), nil
 
-	case *configapi.DenyAllPasswordIdentityProvider:
+	case *osinv1.DenyAllPasswordIdentityProvider:
 		return denypassword.New(), nil
 
-	case *configapi.LDAPPasswordIdentityProvider:
+	case *osinv1.LDAPPasswordIdentityProvider:
 		url, err := ldaputil.ParseURL(provider.URL)
 		if err != nil {
 			return nil, fmt.Errorf("Error parsing LDAPPasswordIdentityProvider URL: %v", err)
 		}
 
-		bindPassword, err := configapi.ResolveStringValue(provider.BindPassword)
+		bindPassword, err := config.ResolveStringValue(provider.BindPassword)
 		if err != nil {
 			return nil, err
 		}
@@ -561,7 +581,7 @@ func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider configapi.
 		}
 		return ldappassword.New(identityProvider.Name, opts, identityMapper)
 
-	case *configapi.HTPasswdPasswordIdentityProvider:
+	case *osinv1.HTPasswdPasswordIdentityProvider:
 		htpasswdFile := provider.File
 		if len(htpasswdFile) == 0 {
 			return nil, fmt.Errorf("HTPasswdFile is required to support htpasswd auth")
@@ -572,28 +592,31 @@ func (c *OAuthServerConfig) getPasswordAuthenticator(identityProvider configapi.
 			return htpasswordAuth, nil
 		}
 
-	case *configapi.BasicAuthPasswordIdentityProvider:
+	case *osinv1.BasicAuthPasswordIdentityProvider:
 		connectionInfo := provider.RemoteConnectionInfo
 		if len(connectionInfo.URL) == 0 {
 			return nil, fmt.Errorf("URL is required for BasicAuthPasswordIdentityProvider")
 		}
-		transport, err := transportFor(connectionInfo.CA, connectionInfo.ClientCert.CertFile, connectionInfo.ClientCert.KeyFile)
+		transport, err := transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error building BasicAuthPasswordIdentityProvider client: %v", err)
 		}
 		return basicauthpassword.New(identityProvider.Name, connectionInfo.URL, transport, identityMapper), nil
 
-	case *configapi.KeystonePasswordIdentityProvider:
+	case *osinv1.KeystonePasswordIdentityProvider:
 		connectionInfo := provider.RemoteConnectionInfo
 		if len(connectionInfo.URL) == 0 {
 			return nil, fmt.Errorf("URL is required for KeystonePasswordIdentityProvider")
 		}
-		transport, err := transportFor(connectionInfo.CA, connectionInfo.ClientCert.CertFile, connectionInfo.ClientCert.KeyFile)
+		transport, err := transportFor(connectionInfo.CA, connectionInfo.CertInfo.CertFile, connectionInfo.CertInfo.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error building KeystonePasswordIdentityProvider client: %v", err)
 		}
 
 		return keystonepassword.New(identityProvider.Name, connectionInfo.URL, transport, provider.DomainName, identityMapper, provider.UseKeystoneIdentity), nil
+
+	case *config.BootstrapIdentityProvider:
+		return bootstrap.New(c.ExtraOAuthConfig.BootstrapUserDataGetter), nil
 
 	default:
 		return nil, fmt.Errorf("No password auth found that matches %v.  The OAuth server cannot start!", identityProvider)
@@ -614,14 +637,14 @@ func (c *OAuthServerConfig) getAuthenticationRequestHandler() (authenticator.Req
 			return nil, err
 		}
 
-		if configapi.IsPasswordAuthenticator(identityProvider) {
+		if config.IsPasswordAuthenticator(identityProvider) {
 			passwordAuthenticator, err := c.getPasswordAuthenticator(identityProvider)
 			if err != nil {
 				return nil, err
 			}
 			authRequestHandlers = append(authRequestHandlers, basicauthrequest.NewBasicAuthAuthentication(identityProvider.Name, passwordAuthenticator, true))
 
-		} else if identityProvider.UseAsChallenger && configapi.IsOAuthIdentityProvider(identityProvider) {
+		} else if identityProvider.UseAsChallenger && config.IsOAuthIdentityProvider(identityProvider) {
 			oauthProvider, err := c.getOAuthProvider(identityProvider)
 			if err != nil {
 				return nil, err
@@ -634,8 +657,8 @@ func (c *OAuthServerConfig) getAuthenticationRequestHandler() (authenticator.Req
 			authRequestHandlers = append(authRequestHandlers, basicauthrequest.NewBasicAuthAuthentication(identityProvider.Name, oauthPasswordAuthenticator, true))
 
 		} else {
-			switch provider := identityProvider.Provider.(type) {
-			case *configapi.RequestHeaderIdentityProvider:
+			switch provider := identityProvider.Provider.Object.(type) {
+			case *osinv1.RequestHeaderIdentityProvider:
 				var authRequestHandler authenticator.Request
 
 				authRequestConfig := &headerrequest.Config{

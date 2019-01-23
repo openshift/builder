@@ -3,7 +3,6 @@ package libpod
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -76,10 +75,10 @@ type syncInfo struct {
 }
 
 // Make a new OCI runtime with provided options
-func newOCIRuntime(name string, path string, conmonPath string, conmonEnv []string, cgroupManager string, tmpDir string, logSizeMax int64, noPivotRoot bool, reservePorts bool) (*OCIRuntime, error) {
+func newOCIRuntime(oruntime OCIRuntimePath, conmonPath string, conmonEnv []string, cgroupManager string, tmpDir string, logSizeMax int64, noPivotRoot bool, reservePorts bool) (*OCIRuntime, error) {
 	runtime := new(OCIRuntime)
-	runtime.name = name
-	runtime.path = path
+	runtime.name = oruntime.Name
+	runtime.path = oruntime.Paths[0]
 	runtime.conmonPath = conmonPath
 	runtime.conmonEnv = conmonEnv
 	runtime.cgroupManager = cgroupManager
@@ -227,7 +226,7 @@ func bindPorts(ports []ocicni.PortMapping) ([]*os.File, error) {
 	return files, nil
 }
 
-func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, restoreContainer bool) (err error) {
+func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, restoreOptions *ContainerCheckpointOptions) (err error) {
 	var stderrBuf bytes.Buffer
 
 	runtimeDir, err := util.GetRootlessRuntimeDir()
@@ -289,8 +288,11 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 		args = append(args, "--syslog")
 	}
 
-	if restoreContainer {
+	if restoreOptions != nil {
 		args = append(args, "--restore", ctr.CheckpointPath())
+		if restoreOptions.TCPEstablished {
+			args = append(args, "--restore-arg", "--tcp-established")
+		}
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -316,8 +318,12 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 	cmd.Env = append(r.conmonEnv, fmt.Sprintf("_OCI_SYNCPIPE=%d", 3))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("_OCI_STARTPIPE=%d", 4))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", runtimeDir))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("_LIBPOD_USERNS_CONFIGURED=%s", os.Getenv("_LIBPOD_USERNS_CONFIGURED")))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("_LIBPOD_ROOTLESS_UID=%s", os.Getenv("_LIBPOD_ROOTLESS_UID")))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("HOME=%s", os.Getenv("HOME")))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", runtimeDir))
 
-	if r.reservePorts {
+	if r.reservePorts && !ctr.config.NetMode.IsSlirp4netns() {
 		ports, err := bindPorts(ctr.config.PortMappings)
 		if err != nil {
 			return err
@@ -329,7 +335,7 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 		cmd.ExtraFiles = append(cmd.ExtraFiles, ports...)
 	}
 
-	if rootless.IsRootless() {
+	if ctr.config.NetMode.IsSlirp4netns() {
 		ctr.rootlessSlirpSyncR, ctr.rootlessSlirpSyncW, err = os.Pipe()
 		if err != nil {
 			return errors.Wrapf(err, "failed to create rootless network sync pipe")
@@ -350,18 +356,25 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, cgroupParent string, res
 		// Set the label of the conmon process to be level :s0
 		// This will allow the container processes to talk to fifo-files
 		// passed into the container by conmon
-		var plabel string
+		var (
+			plabel string
+			con    selinux.Context
+		)
 		plabel, err = selinux.CurrentLabel()
 		if err != nil {
 			childPipe.Close()
 			return errors.Wrapf(err, "Failed to get current SELinux label")
 		}
 
-		c := selinux.NewContext(plabel)
+		con, err = selinux.NewContext(plabel)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to get new context from SELinux label")
+		}
+
 		runtime.LockOSThread()
-		if c["level"] != "s0" && c["level"] != "" {
-			c["level"] = "s0"
-			if err = label.SetProcessLabel(c.Get()); err != nil {
+		if con["level"] != "s0" && con["level"] != "" {
+			con["level"] = "s0"
+			if err = label.SetProcessLabel(con.Get()); err != nil {
 				runtime.UnlockOSThread()
 				return err
 			}
@@ -584,6 +597,9 @@ func (r *OCIRuntime) startContainer(ctr *Container) error {
 		return err
 	}
 	env := []string{fmt.Sprintf("XDG_RUNTIME_DIR=%s", runtimeDir)}
+	if notify, ok := os.LookupEnv("NOTIFY_SOCKET"); ok {
+		env = append(env, fmt.Sprintf("NOTIFY_SOCKET=%s", notify))
+	}
 	if err := utils.ExecCmdWithStdStreams(os.Stdin, os.Stdout, os.Stderr, env, r.path, "start", ctr.ID()); err != nil {
 		return err
 	}
@@ -686,8 +702,12 @@ func (r *OCIRuntime) stopContainer(ctr *Container, timeout uint) error {
 
 // deleteContainer deletes a container from the OCI runtime
 func (r *OCIRuntime) deleteContainer(ctr *Container) error {
-	_, err := utils.ExecCmd(r.path, "delete", "--force", ctr.ID())
-	return err
+	runtimeDir, err := util.GetRootlessRuntimeDir()
+	if err != nil {
+		return err
+	}
+	env := []string{fmt.Sprintf("XDG_RUNTIME_DIR=%s", runtimeDir)}
+	return utils.ExecCmdWithStdStreams(os.Stdin, os.Stdout, os.Stderr, env, r.path, "delete", "--force", ctr.ID())
 }
 
 // pauseContainer pauses the given container
@@ -714,7 +734,7 @@ func (r *OCIRuntime) unpauseContainer(ctr *Container) error {
 // TODO: Add --detach support
 // TODO: Convert to use conmon
 // TODO: add --pid-file and use that to generate exec session tracking
-func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty bool, user, sessionID string) (*exec.Cmd, error) {
+func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty bool, cwd, user, sessionID string) (*exec.Cmd, error) {
 	if len(cmd) == 0 {
 		return nil, errors.Wrapf(ErrInvalidArg, "must provide a command to execute")
 	}
@@ -735,7 +755,9 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 
 	args = append(args, "exec")
 
-	args = append(args, "--cwd", c.config.Spec.Process.Cwd)
+	if cwd != "" {
+		args = append(args, "--cwd", cwd)
+	}
 
 	args = append(args, "--pid-file", c.execPidPath(sessionID))
 
@@ -847,6 +869,7 @@ func (r *OCIRuntime) execStopContainer(ctr *Container, timeout uint) error {
 
 // checkpointContainer checkpoints the given container
 func (r *OCIRuntime) checkpointContainer(ctr *Container, options ContainerCheckpointOptions) error {
+	label.SetSocketLabel(ctr.ProcessLabel())
 	// imagePath is used by CRIU to store the actual checkpoint files
 	imagePath := ctr.CheckpointPath()
 	// workPath will be used to store dump.log and stats-dump
@@ -861,6 +884,9 @@ func (r *OCIRuntime) checkpointContainer(ctr *Container, options ContainerCheckp
 	args = append(args, workPath)
 	if options.KeepRunning {
 		args = append(args, "--leave-running")
+	}
+	if options.TCPEstablished {
+		args = append(args, "--tcp-established")
 	}
 	args = append(args, ctr.ID())
 	return utils.ExecCmdWithStdStreams(os.Stdin, os.Stdout, os.Stderr, nil, r.path, args...)

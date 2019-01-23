@@ -9,7 +9,7 @@ import (
 	dockerarchive "github.com/containers/image/docker/archive"
 	"github.com/containers/image/transports/alltransports"
 	"github.com/containers/image/types"
-	"github.com/containers/libpod/cmd/podman/libpodruntime"
+	"github.com/containers/libpod/libpod/adapter"
 	image2 "github.com/containers/libpod/libpod/image"
 	"github.com/containers/libpod/pkg/util"
 	"github.com/pkg/errors"
@@ -64,8 +64,7 @@ specified, the image with the 'latest' tag (if it exists) is pulled
 // pullCmd gets the data from the command line and calls pullImage
 // to copy an image from a registry to a local machine
 func pullCmd(c *cli.Context) error {
-	forceSecure := false
-	runtime, err := libpodruntime.GetRuntime(c)
+	runtime, err := adapter.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
@@ -104,12 +103,11 @@ func pullCmd(c *cli.Context) error {
 	}
 
 	dockerRegistryOptions := image2.DockerRegistryOptions{
-		DockerRegistryCreds:         registryCreds,
-		DockerCertPath:              c.String("cert-dir"),
-		DockerInsecureSkipTLSVerify: !c.BoolT("tls-verify"),
+		DockerRegistryCreds: registryCreds,
+		DockerCertPath:      c.String("cert-dir"),
 	}
 	if c.IsSet("tls-verify") {
-		forceSecure = c.Bool("tls-verify")
+		dockerRegistryOptions.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!c.BoolT("tls-verify"))
 	}
 
 	// Possible for docker-archive to have multiple tags, so use LoadFromArchiveReference instead
@@ -118,14 +116,14 @@ func pullCmd(c *cli.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "error parsing %q", image)
 		}
-		newImage, err := runtime.ImageRuntime().LoadFromArchiveReference(getContext(), srcRef, c.String("signature-policy"), writer)
+		newImage, err := runtime.LoadFromArchiveReference(getContext(), srcRef, c.String("signature-policy"), writer)
 		if err != nil {
 			return errors.Wrapf(err, "error pulling image from %q", image)
 		}
 		imgID = newImage[0].ID()
 	} else {
 		authfile := getAuthFile(c.String("authfile"))
-		newImage, err := runtime.ImageRuntime().New(getContext(), image, c.String("signature-policy"), authfile, writer, &dockerRegistryOptions, image2.SigningOptions{}, true, forceSecure)
+		newImage, err := runtime.New(getContext(), image, c.String("signature-policy"), authfile, writer, &dockerRegistryOptions, image2.SigningOptions{}, true)
 		if err != nil {
 			return errors.Wrapf(err, "error pulling image %q", image)
 		}

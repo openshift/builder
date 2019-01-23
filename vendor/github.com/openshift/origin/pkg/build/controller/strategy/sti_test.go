@@ -58,7 +58,7 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 	}
 
 	build := mockSTIBuild()
-	actual, err := strategy.CreateBuildPod(build, true)
+	actual, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -111,10 +111,12 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 	// build-system-configmap
 	// certificate authorities
 	// container storage
-	if len(container.VolumeMounts) != 8 {
-		t.Fatalf("Expected 8 volumes in container, got %d %v", len(container.VolumeMounts), container.VolumeMounts)
+	// blobs cache
+	if len(container.VolumeMounts) != 9 {
+		t.Fatalf("Expected 9 volumes in container, got %d %v", len(container.VolumeMounts), container.VolumeMounts)
 	}
 	expectedMounts := []string{buildutil.BuildWorkDirMount,
+		buildutil.BuildBlobsMetaCache,
 		DockerPushSecretMountPath,
 		DockerPullSecretMountPath,
 		filepath.Join(SecretBuildSourceBaseMountPath, "secret"),
@@ -129,8 +131,8 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 		}
 	}
 	// build pod has an extra volume: the git clone source secret
-	if len(actual.Spec.Volumes) != 9 {
-		t.Fatalf("Expected 9 volumes in Build pod, got %d", len(actual.Spec.Volumes))
+	if len(actual.Spec.Volumes) != 10 {
+		t.Fatalf("Expected 10 volumes in Build pod, got %d", len(actual.Spec.Volumes))
 	}
 	if *actual.Spec.ActiveDeadlineSeconds != 60 {
 		t.Errorf("Expected ActiveDeadlineSeconds 60, got %d", *actual.Spec.ActiveDeadlineSeconds)
@@ -194,7 +196,7 @@ func TestS2IBuildLongName(t *testing.T) {
 	}
 	build := mockSTIBuild()
 	build.Name = strings.Repeat("a", validation.DNS1123LabelMaxLength*2)
-	pod, err := strategy.CreateBuildPod(build, true)
+	pod, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost)
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}

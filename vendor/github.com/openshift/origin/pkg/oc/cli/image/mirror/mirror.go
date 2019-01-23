@@ -6,8 +6,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/opencontainers/go-digest"
-
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema2"
@@ -16,6 +14,7 @@ import (
 
 	units "github.com/docker/go-units"
 	"github.com/golang/glog"
+	digest "github.com/opencontainers/go-digest"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/rest"
@@ -119,6 +118,7 @@ func NewCmdMirrorImage(name string, streams genericclioptions.IOStreams) *cobra.
 		Example: fmt.Sprintf(mirrorExample, name+" mirror"),
 		Run: func(c *cobra.Command, args []string) {
 			kcmdutil.CheckErr(o.Complete(c, args))
+			kcmdutil.CheckErr(o.Validate())
 			kcmdutil.CheckErr(o.Run())
 		},
 	}
@@ -187,6 +187,10 @@ func (o *MirrorImageOptions) Repository(ctx context.Context, context *registrycl
 	default:
 		return nil, fmt.Errorf("unrecognized destination type %s", t)
 	}
+}
+
+func (o *MirrorImageOptions) Validate() error {
+	return o.FilterOptions.Validate()
 }
 
 func (o *MirrorImageOptions) Run() error {
@@ -395,6 +399,7 @@ func (o *MirrorImageOptions) plan() (*plan, error) {
 							plan.AddError(retrieverError{src: src.ref, err: fmt.Errorf("unable to retrieve source image %s manifest %s: %v", src.ref, srcDigest, err)})
 							return
 						}
+						glog.V(5).Infof("Found manifest %s with type %T", srcDigest, srcManifest)
 
 						// filter or load manifest list as appropriate
 						originalSrcDigest := srcDigest
@@ -596,13 +601,13 @@ func copyBlob(ctx context.Context, plan *workPlan, c *repositoryBlobCopy, blob d
 			fmt.Fprintf(errOut, "warning: Layer size mismatch for %s: had %d, wrote %d\n", blob.Digest, blob.Size, n)
 		}
 		if _, err := w.Commit(ctx, blob); err != nil {
-			return err
+			return fmt.Errorf("failed to commit blob %s from %s to %s: %v", blob.Digest, c.location, c.toRef, err)
 		}
 		plan.BytesCopied(n)
 		return nil
 	}()
 	if err != nil {
-		return fmt.Errorf("failed to commit blob %s from %s to %s: %v", blob.Digest, c.location, c.toRef, err)
+		return err
 	}
 	return nil
 }
@@ -623,7 +628,7 @@ func copyManifestToTags(
 	for _, tag := range tags {
 		toDigest, err := imagemanifest.PutManifestInCompatibleSchema(ctx, srcManifest, tag, plan.to, ref, plan.toBlobs, nil)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("unable to push manifest to %s: %v", plan.toRef, err))
+			errs = append(errs, fmt.Errorf("unable to push manifest to %s:%s: %v", plan.toRef, tag, err))
 			continue
 		}
 		for _, desc := range srcManifest.References() {

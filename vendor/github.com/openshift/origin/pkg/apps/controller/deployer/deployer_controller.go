@@ -262,9 +262,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 		}
 
 	case appsv1.DeploymentStatusComplete:
-		if err := c.cleanupDeployerPods(deployment); err != nil {
-			return err
-		}
+		// preserve deployer pods on completed deployments
 	}
 
 	deploymentCopy := deployment.DeepCopy()
@@ -409,6 +407,7 @@ func (c *DeploymentController) makeDeployerPod(deployment *corev1.ReplicationCon
 			},
 			ActiveDeadlineSeconds: &maxDeploymentDurationSeconds,
 			DNSPolicy:             deployment.Spec.Template.Spec.DNSPolicy,
+			DNSConfig:             deployment.Spec.Template.Spec.DNSConfig,
 			ImagePullSecrets:      deployment.Spec.Template.Spec.ImagePullSecrets,
 			Tolerations:           deployment.Spec.Template.Spec.Tolerations,
 			// Setting the node selector on the deployer pod so that it is created

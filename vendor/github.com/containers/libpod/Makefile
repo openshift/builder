@@ -1,10 +1,11 @@
 GO ?= go
 DESTDIR ?= /
-EPOCH_TEST_COMMIT ?= 1b52843cfd2ae254a6e52c74e564730f1c875c4c
+EPOCH_TEST_COMMIT ?= 4406e1cfeed18fe89c0ad4e20a3c3b2f4b9ffcae
 HEAD ?= HEAD
 CHANGELOG_BASE ?= HEAD~
 CHANGELOG_TARGET ?= HEAD
 PROJECT := github.com/containers/libpod
+GIT_BASE_BRANCH ?= origin/master
 GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
 GIT_BRANCH_CLEAN ?= $(shell echo $(GIT_BRANCH) | sed -e "s/[^[:alnum:]]/-/g")
 LIBPOD_IMAGE ?= libpod_dev$(if $(GIT_BRANCH_CLEAN),:$(GIT_BRANCH_CLEAN))
@@ -24,8 +25,6 @@ ifneq (,$(findstring varlink,$(BUILDTAGS)))
 	PODMAN_VARLINK_DEPENDENCIES = cmd/podman/varlink/iopodman.go
 endif
 CONTAINER_RUNTIME := $(shell command -v podman 2> /dev/null || echo docker)
-
-HAS_PYTHON3 := $(shell command -v python3 2>/dev/null)
 
 BASHINSTALLDIR=${PREFIX}/share/bash-completion/completions
 OCIUMOUNTINSTALLDIR=$(PREFIX)/share/oci-umount/oci-umount.d
@@ -87,9 +86,6 @@ endif
 lint: .gopathok varlink_generate
 	@echo "checking lint"
 	@./.tool/lint
-	# Not ready
-	# @$(MAKE) -C contrib/python/podman lint
-	# @$(MAKE) -C contrib/python/pypodman lint
 
 gofmt:
 	find . -name '*.go' ! -path './vendor/*' -exec gofmt -s -w {} \+
@@ -108,7 +104,13 @@ test/goecho/goecho: .gopathok $(wildcard test/goecho/*.go)
 	$(GO) build -ldflags '$(LDFLAGS)' -o $@ $(PROJECT)/test/goecho
 
 podman: .gopathok $(PODMAN_VARLINK_DEPENDENCIES)
-	$(GO) build -i -ldflags '$(LDFLAGS_PODMAN)' -tags "$(BUILDTAGS)" -o bin/$@ $(PROJECT)/cmd/podman
+	$(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags "$(BUILDTAGS)" -o bin/$@ $(PROJECT)/cmd/podman
+
+podman-remote: .gopathok $(PODMAN_VARLINK_DEPENDENCIES)
+	$(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags "$(BUILDTAGS) remoteclient" -o bin/$@ $(PROJECT)/cmd/podman
+
+podman-remote-darwin: .gopathok $(PODMAN_VARLINK_DEPENDENCIES)
+	GOOS=darwin $(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags "remoteclient containers_image_openpgp exclude_graphdriver_devicemapper" -o bin/$@ $(PROJECT)/cmd/podman
 
 local-cross: $(CROSS_BUILD_TARGETS)
 
@@ -116,13 +118,7 @@ bin/podman.cross.%: .gopathok
 	TARGET="$*"; \
 	GOOS="$${TARGET%%.*}" \
 	GOARCH="$${TARGET##*.}" \
-	$(GO) build -i -ldflags '$(LDFLAGS_PODMAN)' -tags '$(BUILDTAGS_CROSS)' -o "$@" $(PROJECT)/cmd/podman
-
-python:
-ifdef HAS_PYTHON3
-	$(MAKE) -C contrib/python/podman python-podman
-	$(MAKE) -C contrib/python/pypodman python-pypodman
-endif
+	$(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags '$(BUILDTAGS_CROSS)' -o "$@" $(PROJECT)/cmd/podman
 
 clean:
 	rm -rf \
@@ -143,8 +139,6 @@ clean:
 		$(MANPAGES) ||:
 	find . -name \*~ -delete
 	find . -name \#\* -delete
-	$(MAKE) -C contrib/python/podman clean
-	$(MAKE) -C contrib/python/pypodman clean
 
 libpodimage:
 	${CONTAINER_RUNTIME} build -t ${LIBPOD_IMAGE} .
@@ -153,10 +147,10 @@ dbuild: libpodimage
 	${CONTAINER_RUNTIME} run --name=${LIBPOD_INSTANCE} --privileged -v ${PWD}:/go/src/${PROJECT} --rm ${LIBPOD_IMAGE} make all
 
 test: libpodimage
-	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all localunit localintegration
+	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all localunit install.catatonit localintegration
 
 integration: libpodimage
-	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all localintegration
+	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all install.catatonit localintegration
 
 integration.fedora:
 	DIST=Fedora sh .papr_prepare.sh
@@ -165,18 +159,22 @@ integration.centos:
 	DIST=CentOS sh .papr_prepare.sh
 
 shell: libpodimage
-	${CONTAINER_RUNTIME} run --tmpfs -e STORAGE_OPTIONS="--storage-driver=vfs" -e CGROUP_MANAGER=cgroupfs -e TESTFLAGS -e TRAVIS -it --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} sh
+	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e CGROUP_MANAGER=cgroupfs -e TESTFLAGS -e TRAVIS -it --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} sh
 
 testunit: libpodimage
 	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make localunit
 
 localunit: test/goecho/goecho varlink_generate
 	$(GO) test -tags "$(BUILDTAGS)" -cover $(PACKAGES)
+	$(MAKE) -C contrib/cirrus/packer test
 
 ginkgo:
 	ginkgo -v -tags "$(BUILDTAGS)" -cover -flakeAttempts 3 -progress -trace -noColor test/e2e/.
 
-localintegration: varlink_generate test-binaries clientintegration ginkgo
+ginkgo-remote:
+	ginkgo -v -tags "$(BUILDTAGS) remoteclient" -cover -flakeAttempts 3 -progress -trace -noColor test/e2e/.
+
+localintegration: varlink_generate test-binaries ginkgo ginkgo-remote
 
 localsystem: .install.ginkgo .install.gomega
 	ginkgo -v -noColor test/system/
@@ -184,16 +182,21 @@ localsystem: .install.ginkgo .install.gomega
 system.test-binary: .install.ginkgo .install.gomega
 	$(GO) test -c ./test/system
 
-clientintegration:
-	$(MAKE) -C contrib/python/podman integration
-	$(MAKE) -C contrib/python/pypodman integration
+perftest:
+	$ cd contrib/perftest;go build
+
+run-perftest: perftest
+	$ contrib/perftest/perftest
 
 vagrant-check:
 	BOX=$(BOX) sh ./vagrant.sh
 
-binaries: varlink_generate easyjson_generate podman
+binaries: varlink_generate podman podman-remote
 
-test-binaries: test/bin2img/bin2img test/copyimg/copyimg test/checkseccomp/checkseccomp test/goecho/goecho
+install.catatonit:
+	./hack/install_catatonit.sh
+
+test-binaries: test/bin2img/bin2img test/copyimg/copyimg test/checkseccomp/checkseccomp test/goecho/goecho install.catatonit
 
 MANPAGES_MD ?= $(wildcard docs/*.md pkg/*/docs/*.md)
 MANPAGES ?= $(MANPAGES_MD:%.md=%)
@@ -216,7 +219,7 @@ changelog:
 	$(shell cat $(TMPFILE) >> changelog.txt)
 	$(shell rm $(TMPFILE))
 
-install: .gopathok install.bin install.man install.cni install.systemd install.python
+install: .gopathok install.bin install.man install.cni install.systemd
 
 install.bin:
 	install ${SELINUXOPT} -d -m 755 $(BINDIR)
@@ -254,10 +257,6 @@ install.systemd:
 	install ${SELINUXOPT} -m 644 contrib/varlink/io.podman.service ${SYSTEMDDIR}/io.podman.service
 	install ${SELINUXOPT} -m 644 contrib/varlink/podman.conf ${TMPFILESDIR}/podman.conf
 
-install.python:
-	$(MAKE) DESTDIR=${DESTDIR} -C contrib/python/podman install
-	$(MAKE) DESTDIR=${DESTDIR} -C contrib/python/pypodman install
-
 uninstall:
 	for i in $(filter %.1,$(MANPAGES)); do \
 		rm -f $(MANDIR)/man1/$$(basename $${i}); \
@@ -265,8 +264,6 @@ uninstall:
 	for i in $(filter %.5,$(MANPAGES)); do \
 		rm -f $(MANDIR)/man5/$$(basename $${i}); \
 	done
-	$(MAKE) -C contrib/python/pypodman uninstall
-	$(MAKE) -C contrib/python/podman uninstall
 
 .PHONY: .gitvalidation
 .gitvalidation: .gopathok
@@ -274,7 +271,7 @@ uninstall:
 
 .PHONY: install.tools
 
-install.tools: .install.gitvalidation .install.gometalinter .install.md2man .install.easyjson .install.ginkgo .install.gomega
+install.tools: .install.gitvalidation .install.gometalinter .install.md2man .install.ginkgo .install.gomega
 
 .install.gomega: .gopathok
 	$(GO) get github.com/onsi/gomega/...
@@ -303,11 +300,6 @@ install.tools: .install.gitvalidation .install.gometalinter .install.md2man .ins
 		   $(GO) get -u github.com/cpuguy83/go-md2man; \
 	fi
 
-.install.easyjson: .gopathok
-	if [ ! -x "$(GOBIN)/easyffjson" ]; then \
-		  $(GO) get -u github.com/mailru/easyjson/...; \
-	fi
-
 .install.ostree: .gopathok
 	if ! pkg-config ostree-1 2> /dev/null ; then \
 		git clone https://github.com/ostreedev/ostree $(FIRST_GOPATH)/src/github.com/ostreedev/ostree ; \
@@ -318,16 +310,6 @@ install.tools: .install.gitvalidation .install.gometalinter .install.md2man .ins
 
 varlink_generate: .gopathok cmd/podman/varlink/iopodman.go
 varlink_api_generate: .gopathok API.md
-
-easyjson_generate: .gopathok libpod/container_easyjson.go libpod/pod_easyjson.go
-
-libpod/container_easyjson.go: libpod/container.go
-	rm -f libpod/container_easyjson.go
-	cd "$(GOPKGDIR)" && easyjson -build_tags "$(BUILDTAGS)" ./libpod/container.go
-
-libpod/pod_easyjson.go: libpod/pod.go
-	rm -f libpod/pod_easyjson.go
-	cd "$(GOPKGDIR)" && easyjson -build_tags "$(BUILDTAGS)" ./libpod/pod.go
 
 .PHONY: install.libseccomp.sudo
 install.libseccomp.sudo:
@@ -342,12 +324,23 @@ cmd/podman/varlink/iopodman.go: cmd/podman/varlink/io.podman.varlink
 API.md: cmd/podman/varlink/io.podman.varlink
 	$(GO) generate ./docs/...
 
-validate: gofmt .gitvalidation
+validate.completions: completions/bash/podman
+	. completions/bash/podman
+
+validate: gofmt .gitvalidation validate.completions
+
+build-all-new-commits:
+	# Validate that all the commits build on top of $(GIT_BASE_BRANCH)
+	git rebase $(GIT_BASE_BRANCH) -x make
+
+vendor:
+	vndr -whitelist "github.com/varlink/go"
 
 .PHONY: \
 	.gopathok \
 	binaries \
 	clean \
+	validate.completions \
 	default \
 	docs \
 	gofmt \
@@ -360,5 +353,4 @@ validate: gofmt .gitvalidation
 	changelog \
 	validate \
 	install.libseccomp.sudo \
-	python \
-	clientintegration
+	vendor

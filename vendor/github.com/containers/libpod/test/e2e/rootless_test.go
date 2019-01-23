@@ -1,3 +1,5 @@
+// +build !remoteclient
+
 package integration
 
 import (
@@ -7,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 
 	. "github.com/containers/libpod/test/utils"
@@ -56,6 +59,7 @@ var _ = Describe("Podman rootless", func() {
 		commands := []string{"help", "version"}
 		for _, v := range commands {
 			env := os.Environ()
+			env = append(env, "USER=foo")
 			cmd := podmanTest.PodmanAsUser([]string{v}, 1000, 1000, env)
 			cmd.WaitWithDefaultTimeout()
 			Expect(cmd.ExitCode()).To(Equal(0))
@@ -122,6 +126,7 @@ var _ = Describe("Podman rootless", func() {
 			env = append(env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", xdgRuntimeDir))
 			env = append(env, fmt.Sprintf("HOME=%s", home))
 			env = append(env, "PODMAN_ALLOW_SINGLE_ID_MAPPING_IN_USERNS=1")
+			env = append(env, "USER=foo")
 
 			cmd := rootlessTest.PodmanAsUser([]string{"pod", "create", "--infra=false"}, 1000, 1000, env)
 			cmd.WaitWithDefaultTimeout()
@@ -152,6 +157,7 @@ var _ = Describe("Podman rootless", func() {
 		env := os.Environ()
 		env = append(env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", xdgRuntimeDir))
 		env = append(env, fmt.Sprintf("HOME=%s", home))
+		env = append(env, "USER=foo")
 		cmd := podmanTest.PodmanAsUser([]string{"search", "docker.io/busybox"}, 1000, 1000, env)
 		cmd.WaitWithDefaultTimeout()
 		Expect(cmd.ExitCode()).To(Equal(0))
@@ -165,6 +171,7 @@ var _ = Describe("Podman rootless", func() {
 			env = append(env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", xdgRuntimeDir))
 			env = append(env, fmt.Sprintf("HOME=%s", home))
 			env = append(env, "PODMAN_ALLOW_SINGLE_ID_MAPPING_IN_USERNS=1")
+			env = append(env, "USER=foo")
 
 			allArgs := append([]string{"run"}, args...)
 			allArgs = append(allArgs, "--rootfs", mountPath, "echo", "hello")
@@ -180,6 +187,10 @@ var _ = Describe("Podman rootless", func() {
 			allArgs = append([]string{"run", "-d"}, args...)
 			allArgs = append(allArgs, "--security-opt", "seccomp=unconfined", "--rootfs", mountPath, "top")
 			cmd = rootlessTest.PodmanAsUser(allArgs, 1000, 1000, env)
+			cmd.WaitWithDefaultTimeout()
+			Expect(cmd.ExitCode()).To(Equal(0))
+
+			cmd = rootlessTest.PodmanAsUser([]string{"restart", "-l", "-t", "0"}, 1000, 1000, env)
 			cmd.WaitWithDefaultTimeout()
 			Expect(cmd.ExitCode()).To(Equal(0))
 
@@ -201,9 +212,13 @@ var _ = Describe("Podman rootless", func() {
 			cmd.WaitWithDefaultTimeout()
 			Expect(cmd.ExitCode()).To(Equal(0))
 
-			cmd = rootlessTest.PodmanAsUser([]string{"kill", "-l"}, 1000, 1000, env)
+			cmd = rootlessTest.PodmanAsUser([]string{"stop", "-l", "-t", "0"}, 1000, 1000, env)
 			cmd.WaitWithDefaultTimeout()
 			Expect(cmd.ExitCode()).To(Equal(0))
+
+			cmd = rootlessTest.PodmanAsUser([]string{"inspect", "-l", "--type", "container", "--format", "{{ .State.Status }}"}, 1000, 1000, env)
+			cmd.WaitWithDefaultTimeout()
+			Expect(cmd.LineInOutputContains("exited")).To(BeTrue())
 
 			cmd = rootlessTest.PodmanAsUser([]string{"start", "-l"}, 1000, 1000, env)
 			cmd.WaitWithDefaultTimeout()
@@ -217,6 +232,14 @@ var _ = Describe("Podman rootless", func() {
 			cmd.WaitWithDefaultTimeout()
 			Expect(cmd.ExitCode()).To(Equal(0))
 
+			if len(args) == 0 {
+				cmd = rootlessTest.PodmanAsUser([]string{"inspect", "-l"}, 1000, 1000, env)
+				cmd.WaitWithDefaultTimeout()
+				Expect(cmd.ExitCode()).To(Equal(0))
+				data := cmd.InspectContainerToJSON()
+				Expect(data[0].HostConfig.NetworkMode).To(ContainSubstring("slirp4netns"))
+			}
+
 			if !canUseExec {
 				Skip("ioctl(NS_GET_PARENT) not supported.")
 			}
@@ -225,6 +248,22 @@ var _ = Describe("Podman rootless", func() {
 			cmd.WaitWithDefaultTimeout()
 			Expect(cmd.ExitCode()).To(Equal(0))
 			Expect(cmd.LineInOutputContains("hello")).To(BeTrue())
+
+			cmd = rootlessTest.PodmanAsUser([]string{"ps", "-l", "-q"}, 1000, 1000, env)
+			cmd.WaitWithDefaultTimeout()
+			Expect(cmd.ExitCode()).To(Equal(0))
+			cid := cmd.OutputToString()
+
+			cmd = rootlessTest.PodmanAsUser([]string{"exec", "-l", "sh", "-c", "echo SeCreTMessage > /file"}, 1000, 1000, env)
+			cmd.WaitWithDefaultTimeout()
+			Expect(cmd.ExitCode()).To(Equal(0))
+
+			path := filepath.Join(home, "export.tar")
+			cmd = rootlessTest.PodmanAsUser([]string{"export", "-o", path, cid}, 1000, 1000, env)
+			cmd.WaitWithDefaultTimeout()
+			content, err := ioutil.ReadFile(path)
+			Expect(err).To(BeNil())
+			Expect(strings.Contains(string(content), "SeCreTMessage")).To(BeTrue())
 		}
 		runInRootlessContext(f)
 	}
@@ -235,6 +274,10 @@ var _ = Describe("Podman rootless", func() {
 
 	It("podman rootless rootfs --net host", func() {
 		runRootlessHelper([]string{"--net", "host"})
+	})
+
+	It("podman rootless rootfs --pid host", func() {
+		runRootlessHelper([]string{"--pid", "host"})
 	})
 
 	It("podman rootless rootfs --privileged", func() {

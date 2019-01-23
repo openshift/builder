@@ -1,3 +1,5 @@
+// +build !remoteclient
+
 package integration
 
 import (
@@ -126,5 +128,37 @@ var _ = Describe("Podman exec", func() {
 		session2.WaitWithDefaultTimeout()
 		Expect(session2.ExitCode()).To(Equal(0))
 		Expect(session2.OutputToString()).To(Equal(testUser))
+	})
+
+	It("podman exec simple working directory test", func() {
+		setup := podmanTest.RunTopContainer("test1")
+		setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+
+		session := podmanTest.Podman([]string{"exec", "-l", "--workdir", "/tmp", "pwd"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ := session.GrepString("/tmp")
+		Expect(match).Should(BeTrue())
+
+		session = podmanTest.Podman([]string{"exec", "-l", "-w", "/tmp", "pwd"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		match, _ = session.GrepString("/tmp")
+		Expect(match).Should(BeTrue())
+	})
+
+	It("podman exec missing working directory test", func() {
+		setup := podmanTest.RunTopContainer("test1")
+		setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+
+		session := podmanTest.Podman([]string{"exec", "-l", "--workdir", "/missing", "pwd"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(1))
+
+		session = podmanTest.Podman([]string{"exec", "-l", "-w", "/missing", "pwd"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(1))
 	})
 })

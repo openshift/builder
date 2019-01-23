@@ -33,10 +33,13 @@ type PodmanTestCommon interface {
 
 // PodmanTest struct for command line options
 type PodmanTest struct {
-	PodmanMakeOptions func(args []string) []string
-	PodmanBinary      string
-	ArtifactPath      string
-	TempDir           string
+	PodmanMakeOptions  func(args []string) []string
+	PodmanBinary       string
+	ArtifactPath       string
+	TempDir            string
+	RemoteTest         bool
+	RemotePodmanBinary string
+	VarlinkSession     *os.Process
 }
 
 // PodmanSession wraps the gexec.session so we can extend it
@@ -56,22 +59,25 @@ func (p *PodmanTest) MakeOptions(args []string) []string {
 	return p.PodmanMakeOptions(args)
 }
 
-// PodmanAsUser exec podman as user. uid and gid is set for credentials useage. env is used
+// PodmanAsUserBase exec podman as user. uid and gid is set for credentials useage. env is used
 // to record the env for debugging
-func (p *PodmanTest) PodmanAsUser(args []string, uid, gid uint32, env []string) *PodmanSession {
+func (p *PodmanTest) PodmanAsUserBase(args []string, uid, gid uint32, env []string) *PodmanSession {
 	var command *exec.Cmd
 	podmanOptions := p.MakeOptions(args)
-
+	podmanBinary := p.PodmanBinary
+	if p.RemoteTest {
+		podmanBinary = p.RemotePodmanBinary
+	}
 	if env == nil {
-		fmt.Printf("Running: %s %s\n", p.PodmanBinary, strings.Join(podmanOptions, " "))
+		fmt.Printf("Running: %s %s\n", podmanBinary, strings.Join(podmanOptions, " "))
 	} else {
-		fmt.Printf("Running: (env: %v) %s %s\n", env, p.PodmanBinary, strings.Join(podmanOptions, " "))
+		fmt.Printf("Running: (env: %v) %s %s\n", env, podmanBinary, strings.Join(podmanOptions, " "))
 	}
 	if uid != 0 || gid != 0 {
-		nsEnterOpts := append([]string{"--userspec", fmt.Sprintf("%d:%d", uid, gid), "/", p.PodmanBinary}, podmanOptions...)
+		nsEnterOpts := append([]string{"--userspec", fmt.Sprintf("%d:%d", uid, gid), "/", podmanBinary}, podmanOptions...)
 		command = exec.Command("chroot", nsEnterOpts...)
 	} else {
-		command = exec.Command(p.PodmanBinary, podmanOptions...)
+		command = exec.Command(podmanBinary, podmanOptions...)
 	}
 	if env != nil {
 		command.Env = env
@@ -86,7 +92,7 @@ func (p *PodmanTest) PodmanAsUser(args []string, uid, gid uint32, env []string) 
 
 // PodmanBase exec podman with default env.
 func (p *PodmanTest) PodmanBase(args []string) *PodmanSession {
-	return p.PodmanAsUser(args, 0, 0, nil)
+	return p.PodmanAsUserBase(args, 0, 0, nil)
 }
 
 // WaitForContainer waits on a started container
