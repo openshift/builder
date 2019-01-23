@@ -1,5 +1,5 @@
-hash: a2d41560bae11089032aaef05703c4451526a1d7286a2bf895d9504a8a45fa05
-updated: 2019-01-23T11:59:03.126688834-05:00
+hash: fc4bdcf9e701e79f94a66ddb152a73b4e4be3403aacd327b5c4e8d7e6ac5cf77
+updated: 2019-01-23T13:07:15.677984004-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -304,7 +304,7 @@ imports:
 - name: github.com/Nvveen/Gotty
   version: cd527374f1e5bff4938207604a14f2e38a9cf512
 - name: github.com/opencontainers/go-digest
-  version: a6d0ee40d4207ea02364bd3b9e8e77b9159ba1eb
+  version: c9281466c8b2f606084ac71339773efd177436e7
 - name: github.com/opencontainers/image-spec
   version: 372ad780f63454fbbbbcc7cf80e5b90245c13e13
   subpackages:
@@ -332,7 +332,7 @@ imports:
   - specerror
   - validate
 - name: github.com/opencontainers/selinux
-  version: db3c00219b23c525c4d24e7492d5fd36e2b4a3a5
+  version: 2d93b96e1a01b26e3378c49a974d11f6783ec185
   subpackages:
   - go-selinux
   - go-selinux/label

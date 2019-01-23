@@ -101,3 +101,6 @@ import:
   version: master
 - package: github.com/opencontainers/runtime-spec
   version: master
+# Pins for github.com/containers/image
+- package: github.com/opencontainers/go-digest
+  version: c9281466c8b2f606084ac71339773efd177436e7
