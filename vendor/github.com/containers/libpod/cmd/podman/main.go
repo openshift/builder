@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log/syslog"
 	"os"
 	"os/exec"
 	"runtime/pprof"
+	"sort"
 	"syscall"
 
 	"github.com/containers/libpod/libpod"
-	"github.com/containers/libpod/pkg/hooks"
 	_ "github.com/containers/libpod/pkg/hooks/0.1.0"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/libpod/version"
@@ -17,7 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	lsyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/urfave/cli"
-	"log/syslog"
 )
 
 // This is populated by the Makefile from the VERSION file
@@ -31,18 +31,43 @@ var cmdsNotRequiringRootless = map[string]bool{
 	"version": true,
 	"create":  true,
 	"exec":    true,
+	"export":  true,
 	// `info` must be executed in an user namespace.
 	// If this change, please also update libpod.refreshRootless()
 	"login":   true,
 	"logout":  true,
+	"mount":   true,
 	"kill":    true,
 	"pause":   true,
+	"restart": true,
 	"run":     true,
 	"unpause": true,
 	"search":  true,
 	"stats":   true,
 	"stop":    true,
 	"top":     true,
+}
+
+type commandSorted []cli.Command
+
+func (a commandSorted) Len() int      { return len(a) }
+func (a commandSorted) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+type commandSortedAlpha struct{ commandSorted }
+
+func (a commandSortedAlpha) Less(i, j int) bool {
+	return a.commandSorted[i].Name < a.commandSorted[j].Name
+}
+
+type flagSorted []cli.Flag
+
+func (a flagSorted) Len() int      { return len(a) }
+func (a flagSorted) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+type flagSortedAlpha struct{ flagSorted }
+
+func (a flagSortedAlpha) Less(i, j int) bool {
+	return a.flagSorted[i].GetName() < a.flagSorted[j].GetName()
 }
 
 func main() {
@@ -62,49 +87,20 @@ func main() {
 	app.Version = version.Version
 
 	app.Commands = []cli.Command{
-		attachCommand,
-		commitCommand,
 		containerCommand,
-		buildCommand,
-		createCommand,
-		diffCommand,
-		execCommand,
-		exportCommand,
 		historyCommand,
 		imageCommand,
 		imagesCommand,
-		importCommand,
 		infoCommand,
 		inspectCommand,
-		killCommand,
-		kubeCommand,
-		loadCommand,
-		loginCommand,
-		logoutCommand,
-		logsCommand,
-		mountCommand,
-		pauseCommand,
-		psCommand,
-		podCommand,
-		portCommand,
 		pullCommand,
-		pushCommand,
-		restartCommand,
-		rmCommand,
 		rmiCommand,
-		runCommand,
-		saveCommand,
-		searchCommand,
-		startCommand,
-		statsCommand,
-		stopCommand,
 		tagCommand,
-		topCommand,
-		umountCommand,
-		unpauseCommand,
 		versionCommand,
-		waitCommand,
 	}
+
+	app.Commands = append(app.Commands, getAppCommands()...)
+	sort.Sort(commandSortedAlpha{app.Commands})
 
 	if varlinkCommand != nil {
 		app.Commands = append(app.Commands, *varlinkCommand)
@@ -116,7 +112,7 @@ func main() {
 			os.Exit(1)
 		}
 		args := c.Args()
-		if args.Present() {
+		if args.Present() && rootless.IsRootless() {
 			if _, notRequireRootless := cmdsNotRequiringRootless[args.First()]; !notRequireRootless {
 				became, ret, err := rootless.BecomeRootInUserNS()
 				if err != nil {
@@ -144,18 +140,25 @@ func main() {
 			logrus.SetLevel(level)
 		}
 
-		// Only if not rootless, set rlimits for open files.
-		// We open numerous FDs for ports opened
-		if !rootless.IsRootless() {
-			rlimits := new(syscall.Rlimit)
-			rlimits.Cur = 1048576
-			rlimits.Max = 1048576
+		rlimits := new(syscall.Rlimit)
+		rlimits.Cur = 1048576
+		rlimits.Max = 1048576
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, rlimits); err != nil {
+			if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, rlimits); err != nil {
+				return errors.Wrapf(err, "error getting rlimits")
+			}
+			rlimits.Cur = rlimits.Max
 			if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, rlimits); err != nil {
 				return errors.Wrapf(err, "error setting new rlimits")
 			}
-		} else {
+		}
+
+		if rootless.IsRootless() {
 			logrus.Info("running as rootless")
 		}
+
+		// Be sure we can create directories with 0755 mode.
+		syscall.Umask(0022)
 
 		if logLevel == "debug" {
 			debug = true
@@ -181,41 +184,13 @@ func main() {
 	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:  "cgroup-manager",
-			Usage: "cgroup manager to use (cgroupfs or systemd, default systemd)",
-		},
-		cli.StringFlag{
-			Name:  "cni-config-dir",
-			Usage: "path of the configuration directory for CNI networks",
-		},
-		cli.StringFlag{
 			Name:   "config, c",
 			Usage:  "path of a libpod config file detailing container server configuration options",
 			Hidden: true,
 		},
 		cli.StringFlag{
-			Name:  "conmon",
-			Usage: "path of the conmon binary",
-		},
-		cli.StringFlag{
 			Name:  "cpu-profile",
 			Usage: "path for the cpu profiling results",
-		},
-		cli.StringFlag{
-			Name:   "default-mounts-file",
-			Usage:  "path to default mounts file",
-			Hidden: true,
-		},
-		cli.StringFlag{
-			Name:   "hooks-dir-path",
-			Usage:  "set the OCI hooks directory path",
-			Value:  hooks.DefaultDir,
-			Hidden: true,
-		},
-		cli.IntFlag{
-			Name:   "max-workers",
-			Usage:  "the maximum number of workers for parallel operations",
-			Hidden: true,
 		},
 		cli.StringFlag{
 			Name:  "log-level",
@@ -223,44 +198,18 @@ func main() {
 			Value: "error",
 		},
 		cli.StringFlag{
-			Name:  "namespace",
-			Usage: "set the libpod namespace, used to create separate views of the containers and pods on the system",
-			Value: "",
-		},
-		cli.StringFlag{
-			Name:  "root",
-			Usage: "path to the root directory in which data, including images, is stored",
-		},
-		cli.StringFlag{
 			Name:  "tmpdir",
 			Usage: "path to the tmp directory",
 		},
-		cli.StringFlag{
-			Name:  "runroot",
-			Usage: "path to the 'run directory' where all state information is stored",
-		},
-		cli.StringFlag{
-			Name:  "runtime",
-			Usage: "path to the OCI-compatible binary used to run containers, default is /usr/bin/runc",
-		},
-		cli.StringFlag{
-			Name:  "storage-driver, s",
-			Usage: "select which storage driver is used to manage storage of images and containers (default is overlay)",
-		},
-		cli.StringSliceFlag{
-			Name:  "storage-opt",
-			Usage: "used to pass an option to the storage driver",
-		},
-		cli.BoolFlag{
-			Name:  "syslog",
-			Usage: "output logging information to syslog as well as the console",
-		},
 	}
-	if _, err := os.Stat("/etc/containers/registries.conf"); err != nil {
-		if os.IsNotExist(err) {
-			logrus.Warn("unable to find /etc/containers/registries.conf. some podman (image shortnames) commands may be limited")
-		}
-	}
+
+	app.Flags = append(app.Flags, getMainAppFlags()...)
+	sort.Sort(flagSortedAlpha{app.Flags})
+
+	// Check if /etc/containers/registries.conf exists when running in
+	// in a local environment.
+	CheckForRegistries()
+
 	if err := app.Run(os.Args); err != nil {
 		if debug {
 			logrus.Errorf(err.Error())

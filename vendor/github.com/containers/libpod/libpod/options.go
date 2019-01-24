@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"syscall"
 
+	"github.com/containers/libpod/pkg/namespaces"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/cri-o/ocicni/pkg/ocicni"
@@ -28,19 +29,59 @@ func WithStorageConfig(config storage.StoreOptions) RuntimeOption {
 			return ErrRuntimeFinalized
 		}
 
-		rt.config.StorageConfig.RunRoot = config.RunRoot
-		rt.config.StorageConfig.GraphRoot = config.GraphRoot
-		rt.config.StorageConfig.GraphDriverName = config.GraphDriverName
-		rt.config.StaticDir = filepath.Join(config.GraphRoot, "libpod")
+		setField := false
 
-		rt.config.StorageConfig.GraphDriverOptions = make([]string, len(config.GraphDriverOptions))
-		copy(rt.config.StorageConfig.GraphDriverOptions, config.GraphDriverOptions)
+		if config.RunRoot != "" {
+			rt.config.StorageConfig.RunRoot = config.RunRoot
+			rt.configuredFrom.storageRunRootSet = true
+			setField = true
+		}
 
-		rt.config.StorageConfig.UIDMap = make([]idtools.IDMap, len(config.UIDMap))
-		copy(rt.config.StorageConfig.UIDMap, config.UIDMap)
+		if config.GraphRoot != "" {
+			rt.config.StorageConfig.GraphRoot = config.GraphRoot
+			rt.configuredFrom.storageGraphRootSet = true
 
-		rt.config.StorageConfig.GIDMap = make([]idtools.IDMap, len(config.GIDMap))
-		copy(rt.config.StorageConfig.GIDMap, config.GIDMap)
+			// Also set libpod static dir, so we are a subdirectory
+			// of the c/storage store by default
+			rt.config.StaticDir = filepath.Join(config.GraphRoot, "libpod")
+			rt.configuredFrom.libpodStaticDirSet = true
+
+			setField = true
+		}
+
+		if config.GraphDriverName != "" {
+			rt.config.StorageConfig.GraphDriverName = config.GraphDriverName
+			rt.configuredFrom.storageGraphDriverSet = true
+			setField = true
+		}
+
+		if config.GraphDriverOptions != nil {
+			rt.config.StorageConfig.GraphDriverOptions = make([]string, len(config.GraphDriverOptions))
+			copy(rt.config.StorageConfig.GraphDriverOptions, config.GraphDriverOptions)
+			setField = true
+		}
+
+		if config.UIDMap != nil {
+			rt.config.StorageConfig.UIDMap = make([]idtools.IDMap, len(config.UIDMap))
+			copy(rt.config.StorageConfig.UIDMap, config.UIDMap)
+		}
+
+		if config.GIDMap != nil {
+			rt.config.StorageConfig.GIDMap = make([]idtools.IDMap, len(config.GIDMap))
+			copy(rt.config.StorageConfig.GIDMap, config.GIDMap)
+		}
+
+		// If any one of runroot, graphroot, graphdrivername,
+		// or graphdriveroptions are set, then GraphRoot and RunRoot
+		// must be set
+		if setField {
+			if rt.config.StorageConfig.GraphRoot == "" {
+				rt.config.StorageConfig.GraphRoot = storage.DefaultStoreOptions.GraphRoot
+			}
+			if rt.config.StorageConfig.RunRoot == "" {
+				rt.config.StorageConfig.RunRoot = storage.DefaultStoreOptions.RunRoot
+			}
+		}
 
 		return nil
 	}
@@ -96,17 +137,17 @@ func WithStateType(storeType RuntimeStateStore) RuntimeOption {
 }
 
 // WithOCIRuntime specifies an OCI runtime to use for running containers.
-func WithOCIRuntime(runtimePath string) RuntimeOption {
+func WithOCIRuntime(runtime string) RuntimeOption {
 	return func(rt *Runtime) error {
 		if rt.valid {
 			return ErrRuntimeFinalized
 		}
 
-		if runtimePath == "" {
+		if runtime == "" {
 			return errors.Wrapf(ErrInvalidArg, "must provide a valid path")
 		}
 
-		rt.config.RuntimePath = []string{runtimePath}
+		rt.config.OCIRuntime = runtime
 
 		return nil
 	}
@@ -173,26 +214,26 @@ func WithStaticDir(dir string) RuntimeOption {
 		}
 
 		rt.config.StaticDir = dir
+		rt.configuredFrom.libpodStaticDirSet = true
 
 		return nil
 	}
 }
 
-// WithHooksDir sets the directory to look for OCI runtime hooks config.
-// Note we are not saving this in database, since this is really just for used
-// for testing.
-func WithHooksDir(hooksDir string) RuntimeOption {
+// WithHooksDir sets the directories to look for OCI runtime hook configuration.
+func WithHooksDir(hooksDirs ...string) RuntimeOption {
 	return func(rt *Runtime) error {
 		if rt.valid {
 			return ErrRuntimeFinalized
 		}
 
-		if hooksDir == "" {
-			return errors.Wrap(ErrInvalidArg, "empty-string hook directories are not supported")
+		for _, hooksDir := range hooksDirs {
+			if hooksDir == "" {
+				return errors.Wrap(ErrInvalidArg, "empty-string hook directories are not supported")
+			}
 		}
 
-		rt.config.HooksDir = []string{hooksDir}
-		rt.config.HooksDirNotExistFatal = true
+		rt.config.HooksDir = hooksDirs
 		return nil
 	}
 }
@@ -225,6 +266,7 @@ func WithTmpDir(dir string) RuntimeOption {
 		}
 
 		rt.config.TmpDir = dir
+		rt.configuredFrom.libpodTmpDirSet = true
 
 		return nil
 	}
@@ -299,6 +341,22 @@ func WithNamespace(ns string) RuntimeOption {
 		}
 
 		rt.config.Namespace = ns
+
+		return nil
+	}
+}
+
+// WithVolumePath sets the path under which all named volumes
+// should be created.
+// The path changes based on whethe rthe user is running as root
+// or not.
+func WithVolumePath(volPath string) RuntimeOption {
+	return func(rt *Runtime) error {
+		if rt.valid {
+			return ErrRuntimeFinalized
+		}
+
+		rt.config.VolumePath = volPath
 
 		return nil
 	}
@@ -817,7 +875,7 @@ func WithDependencyCtrs(ctrs []*Container) CtrCreateOption {
 // namespace with a minimal configuration.
 // An optional array of port mappings can be provided.
 // Conflicts with WithNetNSFrom().
-func WithNetNS(portMappings []ocicni.PortMapping, postConfigureNetNS bool, networks []string) CtrCreateOption {
+func WithNetNS(portMappings []ocicni.PortMapping, postConfigureNetNS bool, netmode string, networks []string) CtrCreateOption {
 	return func(ctr *Container) error {
 		if ctr.valid {
 			return ErrCtrFinalized
@@ -831,6 +889,7 @@ func WithNetNS(portMappings []ocicni.PortMapping, postConfigureNetNS bool, netwo
 		ctr.config.CreateNetNS = true
 		ctr.config.PortMappings = portMappings
 		ctr.config.Networks = networks
+		ctr.config.NetMode = namespaces.NetworkMode(netmode)
 
 		return nil
 	}
@@ -997,7 +1056,7 @@ func WithUserVolumes(volumes []string) CtrCreateOption {
 
 // WithLocalVolumes sets the built-in volumes of the container retrieved
 // from a container passed in to the --volumes-from flag.
-// This stores the built-in volume information in the ContainerConfig so we can
+// This stores the built-in volume information in the Config so we can
 // add them when creating the container.
 func WithLocalVolumes(volumes []string) CtrCreateOption {
 	return func(ctr *Container) error {
@@ -1096,6 +1155,70 @@ func withIsInfra() CtrCreateOption {
 		}
 
 		ctr.config.IsInfra = true
+
+		return nil
+	}
+}
+
+// Volume Creation Options
+
+// WithVolumeName sets the name of the volume.
+func WithVolumeName(name string) VolumeCreateOption {
+	return func(volume *Volume) error {
+		if volume.valid {
+			return ErrVolumeFinalized
+		}
+
+		// Check the name against a regex
+		if !nameRegex.MatchString(name) {
+			return errors.Wrapf(ErrInvalidArg, "name must match regex [a-zA-Z0-9_-]+")
+		}
+		volume.config.Name = name
+
+		return nil
+	}
+}
+
+// WithVolumeLabels sets the labels of the volume.
+func WithVolumeLabels(labels map[string]string) VolumeCreateOption {
+	return func(volume *Volume) error {
+		if volume.valid {
+			return ErrVolumeFinalized
+		}
+
+		volume.config.Labels = make(map[string]string)
+		for key, value := range labels {
+			volume.config.Labels[key] = value
+		}
+
+		return nil
+	}
+}
+
+// WithVolumeDriver sets the driver of the volume.
+func WithVolumeDriver(driver string) VolumeCreateOption {
+	return func(volume *Volume) error {
+		if volume.valid {
+			return ErrVolumeFinalized
+		}
+
+		volume.config.Driver = driver
+
+		return nil
+	}
+}
+
+// WithVolumeOptions sets the options of the volume.
+func WithVolumeOptions(options map[string]string) VolumeCreateOption {
+	return func(volume *Volume) error {
+		if volume.valid {
+			return ErrVolumeFinalized
+		}
+
+		volume.config.Options = make(map[string]string)
+		for key, value := range options {
+			volume.config.Options[key] = value
+		}
 
 		return nil
 	}

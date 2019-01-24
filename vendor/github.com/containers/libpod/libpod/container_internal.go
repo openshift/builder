@@ -3,7 +3,6 @@ package libpod
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -18,12 +17,12 @@ import (
 	"github.com/containers/libpod/pkg/ctime"
 	"github.com/containers/libpod/pkg/hooks"
 	"github.com/containers/libpod/pkg/hooks/exec"
-	"github.com/containers/libpod/pkg/lookup"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/chrootarchive"
 	"github.com/containers/storage/pkg/mount"
+	"github.com/opencontainers/runc/libcontainer/user"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/opencontainers/selinux/go-selinux/label"
@@ -273,6 +272,27 @@ func (c *Container) setupStorage(ctx context.Context) error {
 		},
 		LabelOpts: c.config.LabelOpts,
 	}
+	if c.config.Privileged {
+		privOpt := func(opt string) bool {
+			for _, privopt := range []string{"nodev", "nosuid", "noexec"} {
+				if opt == privopt {
+					return true
+				}
+			}
+			return false
+		}
+		defOptions, err := storage.GetDefaultMountOptions()
+		if err != nil {
+			return errors.Wrapf(err, "error getting default mount options")
+		}
+		var newOptions []string
+		for _, opt := range defOptions {
+			if !privOpt(opt) {
+				newOptions = append(newOptions, opt)
+			}
+		}
+		options.MountOpts = newOptions
+	}
 
 	if c.config.Rootfs == "" {
 		options.IDMappingOptions = c.config.IDMappings
@@ -368,7 +388,7 @@ func (c *Container) teardownStorage() error {
 // Reset resets state fields to default values
 // It is performed before a refresh and clears the state after a reboot
 // It does not save the results - assumes the database will do that for us
-func resetState(state *containerState) error {
+func resetState(state *ContainerState) error {
 	state.PID = 0
 	state.Mountpoint = ""
 	state.Mounted = false
@@ -380,7 +400,10 @@ func resetState(state *containerState) error {
 	return nil
 }
 
-// Refresh refreshes the container's state after a restart
+// Refresh refreshes the container's state after a restart.
+// Refresh cannot perform any operations that would lock another container.
+// We cannot guarantee any other container has a valid lock at the time it is
+// running.
 func (c *Container) refresh() error {
 	// Don't need a full sync, but we do need to update from the database to
 	// pick up potentially-missing container state
@@ -425,6 +448,13 @@ func (c *Container) refresh() error {
 	if c.state.UserNSRoot != "" {
 		c.state.DestinationRunDir = filepath.Join(c.state.UserNSRoot, "rundir")
 	}
+
+	// We need to pick up a new lock
+	lock, err := c.runtime.lockManager.RetrieveLock(c.config.LockID)
+	if err != nil {
+		return errors.Wrapf(err, "error acquiring lock for container %s", c.ID())
+	}
+	c.lock = lock
 
 	if err := c.save(); err != nil {
 		return errors.Wrapf(err, "error refreshing state for container %s", c.ID())
@@ -510,7 +540,7 @@ func (c *Container) isStopped() (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	return (c.state.State == ContainerStateStopped || c.state.State == ContainerStateExited), nil
+	return (c.state.State != ContainerStateRunning && c.state.State != ContainerStatePaused), nil
 }
 
 // save container state to the database
@@ -580,13 +610,17 @@ func (c *Container) checkDependenciesRunningLocked(depCtrs map[string]*Container
 }
 
 func (c *Container) completeNetworkSetup() error {
-	if !c.config.PostConfigureNetNS || c.NetworkDisabled() {
+	netDisabled, err := c.NetworkDisabled()
+	if err != nil {
+		return err
+	}
+	if !c.config.PostConfigureNetNS || netDisabled {
 		return nil
 	}
 	if err := c.syncContainer(); err != nil {
 		return err
 	}
-	if rootless.IsRootless() {
+	if c.config.NetMode == "slirp4netns" {
 		return c.runtime.setupRootlessNetNS(c)
 	}
 	return c.runtime.setupNetNS(c)
@@ -606,7 +640,7 @@ func (c *Container) init(ctx context.Context) error {
 	}
 
 	// With the spec complete, do an OCI create
-	if err := c.runtime.ociRuntime.createContainer(c, c.config.CgroupParent, false); err != nil {
+	if err := c.runtime.ociRuntime.createContainer(c, c.config.CgroupParent, nil); err != nil {
 		return err
 	}
 
@@ -723,6 +757,10 @@ func (c *Container) initAndStart(ctx context.Context) (err error) {
 
 // Internal, non-locking function to start a container
 func (c *Container) start() error {
+	if c.config.Spec.Process != nil {
+		logrus.Debugf("Starting container %s with command %v", c.ID(), c.config.Spec.Process.Args)
+	}
+
 	if err := c.runtime.ociRuntime.startContainer(c); err != nil {
 		return err
 	}
@@ -821,28 +859,22 @@ func (c *Container) mountStorage() (string, error) {
 		return c.state.Mountpoint, nil
 	}
 
-	if !rootless.IsRootless() {
-		// TODO: generalize this mount code so it will mount every mount in ctr.config.Mounts
-		mounted, err := mount.Mounted(c.config.ShmDir)
-		if err != nil {
-			return "", errors.Wrapf(err, "unable to determine if %q is mounted", c.config.ShmDir)
-		}
+	mounted, err := mount.Mounted(c.config.ShmDir)
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to determine if %q is mounted", c.config.ShmDir)
+	}
 
+	if !mounted && !MountExists(c.config.Spec.Mounts, "/dev/shm") {
+		shmOptions := fmt.Sprintf("mode=1777,size=%d", c.config.ShmSize)
+		if err := c.mountSHM(shmOptions); err != nil {
+			return "", err
+		}
 		if err := os.Chown(c.config.ShmDir, c.RootUID(), c.RootGID()); err != nil {
 			return "", errors.Wrapf(err, "failed to chown %s", c.config.ShmDir)
 		}
-
-		if !mounted {
-			shmOptions := fmt.Sprintf("mode=1777,size=%d", c.config.ShmSize)
-			if err := c.mountSHM(shmOptions); err != nil {
-				return "", err
-			}
-			if err := os.Chown(c.config.ShmDir, c.RootUID(), c.RootGID()); err != nil {
-				return "", errors.Wrapf(err, "failed to chown %s", c.config.ShmDir)
-			}
-		}
 	}
 
+	// TODO: generalize this mount code so it will mount every mount in ctr.config.Mounts
 	mountPoint := c.config.Rootfs
 	if mountPoint == "" {
 		mountPoint, err = c.mount()
@@ -1008,7 +1040,7 @@ func (c *Container) writeStringToRundir(destFile, output string) (string, error)
 	return filepath.Join(c.state.DestinationRunDir, destFile), nil
 }
 
-func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator) error {
+func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator, execUser *user.ExecUser) error {
 	var uid, gid int
 	mountPoint := c.state.Mountpoint
 	if !c.state.Mounted {
@@ -1024,28 +1056,24 @@ func (c *Container) addLocalVolumes(ctx context.Context, g *generate.Generator) 
 	}
 	// Add the built-in volumes of the container passed in to --volumes-from
 	for _, vol := range c.config.LocalVolumes {
-		if imageData.ContainerConfig.Volumes == nil {
-			imageData.ContainerConfig.Volumes = map[string]struct{}{
+		if imageData.Config.Volumes == nil {
+			imageData.Config.Volumes = map[string]struct{}{
 				vol: {},
 			}
 		} else {
-			imageData.ContainerConfig.Volumes[vol] = struct{}{}
+			imageData.Config.Volumes[vol] = struct{}{}
 		}
 	}
 
 	if c.config.User != "" {
-		if !c.state.Mounted {
-			return errors.Wrapf(ErrCtrStateInvalid, "container %s must be mounted in order to translate User field", c.ID())
-		}
-		execUser, err := lookup.GetUserGroupInfo(c.state.Mountpoint, c.config.User, nil)
-		if err != nil {
-			return err
+		if execUser == nil {
+			return errors.Wrapf(ErrInternal, "nil pointer passed to addLocalVolumes for execUser")
 		}
 		uid = execUser.Uid
 		gid = execUser.Gid
 	}
 
-	for k := range imageData.ContainerConfig.Volumes {
+	for k := range imageData.Config.Volumes {
 		mount := spec.Mount{
 			Destination: k,
 			Type:        "bind",
@@ -1152,11 +1180,8 @@ func (c *Container) saveSpec(spec *spec.Spec) error {
 	return nil
 }
 
+// Warning: precreate hooks may alter 'config' in place.
 func (c *Container) setupOCIHooks(ctx context.Context, config *spec.Spec) (extensionStageHooks map[string][]spec.Hook, err error) {
-	if len(c.runtime.config.HooksDir) == 0 {
-		return nil, nil
-	}
-
 	var locale string
 	var ok bool
 	for _, envVar := range []string{
@@ -1185,23 +1210,54 @@ func (c *Container) setupOCIHooks(ctx context.Context, config *spec.Spec) (exten
 	}
 
 	allHooks := make(map[string][]spec.Hook)
-	for _, hDir := range c.runtime.config.HooksDir {
-		manager, err := hooks.New(ctx, []string{hDir}, []string{"poststop"}, lang)
-		if err != nil {
-			if c.runtime.config.HooksDirNotExistFatal || !os.IsNotExist(err) {
-				return nil, err
-			}
-			logrus.Warnf("failed to load hooks: {}", err)
+	if c.runtime.config.HooksDir == nil {
+		if rootless.IsRootless() {
 			return nil, nil
 		}
-		hooks, err := manager.Hooks(config, c.Spec().Annotations, len(c.config.UserVolumes) > 0)
+		for _, hDir := range []string{hooks.DefaultDir, hooks.OverrideDir} {
+			manager, err := hooks.New(ctx, []string{hDir}, []string{"precreate", "poststop"}, lang)
+			if err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return nil, err
+			}
+			hooks, err := manager.Hooks(config, c.Spec().Annotations, len(c.config.UserVolumes) > 0)
+			if err != nil {
+				return nil, err
+			}
+			if len(hooks) > 0 || config.Hooks != nil {
+				logrus.Warnf("implicit hook directories are deprecated; set --hooks-dir=%q explicitly to continue to load hooks from this directory", hDir)
+			}
+			for i, hook := range hooks {
+				allHooks[i] = hook
+			}
+		}
+	} else {
+		manager, err := hooks.New(ctx, c.runtime.config.HooksDir, []string{"precreate", "poststop"}, lang)
+		if err != nil {
+			if os.IsNotExist(err) {
+				logrus.Warnf("Requested OCI hooks directory %q does not exist", c.runtime.config.HooksDir)
+				return nil, nil
+			}
+			return nil, err
+		}
+
+		allHooks, err = manager.Hooks(config, c.Spec().Annotations, len(c.config.UserVolumes) > 0)
 		if err != nil {
 			return nil, err
 		}
-		for i, hook := range hooks {
-			allHooks[i] = hook
-		}
 	}
+
+	hookErr, err := exec.RuntimeConfigFilter(ctx, allHooks["precreate"], config, exec.DefaultPostKillTimeout)
+	if err != nil {
+		logrus.Warnf("container %s: precreate hook: %v", c.ID(), err)
+		if hookErr != nil && hookErr != err {
+			logrus.Debugf("container %s: precreate hook (hook error): %v", c.ID(), hookErr)
+		}
+		return nil, err
+	}
+
 	return allHooks, nil
 }
 

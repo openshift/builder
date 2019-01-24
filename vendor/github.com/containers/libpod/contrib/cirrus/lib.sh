@@ -4,8 +4,21 @@
 # to be sourced by other scripts, not called directly.
 
 # Under some contexts these values are not set, make sure they are.
-USER="$(whoami)"
-HOME="$(getent passwd $USER | cut -d : -f 6)"
+export USER="$(whoami)"
+export HOME="$(getent passwd $USER | cut -d : -f 6)"
+
+# These are normally set by cirrus, but can't be for VMs setup by hack/get_ci_vm.sh
+# Pick some reasonable defaults
+ENVLIB=${ENVLIB:-.bash_profile}
+CIRRUS_WORKING_DIR="${CIRRUS_WORKING_DIR:-/var/tmp/go/src/github.com/containers/libpod}"
+GOSRC="${GOSRC:-$CIRRUS_WORKING_DIR}"
+SCRIPT_BASE=${SCRIPT_BASE:-./contrib/cirrus}
+PACKER_BASE=${PACKER_BASE:-./contrib/cirrus/packer}
+CIRRUS_BUILD_ID=${CIRRUS_BUILD_ID:-DEADBEEF}  # a human
+CIRRUS_BASE_SHA=${CIRRUS_BASE_SHA:-HEAD}
+CIRRUS_CHANGE_IN_REPO=${CIRRUS_CHANGE_IN_REPO:-FETCH_HEAD}
+TIMESTAMPS_FILEPATH="${TIMESTAMPS_FILEPATH:-/var/tmp/timestamps}"
+
 if ! [[ "$PATH" =~ "/usr/local/bin" ]]
 then
     export PATH="$PATH:/usr/local/bin"
@@ -73,6 +86,18 @@ PACKER_BUILDS $PACKER_BUILDS
     do
         [[ -z "$NAME" ]] || echo "export $NAME=\"$VALUE\""
     done
+    echo ""
+    echo "##### $(go version) #####"
+    echo ""
+}
+
+# Unset environment variables not needed for testing purposes
+clean_env() {
+    req_env_var "
+        UNSET_ENV_VARS $UNSET_ENV_VARS
+    "
+    echo "Unsetting $(echo $UNSET_ENV_VARS | wc -w) environment variables"
+    unset -v UNSET_ENV_VARS $UNSET_ENV_VARS || true  # don't fail on read-only
 }
 
 # Return a GCE image-name compatible string representation of distribution name
@@ -98,18 +123,27 @@ stub() {
 
 ircmsg() {
     req_env_var "
-        SCRIPT_BASE $SCRIPT_BASE
-        GOSRC $GOSRC
         CIRRUS_TASK_ID $CIRRUS_TASK_ID
         1 $1
     "
-    SCRIPT="$GOSRC/$SCRIPT_BASE/podbot.py"
+    # Sometimes setup_environment.sh didn't run
+    SCRIPT="$(dirname $0)/podbot.py"
     NICK="podbot_$CIRRUS_TASK_ID"
     NICK="${NICK:0:15}"  # Any longer will break things
     set +e
     $SCRIPT $NICK $1
     echo "Ignoring exit($?)"
     set -e
+}
+
+record_timestamp() {
+    set +x  # sometimes it's turned on
+    req_env_var "TIMESTAMPS_FILEPATH $TIMESTAMPS_FILEPATH"
+    echo "."  # cirrus webui strips blank-lines
+    STAMPMSG="The $1 time at the tone will be:"
+    echo -e "$STAMPMSG\t$(date --iso-8601=seconds)" | \
+        tee -a $TIMESTAMPS_FILEPATH
+    echo -e "BLEEEEEEEEEEP!\n."
 }
 
 # Run sudo in directory with GOPATH set
@@ -157,6 +191,19 @@ install_cni_plugins() {
     sudo cp bin/* /usr/libexec/cni
 }
 
+install_runc_from_git(){
+    wd=$(pwd)
+    DEST="$GOPATH/src/github.com/opencontainers/runc"
+    rm -rf "$DEST"
+    ooe.sh git clone https://github.com/opencontainers/runc.git "$DEST"
+    cd "$DEST"
+    ooe.sh git fetch origin --tags
+    ooe.sh git checkout -q "$RUNC_COMMIT"
+    ooe.sh make static BUILDTAGS="seccomp selinux"
+    sudo install -m 755 runc /usr/bin/runc
+    cd $wd
+}
+
 install_runc(){
     OS_RELEASE_ID=$(os_release_id)
     echo "Installing RunC from commit $RUNC_COMMIT"
@@ -179,14 +226,7 @@ install_runc(){
         cd "$GOPATH/src/github.com/containers/libpod"
         ooe.sh sudo make install.libseccomp.sudo
     fi
-    DEST="$GOPATH/src/github.com/opencontainers/runc"
-    rm -rf "$DEST"
-    ooe.sh git clone https://github.com/opencontainers/runc.git "$DEST"
-    cd "$DEST"
-    ooe.sh git fetch origin --tags
-    ooe.sh git checkout -q "$RUNC_COMMIT"
-    ooe.sh make static BUILDTAGS="seccomp selinux"
-    sudo install -m 755 runc /usr/bin/runc
+    install_runc_from_git
 }
 
 install_buildah() {
@@ -218,18 +258,46 @@ install_conmon(){
 }
 
 install_criu(){
+    OS_RELEASE_ID=$(os_release_id)
+    OS_RELEASE_VER=$(os_release_ver)
+    echo "Installing CRIU"
     echo "Installing CRIU from commit $CRIU_COMMIT"
+    echo "Platform is $OS_RELEASE_ID"
     req_env_var "
     CRIU_COMMIT $CRIU_COMMIT
     "
-    DEST="/tmp/criu"
-    rm -rf "$DEST"
-    ooe.sh git clone https://github.com/checkpoint-restore/criu.git "$DEST"
-    cd $DEST
-    ooe.sh git fetch origin --tags
-    ooe.sh git checkout -q "$CRIU_COMMIT"
-    ooe.sh make
-    sudo install -D -m 755  criu/criu /usr/sbin/
+
+    if [[ "$OS_RELEASE_ID" =~ "ubuntu" ]]; then
+        ooe.sh sudo -E add-apt-repository -y ppa:criu/ppa
+        ooe.sh sudo -E apt-get -qq -y update
+        ooe.sh sudo -E apt-get -qq -y install criu
+    elif [[ ( "$OS_RELEASE_ID" =~ "centos" || "$OS_RELEASE_ID" =~ "rhel" ) && "$OS_RELEASE_VER" =~ "7"* ]]; then
+        echo "Configuring Repositories for latest CRIU"
+        ooe.sh sudo tee /etc/yum.repos.d/adrian-criu-el7.repo <<EOF
+[adrian-criu-el7]
+name=Copr repo for criu-el7 owned by adrian
+baseurl=https://copr-be.cloud.fedoraproject.org/results/adrian/criu-el7/epel-7-$basearch/
+type=rpm-md
+skip_if_unavailable=True
+gpgcheck=1
+gpgkey=https://copr-be.cloud.fedoraproject.org/results/adrian/criu-el7/pubkey.gpg
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1
+EOF
+        ooe.sh sudo yum -y install criu
+    elif [[ "$OS_RELEASE_ID" =~ "fedora" ]]; then
+        echo "Using CRIU from distribution"
+    else
+        DEST="/tmp/criu"
+        rm -rf "$DEST"
+        ooe.sh git clone https://github.com/checkpoint-restore/criu.git "$DEST"
+        cd $DEST
+        ooe.sh git fetch origin --tags
+        ooe.sh git checkout -q "$CRIU_COMMIT"
+        ooe.sh make
+        sudo install -D -m 755  criu/criu /usr/sbin/
+    fi
 }
 
 # Runs in testing VM, not image building
@@ -263,21 +331,29 @@ install_varlink(){
 }
 
 _finalize(){
+    set +e  # Don't fail at the very end
+    set +e  # make errors non-fatal
     echo "Removing leftover giblets from cloud-init"
     cd /
     sudo rm -rf /var/lib/cloud/instance?
     sudo rm -rf /root/.ssh/*
     sudo rm -rf /home/*
+    sudo rm -rf /tmp/*
+    sudo rm -rf /tmp/.??*
+    sync
+    sudo fstrim -av
 }
 
 rh_finalize(){
+    set +e  # Don't fail at the very end
     # Allow root ssh-logins
     if [[ -r /etc/cloud/cloud.cfg ]]
     then
         sudo sed -re 's/^disable_root:.*/disable_root: 0/g' -i /etc/cloud/cloud.cfg
     fi
     echo "Resetting to fresh-state for usage as cloud-image."
-    sudo $(type -P dnf || type -P yum) clean all
+    PKG=$(type -P dnf || type -P yum || echo "")
+    [[ -z "$PKG" ]] || sudo $PKG clean all  # not on atomic
     sudo rm -rf /var/cache/{yum,dnf}
     sudo rm -f /etc/udev/rules.d/*-persistent-*.rules
     sudo touch /.unconfigured  # force firstboot to run
@@ -285,7 +361,35 @@ rh_finalize(){
 }
 
 ubuntu_finalize(){
+    set +e  # Don't fail at the very end
     echo "Resetting to fresh-state for usage as cloud-image."
     sudo rm -rf /var/cache/apt
     _finalize
+}
+
+rhel_exit_handler() {
+    set +ex
+    req_env_var "
+        GOPATH $GOPATH
+        RHSMCMD $RHSMCMD
+    "
+    cd /
+    sudo rm -rf "$RHSMCMD"
+    sudo rm -rf "$GOPATH"
+    sudo subscription-manager remove --all
+    sudo subscription-manager unregister
+    sudo subscription-manager clean
+}
+
+rhsm_enable() {
+    req_env_var "
+        RHSM_COMMAND $RHSM_COMMAND
+    "
+    export GOPATH="$(mktemp -d)"
+    export RHSMCMD="$(mktemp)"
+    trap "rhel_exit_handler" EXIT
+    # Avoid logging sensitive details
+    echo "$RHSM_COMMAND" > "$RHSMCMD"
+    ooe.sh sudo bash "$RHSMCMD"
+    sudo rm -rf "$RHSMCMD"
 }

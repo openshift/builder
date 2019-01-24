@@ -8,16 +8,26 @@
 | [podman-attach(1)](/docs/podman-attach.1.md)             | Attach to a running container                                             |[![...](/docs/play.png)](https://asciinema.org/a/XDlocUrHVETFECg4zlO9nBbLf)|
 | [podman-build(1)](/docs/podman-build.1.md)               | Build an image using instructions from Dockerfiles                        ||
 | [podman-commit(1)](/docs/podman-commit.1.md)             | Create new image based on the changed container                           ||
-| [podman-container(1)](/docs/podman-container.1.md)       | Manage Containers                    ||
+| [podman-container(1)](/docs/podman-container.1.md)       | Manage Containers                     				       ||
+| [podman-container-checkpoint(1)](/docs/podman-container-checkpoint.1.md) | Checkpoints one or more running containers                ||
 | [podman-container-cleanup(1)](/docs/podman-container-cleanup.1.md)       | Cleanup Container storage and networks                    ||
+| [podman-container-exists(1)](/docs/podman-container-exists.1.md)         | Check if an container exists in local storage	       ||
+| [podman-container-prune(1)](/docs/podman-container-prune.1.md)           | Remove all stopped containers                             ||
 | [podman-container-refresh(1)](/docs/podman-container-refresh.1.md)       | Refresh all containers state in database                  ||
+| [podman-container-restore(1)](/docs/podman-container-restore.1.md)       | Restores one or more running containers                   ||
+| [podman-container-runlabel(1)](/docs/podman-container-runlabel.1.md)     | Execute Image Label Method	     			       ||
 | [podman-cp(1)](/docs/podman-cp.1.md)                     | Instead of providing a `podman cp` command, the man page `podman-cp` describes how to use the `podman mount` command to have even more flexibility and functionality||
 | [podman-create(1)](/docs/podman-create.1.md)             | Create a new container                                                    ||
 | [podman-diff(1)](/docs/podman-diff.1.md)                 | Inspect changes on a container or image's filesystem                      |[![...](/docs/play.png)](https://asciinema.org/a/FXfWB9CKYFwYM4EfqW3NSZy1G)|
 | [podman-exec(1)](/docs/podman-exec.1.md)                 | Execute a command in a running container
 | [podman-export(1)](/docs/podman-export.1.md)             | Export container's filesystem contents as a tar archive                   |[![...](/docs/play.png)](https://asciinema.org/a/913lBIRAg5hK8asyIhhkQVLtV)|
+| [podman-generate(1)](/docs/podman-generate.1.md)         | Generate structured output based on Podman containers and pods | |
 | [podman-history(1)](/docs/podman-history.1.md)           | Shows the history of an image                                             |[![...](/docs/play.png)](https://asciinema.org/a/bCvUQJ6DkxInMELZdc5DinNSx)|
-| [podman-image(1)](/docs/podman-image.1.md)             | Manage Images||
+| [podman-image(1)](/docs/podman-image.1.md)               | Manage Images||
+| [podman-image-exists(1)](/docs/podman-image-exists.1.md) | Check if an image exists in local storage||
+| [podman-image-prune(1)](/docs/podman-image-prune.1.md)   | Remove all unused images||
+| [podman-image-sign(1)](/docs/podman-image-sign.1.md)     | Create a signature for an image||
+| [podman-image-trust(1)](/docs/podman-image-trust.1.md)   | Manage container registry image trust policy||
 | [podman-images(1)](/docs/podman-images.1.md)             | List images in local storage                                              |[![...](/docs/play.png)](https://asciinema.org/a/133649)|
 | [podman-import(1)](/docs/podman-import.1.md)             | Import a tarball and save it as a filesystem image                        ||
 | [podman-info(1)](/docs/podman-info.1.md)                 | Display system information                                                |[![...](/docs/play.png)](https://asciinema.org/a/yKbi5fQ89y5TJ8e1RfJd4ivTD)|
@@ -62,4 +72,9 @@
 | [podman-unpause(1)](/docs/podman-unpause.1.md)           | Unpause one or more running containers                                    |[![...](/docs/play.png)](https://asciinema.org/a/141292)|
 | [podman-varlink(1)](/docs/podman-varlink.1.md)           | Run the varlink backend                                           ||
 | [podman-version(1)](/docs/podman-version.1.md)           | Display the version information                                           |[![...](/docs/play.png)](https://asciinema.org/a/mfrn61pjZT9Fc8L4NbfdSqfgu)|
+| [podman-volume-create(1)](/docs/podman-volume-create.1.md) | Create a volume ||
+| [podman-volume-inspect(1)](/docs/podman-volume-inspect.1.md) | Get detailed information on one or more volumes ||
+| [podman-volume-ls(1)](/docs/podman-volume-ls.1.md)       | List all the available volumes ||
+| [podman-volume-rm(1)](/docs/podman-volume-rm.1.md)       | Remove one or more volumes ||
+| [podman-volume-prune(1)](/docs/podman-volume-prune.1.md) | Remove all unused volumes ||
 | [podman-wait(1)](/docs/podman-wait.1.md)                 | Wait on one or more containers to stop and print their exit codes  |[![...](/docs/play.png)](https://asciinema.org/a/QNPGKdjWuPgI96GcfkycQtah0)|

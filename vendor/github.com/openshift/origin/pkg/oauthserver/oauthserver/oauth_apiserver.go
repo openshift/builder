@@ -1,6 +1,7 @@
 package oauthserver
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"net/http"
@@ -21,8 +22,6 @@ import (
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 
-	"bytes"
-
 	legacyconfigv1 "github.com/openshift/api/legacyconfig/v1"
 	oauthv1 "github.com/openshift/api/oauth/v1"
 	osinv1 "github.com/openshift/api/osin/v1"
@@ -33,8 +32,11 @@ import (
 	"github.com/openshift/origin/pkg/cmd/server/apis/config/latest"
 	"github.com/openshift/origin/pkg/configconversion"
 	"github.com/openshift/origin/pkg/oauth/urls"
+	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/bootstrap"
+	"github.com/openshift/origin/pkg/oauthserver/config"
 	"github.com/openshift/origin/pkg/oauthserver/server/crypto"
 	"github.com/openshift/origin/pkg/oauthserver/server/session"
+	"github.com/openshift/origin/pkg/oauthserver/userregistry/identitymapper"
 )
 
 var (
@@ -42,38 +44,50 @@ var (
 	codecs = serializer.NewCodecFactory(scheme)
 )
 
-// TODO we need to switch the oauth server to an external type, but that can be done after we get our externally facing flag values fixed
-func NewOAuthServerConfig(oauthConfig osinv1.OAuthConfig, userClientConfig *rest.Config) (*OAuthServerConfig, error) {
-	legacyConfig := &legacyconfigv1.MasterConfig{}
-	legacyConfig.OAuthConfig = &legacyconfigv1.OAuthConfig{}
-	if err := configconversion.Convert_osinv1_OAuthConfig_to_legacyconfigv1_OAuthConfig(&oauthConfig, legacyConfig.OAuthConfig, nil); err != nil {
-		return nil, err
-	}
-	buf := &bytes.Buffer{}
-	if err := latest.Codec.Encode(legacyConfig, buf); err != nil {
-		return nil, err
-	}
-	internalConfig := &configapi.MasterConfig{}
-	if _, _, err := latest.Codec.Decode(buf.Bytes(), nil, internalConfig); err != nil {
-		return nil, err
-	}
-	return NewOAuthServerConfigFromInternal(*internalConfig.OAuthConfig, userClientConfig)
+func init() {
+	utilruntime.Must(osinv1.Install(scheme))
 }
 
+// TODO we need to switch the oauth server to an external type, but that can be done after we get our externally facing flag values fixed
+// TODO remaining bits involve the session file, LDAP util code, validation, ...
 func NewOAuthServerConfigFromInternal(oauthConfig configapi.OAuthConfig, userClientConfig *rest.Config) (*OAuthServerConfig, error) {
-	genericConfig := genericapiserver.NewRecommendedConfig(codecs)
-	genericConfig.LoopbackClientConfig = userClientConfig
+	osinConfig, err := internalOAuthConfigToExternal(oauthConfig)
+	if err != nil {
+		return nil, err
+	}
+	return NewOAuthServerConfig(*osinConfig, userClientConfig)
+}
 
-	var sessionAuth *session.Authenticator
-	if oauthConfig.SessionConfig != nil {
-		// TODO we really need to enforce HTTPS always
-		secure := isHTTPS(oauthConfig.MasterPublicURL)
-		auth, err := buildSessionAuth(secure, oauthConfig.SessionConfig)
+func internalOAuthConfigToExternal(oauthConfig configapi.OAuthConfig) (*osinv1.OAuthConfig, error) {
+	buf := &bytes.Buffer{}
+	internalConfig := &configapi.MasterConfig{OAuthConfig: &oauthConfig}
+	if err := latest.Codec.Encode(internalConfig, buf); err != nil {
+		return nil, err
+	}
+	legacyConfig := &legacyconfigv1.MasterConfig{}
+	if _, _, err := latest.Codec.Decode(buf.Bytes(), nil, legacyConfig); err != nil {
+		return nil, err
+	}
+	return configconversion.ToOAuthConfig(legacyConfig.OAuthConfig)
+}
+
+func NewOAuthServerConfig(oauthConfig osinv1.OAuthConfig, userClientConfig *rest.Config) (*OAuthServerConfig, error) {
+	// TODO: there is probably some better way to do this
+	decoder := codecs.UniversalDecoder(osinv1.GroupVersion)
+	for i, idp := range oauthConfig.IdentityProviders {
+		if idp.Provider.Object != nil {
+			// depending on how you get here, the IDP objects may or may not be filled out
+			break
+		}
+		idpObject, err := runtime.Decode(decoder, idp.Provider.Raw)
 		if err != nil {
 			return nil, err
 		}
-		sessionAuth = auth
+		oauthConfig.IdentityProviders[i].Provider.Object = idpObject
 	}
+
+	genericConfig := genericapiserver.NewRecommendedConfig(codecs)
+	genericConfig.LoopbackClientConfig = userClientConfig
 
 	userClient, err := userclient.NewForConfig(userClientConfig)
 	if err != nil {
@@ -87,20 +101,63 @@ func NewOAuthServerConfigFromInternal(oauthConfig configapi.OAuthConfig, userCli
 	if err != nil {
 		return nil, err
 	}
+	routeClient, err := routeclient.NewForConfig(userClientConfig)
+	if err != nil {
+		return nil, err
+	}
+	kubeClient, err := kclientset.NewForConfig(userClientConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	bootstrapUserDataGetter := bootstrap.NewBootstrapUserDataGetter(kubeClient.CoreV1(), kubeClient.CoreV1())
+
+	var sessionAuth session.SessionAuthenticator
+	if oauthConfig.SessionConfig != nil {
+		// TODO we really need to enforce HTTPS always
+		secure := isHTTPS(oauthConfig.MasterPublicURL)
+		auth, err := buildSessionAuth(secure, oauthConfig.SessionConfig, bootstrapUserDataGetter)
+		if err != nil {
+			return nil, err
+		}
+		sessionAuth = auth
+
+		// session capability is the only thing required to enable the bootstrap IDP
+		// we dynamically enable or disable its UI based on the backing secret
+		// this must be the first IDP to make sure that it can handle basic auth challenges first
+		// this mostly avoids weird cases with the allow all IDP
+		oauthConfig.IdentityProviders = append(
+			[]osinv1.IdentityProvider{
+				{
+					Name:            bootstrap.BootstrapUser, // will never conflict with other IDPs due to the :
+					UseAsChallenger: true,
+					UseAsLogin:      true,
+					MappingMethod:   string(identitymapper.MappingMethodClaim), // irrelevant, but needs to be valid
+					Provider: runtime.RawExtension{
+						Object: &config.BootstrapIdentityProvider{},
+					},
+				},
+			},
+			oauthConfig.IdentityProviders...,
+		)
+	}
 
 	ret := &OAuthServerConfig{
 		GenericConfig: genericConfig,
 		ExtraOAuthConfig: ExtraOAuthConfig{
 			Options:                        oauthConfig,
-			SessionAuth:                    sessionAuth,
+			KubeClient:                     kubeClient,
 			EventsClient:                   eventsClient.Events(""),
-			IdentityClient:                 userClient.Identities(),
+			RouteClient:                    routeClient,
 			UserClient:                     userClient.Users(),
+			IdentityClient:                 userClient.Identities(),
 			UserIdentityMappingClient:      userClient.UserIdentityMappings(),
 			OAuthAccessTokenClient:         oauthClient.OAuthAccessTokens(),
 			OAuthAuthorizeTokenClient:      oauthClient.OAuthAuthorizeTokens(),
 			OAuthClientClient:              oauthClient.OAuthClients(),
 			OAuthClientAuthorizationClient: oauthClient.OAuthClientAuthorizations(),
+			SessionAuth:                    sessionAuth,
+			BootstrapUserDataGetter:        bootstrapUserDataGetter,
 		},
 	}
 	genericConfig.BuildHandlerChainFunc = ret.buildHandlerChainForOAuth
@@ -108,13 +165,14 @@ func NewOAuthServerConfigFromInternal(oauthConfig configapi.OAuthConfig, userCli
 	return ret, nil
 }
 
-func buildSessionAuth(secure bool, config *configapi.SessionConfig) (*session.Authenticator, error) {
+func buildSessionAuth(secure bool, config *osinv1.SessionConfig, getter bootstrap.BootstrapUserDataGetter) (session.SessionAuthenticator, error) {
 	secrets, err := getSessionSecrets(config.SessionSecretsFile)
 	if err != nil {
 		return nil, err
 	}
 	sessionStore := session.NewStore(config.SessionName, secure, secrets...)
-	return session.NewAuthenticator(sessionStore, time.Duration(config.SessionMaxAgeSeconds)*time.Second), nil
+	sessionAuthenticator := session.NewAuthenticator(sessionStore, time.Duration(config.SessionMaxAgeSeconds)*time.Second)
+	return session.NewBootstrapAuthenticator(sessionAuthenticator, getter, sessionStore), nil
 }
 
 func getSessionSecrets(filename string) ([][]byte, error) {
@@ -156,7 +214,7 @@ func isHTTPS(u string) bool {
 }
 
 type ExtraOAuthConfig struct {
-	Options configapi.OAuthConfig
+	Options osinv1.OAuthConfig
 
 	// AssetPublicAddresses contains valid redirectURI prefixes to direct browsers to the web console
 	AssetPublicAddresses []string
@@ -179,7 +237,9 @@ type ExtraOAuthConfig struct {
 	OAuthClientClient              oauthclient.OAuthClientInterface
 	OAuthClientAuthorizationClient oauthclient.OAuthClientAuthorizationInterface
 
-	SessionAuth *session.Authenticator
+	SessionAuth session.SessionAuthenticator
+
+	BootstrapUserDataGetter bootstrap.BootstrapUserDataGetter
 }
 
 type OAuthServerConfig struct {
@@ -253,7 +313,8 @@ func (c *OAuthServerConfig) buildHandlerChainForOAuth(startingHandler http.Handl
 func (c *OAuthServerConfig) StartOAuthClientsBootstrapping(context genericapiserver.PostStartHookContext) error {
 	// the TODO above still applies, but this makes it possible for this poststarthook to do its job with a split kubeapiserver and not run forever
 	go func() {
-		wait.PollUntil(1*time.Second, func() (done bool, err error) {
+		// error is guaranteed to be nil
+		_ = wait.PollUntil(1*time.Second, func() (done bool, err error) {
 			webConsoleClient := oauthv1.OAuthClient{
 				ObjectMeta:            metav1.ObjectMeta{Name: openShiftWebConsoleClientID},
 				Secret:                "",

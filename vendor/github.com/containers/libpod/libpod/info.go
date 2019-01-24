@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/containers/buildah"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -12,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containers/buildah"
 	"github.com/containers/libpod/pkg/rootless"
+	"github.com/containers/libpod/pkg/util"
 	"github.com/containers/libpod/utils"
 	"github.com/containers/storage/pkg/system"
 	"github.com/pkg/errors"
@@ -115,6 +116,7 @@ func (r *Runtime) hostInfo() (map[string]interface{}, error) {
 func (r *Runtime) storeInfo() (map[string]interface{}, error) {
 	// lets say storage driver in use, number of images, number of containers
 	info := map[string]interface{}{}
+	info["ConfigFile"] = util.StorageConfigFile()
 	info["GraphRoot"] = r.store.GraphRoot()
 	info["RunRoot"] = r.store.RunRoot()
 	info["GraphDriverName"] = r.store.GraphDriverName()
@@ -180,9 +182,14 @@ func (r *Runtime) GetConmonVersion() (string, error) {
 	return strings.TrimSuffix(strings.Replace(output, "\n", ", ", 1), "\n"), nil
 }
 
+// GetOCIRuntimePath returns the path to the OCI Runtime Path the runtime is using
+func (r *Runtime) GetOCIRuntimePath() string {
+	return r.ociRuntimePath.Paths[0]
+}
+
 // GetOCIRuntimeVersion returns a string representation of the oci runtimes version
 func (r *Runtime) GetOCIRuntimeVersion() (string, error) {
-	output, err := utils.ExecCmd(r.ociRuntimePath, "--version")
+	output, err := utils.ExecCmd(r.ociRuntimePath.Paths[0], "--version")
 	if err != nil {
 		return "", err
 	}

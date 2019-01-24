@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -155,40 +154,6 @@ func ParseIDMapping(UIDMapSlice, GIDMapSlice []string, subUIDMap, subGIDMap stri
 		GIDMapSlice = []string{fmt.Sprintf("0:%d:1", os.Getgid())}
 	}
 
-	parseTriple := func(spec []string) (container, host, size int, err error) {
-		cid, err := strconv.ParseUint(spec[0], 10, 32)
-		if err != nil {
-			return 0, 0, 0, fmt.Errorf("error parsing id map value %q: %v", spec[0], err)
-		}
-		hid, err := strconv.ParseUint(spec[1], 10, 32)
-		if err != nil {
-			return 0, 0, 0, fmt.Errorf("error parsing id map value %q: %v", spec[1], err)
-		}
-		sz, err := strconv.ParseUint(spec[2], 10, 32)
-		if err != nil {
-			return 0, 0, 0, fmt.Errorf("error parsing id map value %q: %v", spec[2], err)
-		}
-		return int(cid), int(hid), int(sz), nil
-	}
-	parseIDMap := func(spec []string) (idmap []idtools.IDMap, err error) {
-		for _, uid := range spec {
-			splitmap := strings.SplitN(uid, ":", 3)
-			if len(splitmap) < 3 {
-				return nil, fmt.Errorf("invalid mapping requires 3 fields: %q", uid)
-			}
-			cid, hid, size, err := parseTriple(splitmap)
-			if err != nil {
-				return nil, err
-			}
-			pmap := idtools.IDMap{
-				ContainerID: cid,
-				HostID:      hid,
-				Size:        size,
-			}
-			idmap = append(idmap, pmap)
-		}
-		return idmap, nil
-	}
 	if subUIDMap != "" && subGIDMap != "" {
 		mappings, err := idtools.NewIDMappings(subUIDMap, subGIDMap)
 		if err != nil {
@@ -197,11 +162,11 @@ func ParseIDMapping(UIDMapSlice, GIDMapSlice []string, subUIDMap, subGIDMap stri
 		options.UIDMap = mappings.UIDs()
 		options.GIDMap = mappings.GIDs()
 	}
-	parsedUIDMap, err := parseIDMap(UIDMapSlice)
+	parsedUIDMap, err := idtools.ParseIDMap(UIDMapSlice, "UID")
 	if err != nil {
 		return nil, err
 	}
-	parsedGIDMap, err := parseIDMap(GIDMapSlice)
+	parsedGIDMap, err := idtools.ParseIDMap(GIDMapSlice, "GID")
 	if err != nil {
 		return nil, err
 	}
@@ -250,30 +215,40 @@ func GetRootlessRuntimeDir() (string, error) {
 	return runtimeDir, nil
 }
 
-// GetRootlessStorageOpts returns the storage ops for containers running as non root
-func GetRootlessStorageOpts() (storage.StoreOptions, error) {
-	var opts storage.StoreOptions
-
+// GetRootlessDirInfo returns the parent path of where the storage for containers and
+// volumes will be in rootless mode
+func GetRootlessDirInfo() (string, string, error) {
 	rootlessRuntime, err := GetRootlessRuntimeDir()
 	if err != nil {
-		return opts, err
+		return "", "", err
 	}
-	opts.RunRoot = rootlessRuntime
 
 	dataDir := os.Getenv("XDG_DATA_HOME")
 	if dataDir == "" {
 		home := os.Getenv("HOME")
 		if home == "" {
-			return opts, fmt.Errorf("neither XDG_DATA_HOME nor HOME was set non-empty")
+			return "", "", fmt.Errorf("neither XDG_DATA_HOME nor HOME was set non-empty")
 		}
 		// runc doesn't like symlinks in the rootfs path, and at least
 		// on CoreOS /home is a symlink to /var/home, so resolve any symlink.
 		resolvedHome, err := filepath.EvalSymlinks(home)
 		if err != nil {
-			return opts, errors.Wrapf(err, "cannot resolve %s", home)
+			return "", "", errors.Wrapf(err, "cannot resolve %s", home)
 		}
 		dataDir = filepath.Join(resolvedHome, ".local", "share")
 	}
+	return dataDir, rootlessRuntime, nil
+}
+
+// GetRootlessStorageOpts returns the storage opts for containers running as non root
+func GetRootlessStorageOpts() (storage.StoreOptions, error) {
+	var opts storage.StoreOptions
+
+	dataDir, rootlessRuntime, err := GetRootlessDirInfo()
+	if err != nil {
+		return opts, err
+	}
+	opts.RunRoot = rootlessRuntime
 	opts.GraphRoot = filepath.Join(dataDir, "containers", "storage")
 	if path, err := exec.LookPath("fuse-overlayfs"); err == nil {
 		opts.GraphDriverName = "overlay"
@@ -284,32 +259,99 @@ func GetRootlessStorageOpts() (storage.StoreOptions, error) {
 	return opts, nil
 }
 
-// GetDefaultStoreOptions returns the storage ops for containers
-func GetDefaultStoreOptions() (storage.StoreOptions, error) {
+// GetRootlessVolumeInfo returns where all the name volumes will be created in rootless mode
+func GetRootlessVolumeInfo() (string, error) {
+	dataDir, _, err := GetRootlessDirInfo()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dataDir, "containers", "storage", "volumes"), nil
+}
+
+type tomlOptionsConfig struct {
+	MountProgram string `toml:"mount_program"`
+}
+
+type tomlConfig struct {
+	Storage struct {
+		Driver    string                      `toml:"driver"`
+		RunRoot   string                      `toml:"runroot"`
+		GraphRoot string                      `toml:"graphroot"`
+		Options   struct{ tomlOptionsConfig } `toml:"options"`
+	} `toml:"storage"`
+}
+
+func getTomlStorage(storeOptions *storage.StoreOptions) *tomlConfig {
+	config := new(tomlConfig)
+
+	config.Storage.Driver = storeOptions.GraphDriverName
+	config.Storage.RunRoot = storeOptions.RunRoot
+	config.Storage.GraphRoot = storeOptions.GraphRoot
+	for _, i := range storeOptions.GraphDriverOptions {
+		s := strings.Split(i, "=")
+		if s[0] == "overlay.mount_program" {
+			config.Storage.Options.MountProgram = s[1]
+		}
+	}
+
+	return config
+}
+
+// GetDefaultStoreOptions returns the storage ops for containers and the volume path
+// for the volume API
+// It also returns the path where all named volumes will be created using the volume API
+func GetDefaultStoreOptions() (storage.StoreOptions, string, error) {
 	storageOpts := storage.DefaultStoreOptions
+	volumePath := "/var/lib/containers/storage"
 	if rootless.IsRootless() {
 		var err error
 		storageOpts, err = GetRootlessStorageOpts()
 		if err != nil {
-			return storageOpts, err
+			return storageOpts, volumePath, err
+		}
+		volumePath, err = GetRootlessVolumeInfo()
+		if err != nil {
+			return storageOpts, volumePath, err
 		}
 
-		storageConf := filepath.Join(os.Getenv("HOME"), ".config/containers/storage.conf")
+		storageConf := StorageConfigFile()
 		if _, err := os.Stat(storageConf); err == nil {
+			defaultRootlessRunRoot := storageOpts.RunRoot
+			defaultRootlessGraphRoot := storageOpts.GraphRoot
+			storageOpts = storage.StoreOptions{}
 			storage.ReloadConfigurationFile(storageConf, &storageOpts)
+
+			// If the file did not specify a graphroot or runroot,
+			// set sane defaults so we don't try and use root-owned
+			// directories
+			if storageOpts.RunRoot == "" {
+				storageOpts.RunRoot = defaultRootlessRunRoot
+			}
+			if storageOpts.GraphRoot == "" {
+				storageOpts.GraphRoot = defaultRootlessGraphRoot
+			}
 		} else if os.IsNotExist(err) {
 			os.MkdirAll(filepath.Dir(storageConf), 0755)
 			file, err := os.OpenFile(storageConf, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 			if err != nil {
-				return storageOpts, errors.Wrapf(err, "cannot open %s", storageConf)
+				return storageOpts, volumePath, errors.Wrapf(err, "cannot open %s", storageConf)
 			}
 
+			tomlConfiguration := getTomlStorage(&storageOpts)
 			defer file.Close()
 			enc := toml.NewEncoder(file)
-			if err := enc.Encode(storageOpts); err != nil {
+			if err := enc.Encode(tomlConfiguration); err != nil {
 				os.Remove(storageConf)
 			}
 		}
 	}
-	return storageOpts, nil
+	return storageOpts, volumePath, nil
+}
+
+// StorageConfigFile returns the path to the storage config file used
+func StorageConfigFile() string {
+	if rootless.IsRootless() {
+		return filepath.Join(os.Getenv("HOME"), ".config/containers/storage.conf")
+	}
+	return storage.DefaultConfigFile
 }

@@ -32,7 +32,7 @@ var DefaultDropCaps = []string{
 
 // CreateBuildPod creates a pod that will execute the STI build
 // TODO: Make the Pod definition configurable
-func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, includeAdditionalCA bool) (*corev1.Pod, error) {
+func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*corev1.Pod, error) {
 	data, err := runtime.Encode(buildJSONCodec, build)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode the Build %s/%s: %v", build.Namespace, build.Name, err)
@@ -89,12 +89,22 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, includeAddit
 							Name:      "buildworkdir",
 							MountPath: buildutil.BuildWorkDirMount,
 						},
+						{
+							Name:      "buildcachedir",
+							MountPath: buildutil.BuildBlobsMetaCache,
+						},
 					},
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Resources:       build.Spec.Resources,
 				},
 			},
 			Volumes: []corev1.Volume{
+				{
+					Name: "buildcachedir",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{Path: buildutil.BuildBlobsMetaCache},
+					},
+				},
 				{
 					Name: "buildworkdir",
 					VolumeSource: corev1.VolumeSource{
@@ -146,12 +156,15 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, includeAddit
 					Name:      "buildworkdir",
 					MountPath: buildutil.BuildWorkDirMount,
 				},
+				{
+					Name:      "buildcachedir",
+					MountPath: buildutil.BuildBlobsMetaCache,
+				},
 			},
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Resources:       build.Spec.Resources,
 		}
 		setupDockerSecrets(pod, &extractImageContentContainer, build.Spec.Output.PushSecret, strategy.PullSecret, build.Spec.Source.Images)
-		setupContainersConfigs(pod, &extractImageContentContainer)
 		setupContainersStorage(pod, &extractImageContentContainer)
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, extractImageContentContainer)
 	}
@@ -185,8 +198,8 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, includeAddit
 	// TODO: consider moving this into the git-clone container and doing the secret copying there instead.
 	setupInputSecrets(pod, &pod.Spec.Containers[0], build.Spec.Source.Secrets)
 	setupInputConfigMaps(pod, &pod.Spec.Containers[0], build.Spec.Source.ConfigMaps)
-	setupContainersConfigs(pod, &pod.Spec.Containers[0])
-	setupBuildCAs(build, pod, includeAdditionalCA)
+	setupContainersConfigs(build, pod)
+	setupBuildCAs(build, pod, additionalCAs, internalRegistryHost)
 	setupContainersStorage(pod, &pod.Spec.Containers[0]) // for unprivileged builds
 	// setupContainersNodeStorage(pod, &pod.Spec.Containers[0]) // for privileged builds
 	return pod, nil

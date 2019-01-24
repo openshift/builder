@@ -18,6 +18,10 @@ import (
 
 var (
 	runFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "add-history",
+			Usage: "add an entry for this operation to the image's history.  Use BUILDAH_HISTORY environment variable to override. (default false)",
+		},
 		cli.StringSliceFlag{
 			Name:  "cap-add",
 			Usage: "add the specified capability (default [])",
@@ -60,7 +64,7 @@ var (
 			Usage: "bind mount a host location into the container while running the command",
 		},
 	}
-	runDescription = "Runs a specified command using the container's root filesystem as a root\n   filesystem, using configuration settings inherited from the container's\n   image or as specified using previous calls to the config command"
+	runDescription = "Runs a specified command using the container's root filesystem as a root\n   filesystem, using configuration settings inherited from the container's\n   image or as specified using previous calls to the config command."
 	runCommand     = cli.Command{
 		Name:                   "run",
 		Usage:                  "Run a command inside of the container",
@@ -175,6 +179,14 @@ func runCmd(c *cli.Context) error {
 		if w, ok := ee.Sys().(syscall.WaitStatus); ok {
 			os.Exit(w.ExitStatus())
 		}
+	}
+	if runerr == nil {
+		shell := "/bin/sh -c"
+		if len(builder.Shell()) > 0 {
+			shell = strings.Join(builder.Shell(), " ")
+		}
+		conditionallyAddHistory(builder, c, "%s %s", shell, strings.Join(args, " "))
+		return builder.Save()
 	}
 	return runerr
 }

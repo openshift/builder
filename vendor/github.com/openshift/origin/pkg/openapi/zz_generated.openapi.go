@@ -131,6 +131,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/config/v1.AuthenticationList":                                             schema_openshift_api_config_v1_AuthenticationList(ref),
 		"github.com/openshift/api/config/v1.AuthenticationSpec":                                             schema_openshift_api_config_v1_AuthenticationSpec(ref),
 		"github.com/openshift/api/config/v1.AuthenticationStatus":                                           schema_openshift_api_config_v1_AuthenticationStatus(ref),
+		"github.com/openshift/api/config/v1.BasicAuthIdentityProvider":                                      schema_openshift_api_config_v1_BasicAuthIdentityProvider(ref),
 		"github.com/openshift/api/config/v1.Build":                                                          schema_openshift_api_config_v1_Build(ref),
 		"github.com/openshift/api/config/v1.BuildDefaults":                                                  schema_openshift_api_config_v1_BuildDefaults(ref),
 		"github.com/openshift/api/config/v1.BuildList":                                                      schema_openshift_api_config_v1_BuildList(ref),
@@ -138,6 +139,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/config/v1.BuildSpec":                                                      schema_openshift_api_config_v1_BuildSpec(ref),
 		"github.com/openshift/api/config/v1.CertInfo":                                                       schema_openshift_api_config_v1_CertInfo(ref),
 		"github.com/openshift/api/config/v1.ClientConnectionOverrides":                                      schema_openshift_api_config_v1_ClientConnectionOverrides(ref),
+		"github.com/openshift/api/config/v1.ClusterNetworkEntry":                                            schema_openshift_api_config_v1_ClusterNetworkEntry(ref),
 		"github.com/openshift/api/config/v1.ClusterOperator":                                                schema_openshift_api_config_v1_ClusterOperator(ref),
 		"github.com/openshift/api/config/v1.ClusterOperatorList":                                            schema_openshift_api_config_v1_ClusterOperatorList(ref),
 		"github.com/openshift/api/config/v1.ClusterOperatorSpec":                                            schema_openshift_api_config_v1_ClusterOperatorSpec(ref),
@@ -148,7 +150,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/config/v1.ClusterVersionSpec":                                             schema_openshift_api_config_v1_ClusterVersionSpec(ref),
 		"github.com/openshift/api/config/v1.ClusterVersionStatus":                                           schema_openshift_api_config_v1_ClusterVersionStatus(ref),
 		"github.com/openshift/api/config/v1.ComponentOverride":                                              schema_openshift_api_config_v1_ComponentOverride(ref),
-		"github.com/openshift/api/config/v1.ConfigMapReference":                                             schema_openshift_api_config_v1_ConfigMapReference(ref),
+		"github.com/openshift/api/config/v1.ConfigMapFileReference":                                         schema_openshift_api_config_v1_ConfigMapFileReference(ref),
+		"github.com/openshift/api/config/v1.ConfigMapNameReference":                                         schema_openshift_api_config_v1_ConfigMapNameReference(ref),
 		"github.com/openshift/api/config/v1.Console":                                                        schema_openshift_api_config_v1_Console(ref),
 		"github.com/openshift/api/config/v1.ConsoleList":                                                    schema_openshift_api_config_v1_ConsoleList(ref),
 		"github.com/openshift/api/config/v1.ConsoleSpec":                                                    schema_openshift_api_config_v1_ConsoleSpec(ref),
@@ -163,11 +166,13 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/config/v1.EtcdStorageConfig":                                              schema_openshift_api_config_v1_EtcdStorageConfig(ref),
 		"github.com/openshift/api/config/v1.GenericAPIServerConfig":                                         schema_openshift_api_config_v1_GenericAPIServerConfig(ref),
 		"github.com/openshift/api/config/v1.GenericControllerConfig":                                        schema_openshift_api_config_v1_GenericControllerConfig(ref),
+		"github.com/openshift/api/config/v1.GitHubIdentityProvider":                                         schema_openshift_api_config_v1_GitHubIdentityProvider(ref),
+		"github.com/openshift/api/config/v1.GitLabIdentityProvider":                                         schema_openshift_api_config_v1_GitLabIdentityProvider(ref),
+		"github.com/openshift/api/config/v1.GoogleIdentityProvider":                                         schema_openshift_api_config_v1_GoogleIdentityProvider(ref),
+		"github.com/openshift/api/config/v1.HTPasswdIdentityProvider":                                       schema_openshift_api_config_v1_HTPasswdIdentityProvider(ref),
 		"github.com/openshift/api/config/v1.HTTPServingInfo":                                                schema_openshift_api_config_v1_HTTPServingInfo(ref),
 		"github.com/openshift/api/config/v1.IdentityProvider":                                               schema_openshift_api_config_v1_IdentityProvider(ref),
-		"github.com/openshift/api/config/v1.IdentityProviderList":                                           schema_openshift_api_config_v1_IdentityProviderList(ref),
-		"github.com/openshift/api/config/v1.IdentityProviderSpec":                                           schema_openshift_api_config_v1_IdentityProviderSpec(ref),
-		"github.com/openshift/api/config/v1.IdentityProviderStatus":                                         schema_openshift_api_config_v1_IdentityProviderStatus(ref),
+		"github.com/openshift/api/config/v1.IdentityProviderConfig":                                         schema_openshift_api_config_v1_IdentityProviderConfig(ref),
 		"github.com/openshift/api/config/v1.Image":                                                          schema_openshift_api_config_v1_Image(ref),
 		"github.com/openshift/api/config/v1.ImageLabel":                                                     schema_openshift_api_config_v1_ImageLabel(ref),
 		"github.com/openshift/api/config/v1.ImageList":                                                      schema_openshift_api_config_v1_ImageList(ref),
@@ -181,7 +186,10 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/config/v1.IngressList":                                                    schema_openshift_api_config_v1_IngressList(ref),
 		"github.com/openshift/api/config/v1.IngressSpec":                                                    schema_openshift_api_config_v1_IngressSpec(ref),
 		"github.com/openshift/api/config/v1.IngressStatus":                                                  schema_openshift_api_config_v1_IngressStatus(ref),
+		"github.com/openshift/api/config/v1.KeystoneIdentityProvider":                                       schema_openshift_api_config_v1_KeystoneIdentityProvider(ref),
 		"github.com/openshift/api/config/v1.KubeClientConfig":                                               schema_openshift_api_config_v1_KubeClientConfig(ref),
+		"github.com/openshift/api/config/v1.LDAPAttributeMapping":                                           schema_openshift_api_config_v1_LDAPAttributeMapping(ref),
+		"github.com/openshift/api/config/v1.LDAPIdentityProvider":                                           schema_openshift_api_config_v1_LDAPIdentityProvider(ref),
 		"github.com/openshift/api/config/v1.LeaderElection":                                                 schema_openshift_api_config_v1_LeaderElection(ref),
 		"github.com/openshift/api/config/v1.NamedCertificate":                                               schema_openshift_api_config_v1_NamedCertificate(ref),
 		"github.com/openshift/api/config/v1.Network":                                                        schema_openshift_api_config_v1_Network(ref),
@@ -190,22 +198,39 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/config/v1.NetworkStatus":                                                  schema_openshift_api_config_v1_NetworkStatus(ref),
 		"github.com/openshift/api/config/v1.OAuth":                                                          schema_openshift_api_config_v1_OAuth(ref),
 		"github.com/openshift/api/config/v1.OAuthList":                                                      schema_openshift_api_config_v1_OAuthList(ref),
+		"github.com/openshift/api/config/v1.OAuthRemoteConnectionInfo":                                      schema_openshift_api_config_v1_OAuthRemoteConnectionInfo(ref),
 		"github.com/openshift/api/config/v1.OAuthSpec":                                                      schema_openshift_api_config_v1_OAuthSpec(ref),
 		"github.com/openshift/api/config/v1.OAuthStatus":                                                    schema_openshift_api_config_v1_OAuthStatus(ref),
+		"github.com/openshift/api/config/v1.OAuthTemplates":                                                 schema_openshift_api_config_v1_OAuthTemplates(ref),
+		"github.com/openshift/api/config/v1.ObjectReference":                                                schema_openshift_api_config_v1_ObjectReference(ref),
+		"github.com/openshift/api/config/v1.OpenIDClaims":                                                   schema_openshift_api_config_v1_OpenIDClaims(ref),
+		"github.com/openshift/api/config/v1.OpenIDIdentityProvider":                                         schema_openshift_api_config_v1_OpenIDIdentityProvider(ref),
+		"github.com/openshift/api/config/v1.OpenIDURLs":                                                     schema_openshift_api_config_v1_OpenIDURLs(ref),
+		"github.com/openshift/api/config/v1.OperandVersion":                                                 schema_openshift_api_config_v1_OperandVersion(ref),
 		"github.com/openshift/api/config/v1.Project":                                                        schema_openshift_api_config_v1_Project(ref),
 		"github.com/openshift/api/config/v1.ProjectList":                                                    schema_openshift_api_config_v1_ProjectList(ref),
 		"github.com/openshift/api/config/v1.ProjectSpec":                                                    schema_openshift_api_config_v1_ProjectSpec(ref),
 		"github.com/openshift/api/config/v1.ProjectStatus":                                                  schema_openshift_api_config_v1_ProjectStatus(ref),
+		"github.com/openshift/api/config/v1.Proxy":                                                          schema_openshift_api_config_v1_Proxy(ref),
+		"github.com/openshift/api/config/v1.ProxyList":                                                      schema_openshift_api_config_v1_ProxyList(ref),
+		"github.com/openshift/api/config/v1.ProxySpec":                                                      schema_openshift_api_config_v1_ProxySpec(ref),
+		"github.com/openshift/api/config/v1.RegistriesConfig":                                               schema_openshift_api_config_v1_RegistriesConfig(ref),
 		"github.com/openshift/api/config/v1.RegistryLocation":                                               schema_openshift_api_config_v1_RegistryLocation(ref),
 		"github.com/openshift/api/config/v1.RemoteConnectionInfo":                                           schema_openshift_api_config_v1_RemoteConnectionInfo(ref),
+		"github.com/openshift/api/config/v1.RequestHeaderIdentityProvider":                                  schema_openshift_api_config_v1_RequestHeaderIdentityProvider(ref),
 		"github.com/openshift/api/config/v1.Scheduling":                                                     schema_openshift_api_config_v1_Scheduling(ref),
 		"github.com/openshift/api/config/v1.SchedulingList":                                                 schema_openshift_api_config_v1_SchedulingList(ref),
 		"github.com/openshift/api/config/v1.SchedulingSpec":                                                 schema_openshift_api_config_v1_SchedulingSpec(ref),
 		"github.com/openshift/api/config/v1.SchedulingStatus":                                               schema_openshift_api_config_v1_SchedulingStatus(ref),
+		"github.com/openshift/api/config/v1.SecretNameReference":                                            schema_openshift_api_config_v1_SecretNameReference(ref),
 		"github.com/openshift/api/config/v1.ServingInfo":                                                    schema_openshift_api_config_v1_ServingInfo(ref),
 		"github.com/openshift/api/config/v1.StringSource":                                                   schema_openshift_api_config_v1_StringSource(ref),
 		"github.com/openshift/api/config/v1.StringSourceSpec":                                               schema_openshift_api_config_v1_StringSourceSpec(ref),
+		"github.com/openshift/api/config/v1.TemplateReference":                                              schema_openshift_api_config_v1_TemplateReference(ref),
+		"github.com/openshift/api/config/v1.TokenConfig":                                                    schema_openshift_api_config_v1_TokenConfig(ref),
 		"github.com/openshift/api/config/v1.Update":                                                         schema_openshift_api_config_v1_Update(ref),
+		"github.com/openshift/api/config/v1.UpdateHistory":                                                  schema_openshift_api_config_v1_UpdateHistory(ref),
+		"github.com/openshift/api/config/v1.WebhookTokenAuthenticator":                                      schema_openshift_api_config_v1_WebhookTokenAuthenticator(ref),
 		"github.com/openshift/api/image/v1.DockerImageReference":                                            schema_openshift_api_image_v1_DockerImageReference(ref),
 		"github.com/openshift/api/image/v1.Image":                                                           schema_openshift_api_image_v1_Image(ref),
 		"github.com/openshift/api/image/v1.ImageBlobReferences":                                             schema_openshift_api_image_v1_ImageBlobReferences(ref),
@@ -364,6 +389,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/openshiftcontrolplane/v1.ClusterNetworkEntry":                             schema_openshift_api_openshiftcontrolplane_v1_ClusterNetworkEntry(ref),
 		"github.com/openshift/api/openshiftcontrolplane/v1.DeployerControllerConfig":                        schema_openshift_api_openshiftcontrolplane_v1_DeployerControllerConfig(ref),
 		"github.com/openshift/api/openshiftcontrolplane/v1.DockerPullSecretControllerConfig":                schema_openshift_api_openshiftcontrolplane_v1_DockerPullSecretControllerConfig(ref),
+		"github.com/openshift/api/openshiftcontrolplane/v1.FrontProxyConfig":                                schema_openshift_api_openshiftcontrolplane_v1_FrontProxyConfig(ref),
 		"github.com/openshift/api/openshiftcontrolplane/v1.ImageConfig":                                     schema_openshift_api_openshiftcontrolplane_v1_ImageConfig(ref),
 		"github.com/openshift/api/openshiftcontrolplane/v1.ImageImportControllerConfig":                     schema_openshift_api_openshiftcontrolplane_v1_ImageImportControllerConfig(ref),
 		"github.com/openshift/api/openshiftcontrolplane/v1.ImagePolicyConfig":                               schema_openshift_api_openshiftcontrolplane_v1_ImagePolicyConfig(ref),
@@ -380,21 +406,30 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/openshiftcontrolplane/v1.ServiceAccountControllerConfig":                  schema_openshift_api_openshiftcontrolplane_v1_ServiceAccountControllerConfig(ref),
 		"github.com/openshift/api/openshiftcontrolplane/v1.ServiceServingCert":                              schema_openshift_api_openshiftcontrolplane_v1_ServiceServingCert(ref),
 		"github.com/openshift/api/openshiftcontrolplane/v1.SourceStrategyDefaultsConfig":                    schema_openshift_api_openshiftcontrolplane_v1_SourceStrategyDefaultsConfig(ref),
-		"github.com/openshift/api/operator/v1.CapnsLogConfig":                                               schema_openshift_api_operator_v1_CapnsLogConfig(ref),
 		"github.com/openshift/api/operator/v1.GenerationStatus":                                             schema_openshift_api_operator_v1_GenerationStatus(ref),
-		"github.com/openshift/api/operator/v1.GlogConfig":                                                   schema_openshift_api_operator_v1_GlogConfig(ref),
-		"github.com/openshift/api/operator/v1.JavaLog":                                                      schema_openshift_api_operator_v1_JavaLog(ref),
-		"github.com/openshift/api/operator/v1.LoggingConfig":                                                schema_openshift_api_operator_v1_LoggingConfig(ref),
+		"github.com/openshift/api/operator/v1.KubeAPIServer":                                                schema_openshift_api_operator_v1_KubeAPIServer(ref),
+		"github.com/openshift/api/operator/v1.KubeAPIServerList":                                            schema_openshift_api_operator_v1_KubeAPIServerList(ref),
+		"github.com/openshift/api/operator/v1.KubeAPIServerSpec":                                            schema_openshift_api_operator_v1_KubeAPIServerSpec(ref),
+		"github.com/openshift/api/operator/v1.KubeAPIServerStatus":                                          schema_openshift_api_operator_v1_KubeAPIServerStatus(ref),
+		"github.com/openshift/api/operator/v1.KubeControllerManager":                                        schema_openshift_api_operator_v1_KubeControllerManager(ref),
+		"github.com/openshift/api/operator/v1.KubeControllerManagerList":                                    schema_openshift_api_operator_v1_KubeControllerManagerList(ref),
+		"github.com/openshift/api/operator/v1.KubeControllerManagerSpec":                                    schema_openshift_api_operator_v1_KubeControllerManagerSpec(ref),
+		"github.com/openshift/api/operator/v1.KubeControllerManagerStatus":                                  schema_openshift_api_operator_v1_KubeControllerManagerStatus(ref),
 		"github.com/openshift/api/operator/v1.MyOperatorResource":                                           schema_openshift_api_operator_v1_MyOperatorResource(ref),
 		"github.com/openshift/api/operator/v1.MyOperatorResourceSpec":                                       schema_openshift_api_operator_v1_MyOperatorResourceSpec(ref),
 		"github.com/openshift/api/operator/v1.MyOperatorResourceStatus":                                     schema_openshift_api_operator_v1_MyOperatorResourceStatus(ref),
 		"github.com/openshift/api/operator/v1.NodeStatus":                                                   schema_openshift_api_operator_v1_NodeStatus(ref),
+		"github.com/openshift/api/operator/v1.OpenShiftAPIServer":                                           schema_openshift_api_operator_v1_OpenShiftAPIServer(ref),
+		"github.com/openshift/api/operator/v1.OpenShiftAPIServerList":                                       schema_openshift_api_operator_v1_OpenShiftAPIServerList(ref),
+		"github.com/openshift/api/operator/v1.OpenShiftAPIServerSpec":                                       schema_openshift_api_operator_v1_OpenShiftAPIServerSpec(ref),
+		"github.com/openshift/api/operator/v1.OpenShiftAPIServerStatus":                                     schema_openshift_api_operator_v1_OpenShiftAPIServerStatus(ref),
 		"github.com/openshift/api/operator/v1.OperandContainerSpec":                                         schema_openshift_api_operator_v1_OperandContainerSpec(ref),
 		"github.com/openshift/api/operator/v1.OperandSpec":                                                  schema_openshift_api_operator_v1_OperandSpec(ref),
 		"github.com/openshift/api/operator/v1.OperatorCondition":                                            schema_openshift_api_operator_v1_OperatorCondition(ref),
 		"github.com/openshift/api/operator/v1.OperatorSpec":                                                 schema_openshift_api_operator_v1_OperatorSpec(ref),
 		"github.com/openshift/api/operator/v1.OperatorStatus":                                               schema_openshift_api_operator_v1_OperatorStatus(ref),
 		"github.com/openshift/api/operator/v1.ResourcePatch":                                                schema_openshift_api_operator_v1_ResourcePatch(ref),
+		"github.com/openshift/api/operator/v1.StaticPodOperatorSpec":                                        schema_openshift_api_operator_v1_StaticPodOperatorSpec(ref),
 		"github.com/openshift/api/operator/v1.StaticPodOperatorStatus":                                      schema_openshift_api_operator_v1_StaticPodOperatorStatus(ref),
 		"github.com/openshift/api/operator/v1alpha1.DelegatedAuthentication":                                schema_openshift_api_operator_v1alpha1_DelegatedAuthentication(ref),
 		"github.com/openshift/api/operator/v1alpha1.DelegatedAuthorization":                                 schema_openshift_api_operator_v1alpha1_DelegatedAuthorization(ref),
@@ -471,8 +506,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/security/v1.SupplementalGroupsStrategyOptions":                            schema_openshift_api_security_v1_SupplementalGroupsStrategyOptions(ref),
 		"github.com/openshift/api/servicecertsigner/v1alpha1.APIServiceCABundleInjectorConfig":              schema_openshift_api_servicecertsigner_v1alpha1_APIServiceCABundleInjectorConfig(ref),
 		"github.com/openshift/api/servicecertsigner/v1alpha1.ConfigMapCABundleInjectorConfig":               schema_openshift_api_servicecertsigner_v1alpha1_ConfigMapCABundleInjectorConfig(ref),
-		"github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthentication":                       schema_openshift_api_servicecertsigner_v1alpha1_DelegatedAuthentication(ref),
-		"github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthorization":                        schema_openshift_api_servicecertsigner_v1alpha1_DelegatedAuthorization(ref),
 		"github.com/openshift/api/servicecertsigner/v1alpha1.ServiceCertSignerOperatorConfig":               schema_openshift_api_servicecertsigner_v1alpha1_ServiceCertSignerOperatorConfig(ref),
 		"github.com/openshift/api/servicecertsigner/v1alpha1.ServiceCertSignerOperatorConfigList":           schema_openshift_api_servicecertsigner_v1alpha1_ServiceCertSignerOperatorConfigList(ref),
 		"github.com/openshift/api/servicecertsigner/v1alpha1.ServiceCertSignerOperatorConfigSpec":           schema_openshift_api_servicecertsigner_v1alpha1_ServiceCertSignerOperatorConfigSpec(ref),
@@ -6883,10 +6916,39 @@ func schema_openshift_api_config_v1_AuthenticationSpec(ref common.ReferenceCallb
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "type identifies the cluster managed, user facing authentication mode in use. Specifically, it manages the component that responds to login attempts. The default is IntegratedOAuth.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"oauthMetadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "oauthMetadata contains the discovery endpoint data for OAuth 2.0 Authorization Server Metadata for an external OAuth server. This discovery document can be viewed from its served location: oc get --raw '/.well-known/oauth-authorization-server' For further details, see the IETF Draft: https://tools.ietf.org/html/draft-ietf-oauth-discovery-04#section-2 If oauthMetadata.name is non-empty, this value has precedence over any metadata reference stored in status. The key \"oauthMetadata\" is used to locate the data. If specified and the config map or expected key is not found, no metadata is served. If the specified metadata is not valid, no metadata is served. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+					"webhookTokenAuthenticators": {
+						SchemaProps: spec.SchemaProps{
+							Description: "webhookTokenAuthenticators configures remote token reviewers. These remote authentication webhooks can be used to verify bearer tokens via the tokenreviews.authentication.k8s.io REST API.  This is required to honor bearer tokens that are provisioned by an external authentication service. The namespace for these secrets is openshift-config.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.WebhookTokenAuthenticator"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"type"},
 			},
 		},
-		Dependencies: []string{},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.WebhookTokenAuthenticator"},
 	}
 }
 
@@ -6894,10 +6956,59 @@ func schema_openshift_api_config_v1_AuthenticationStatus(ref common.ReferenceCal
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"integratedOAuthMetadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "integratedOAuthMetadata contains the discovery endpoint data for OAuth 2.0 Authorization Server Metadata for the in-cluster integrated OAuth server. This discovery document can be viewed from its served location: oc get --raw '/.well-known/oauth-authorization-server' For further details, see the IETF Draft: https://tools.ietf.org/html/draft-ietf-oauth-discovery-04#section-2 This contains the observed value based on cluster state. An explicitly set value in spec.oauthMetadata has precedence over this field. This field has no meaning if authentication spec.type is not set to IntegratedOAuth. The key \"oauthMetadata\" is used to locate the data. If the config map or expected key is not found, no metadata is served. If the specified metadata is not valid, no metadata is served. The namespace for this config map is openshift-config-managed.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+				},
+				Required: []string{"integratedOAuthMetadata"},
 			},
 		},
-		Dependencies: []string{},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference"},
+	}
+}
+
+func schema_openshift_api_config_v1_BasicAuthIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BasicAuthPasswordIdentityProvider provides identities for users authenticating using HTTP basic auth credentials",
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "url is the remote URL to connect to",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is an optional reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. The key \"ca.crt\" is used to locate the data. If specified and the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. If empty, the default system roots are used. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+					"tlsClientCert": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tlsClientCert is an optional reference to a secret by name that contains the PEM-encoded TLS client certificate to present when connecting to the server. The key \"tls.crt\" is used to locate the data. If specified and the secret or expected key is not found, the identity provider is not honored. If the specified certificate data is not valid, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"tlsClientKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tlsClientKey is an optional reference to a secret by name that contains the PEM-encoded TLS private key for the client certificate referenced in tlsClientCert. The key \"tls.key\" is used to locate the data. If specified and the secret or expected key is not found, the identity provider is not honored. If the specified certificate data is not valid, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+				},
+				Required: []string{"url"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.SecretNameReference"},
 	}
 }
 
@@ -6945,25 +7056,16 @@ func schema_openshift_api_config_v1_BuildDefaults(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Properties: map[string]spec.Schema{
-					"gitHTTPProxy": {
+					"defaultProxy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "GitHTTPProxy is the location of the HTTPProxy for Git source",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "DefaultProxy contains the default proxy settings for all build operations, including image pull/push and source download.\n\nValues can be overrode by setting the `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables in the build config's strategy.",
+							Ref:         ref("github.com/openshift/api/config/v1.ProxySpec"),
 						},
 					},
-					"gitHTTPSProxy": {
+					"gitProxy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "GitHTTPSProxy is the location of the HTTPSProxy for Git source",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"gitNoProxy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "GitNoProxy is the list of domains for which the proxy should not be used",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "GitProxy contains the proxy settings for git operations only. If set, this will override any Proxy settings for all git commands, such as git clone.\n\nValues that are not set here will be inherited from DefaultProxy.",
+							Ref:         ref("github.com/openshift/api/config/v1.ProxySpec"),
 						},
 					},
 					"env": {
@@ -6998,11 +7100,17 @@ func schema_openshift_api_config_v1_BuildDefaults(ref common.ReferenceCallback) 
 							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
 						},
 					},
+					"registriesConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RegistriesConfig controls the registries allowed for image pull and push.",
+							Ref:         ref("github.com/openshift/api/config/v1.RegistriesConfig"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.ImageLabel", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.ResourceRequirements"},
+			"github.com/openshift/api/config/v1.ImageLabel", "github.com/openshift/api/config/v1.ProxySpec", "github.com/openshift/api/config/v1.RegistriesConfig", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.ResourceRequirements"},
 	}
 }
 
@@ -7073,7 +7181,15 @@ func schema_openshift_api_config_v1_BuildOverrides(ref common.ReferenceCallback)
 					"nodeSelector": {
 						SchemaProps: spec.SchemaProps{
 							Description: "NodeSelector is a selector which must be true for the build pod to fit on a node",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"),
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
 						},
 					},
 					"tolerations": {
@@ -7093,7 +7209,7 @@ func schema_openshift_api_config_v1_BuildOverrides(ref common.ReferenceCallback)
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.ImageLabel", "k8s.io/api/core/v1.Toleration", "k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"},
+			"github.com/openshift/api/config/v1.ImageLabel", "k8s.io/api/core/v1.Toleration"},
 	}
 }
 
@@ -7104,8 +7220,8 @@ func schema_openshift_api_config_v1_BuildSpec(ref common.ReferenceCallback) comm
 				Properties: map[string]spec.Schema{
 					"additionalTrustedCA": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AdditionalTrustedCA is a reference to a ConfigMap containing additional CAs that should be trusted for image pushes and pulls during builds.",
-							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapReference"),
+							Description: "AdditionalTrustedCA is a reference to a ConfigMap containing additional CAs that should be trusted for image pushes and pulls during builds. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
 						},
 					},
 					"buildDefaults": {
@@ -7124,7 +7240,7 @@ func schema_openshift_api_config_v1_BuildSpec(ref common.ReferenceCallback) comm
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.BuildDefaults", "github.com/openshift/api/config/v1.BuildOverrides", "github.com/openshift/api/config/v1.ConfigMapReference"},
+			"github.com/openshift/api/config/v1.BuildDefaults", "github.com/openshift/api/config/v1.BuildOverrides", "github.com/openshift/api/config/v1.ConfigMapNameReference"},
 	}
 }
 
@@ -7191,6 +7307,34 @@ func schema_openshift_api_config_v1_ClientConnectionOverrides(ref common.Referen
 					},
 				},
 				Required: []string{"acceptContentTypes", "contentType", "qps", "burst"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_ClusterNetworkEntry(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterNetworkEntry is a contiguous block of IP addresses from which pod IPs are allocated.",
+				Properties: map[string]spec.Schema{
+					"cidr": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The complete block for pod IPs.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hostPrefix": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The size (prefix) of block to allocate to each node.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+				},
+				Required: []string{"cidr", "hostPrefix"},
 			},
 		},
 		Dependencies: []string{},
@@ -7326,11 +7470,30 @@ func schema_openshift_api_config_v1_ClusterOperatorStatus(ref common.ReferenceCa
 							},
 						},
 					},
-					"version": {
+					"versions": {
 						SchemaProps: spec.SchemaProps{
-							Description: "version indicates which version of the operator updated the current status object.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "versions is a slice of operand version tuples.  Operators which manage multiple operands will have multiple entries in the array.  If an operator is Available, it must have at least one entry.  Report the version of the operator itself in addition to the version of its operands is recommended.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.OperandVersion"),
+									},
+								},
+							},
+						},
+					},
+					"relatedObjects": {
+						SchemaProps: spec.SchemaProps{
+							Description: "relatedObjects is a list of objects that are \"interesting\" or related to this operator.  Common uses are: 1. the detailed resource driving the operator 2. operator namespaces 3. operand namespaces",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.ObjectReference"),
+									},
+								},
+							},
 						},
 					},
 					"extension": {
@@ -7340,11 +7503,11 @@ func schema_openshift_api_config_v1_ClusterOperatorStatus(ref common.ReferenceCa
 						},
 					},
 				},
-				Required: []string{"conditions", "version"},
+				Required: []string{"conditions", "versions", "relatedObjects"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.ClusterOperatorStatusCondition", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"github.com/openshift/api/config/v1.ClusterOperatorStatusCondition", "github.com/openshift/api/config/v1.ObjectReference", "github.com/openshift/api/config/v1.OperandVersion", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -7550,10 +7713,23 @@ func schema_openshift_api_config_v1_ClusterVersionStatus(ref common.ReferenceCal
 			SchemaProps: spec.SchemaProps{
 				Description: "ClusterVersionStatus reports the status of the cluster versioning, including any upgrades that are in progress. The current field will be set to whichever version the cluster is reconciling to, and the conditions array will report whether the update succeeded, is in progress, or is failing.",
 				Properties: map[string]spec.Schema{
-					"current": {
+					"desired": {
 						SchemaProps: spec.SchemaProps{
-							Description: "current is the version that the cluster will be reconciled to. This value may be empty during cluster startup, and then will be set whenever a new update is being applied. Use the conditions array to know whether the update is complete.",
+							Description: "desired is the version that the cluster is reconciling towards. If the cluster is not yet fully initialized desired will be set with the information available, which may be a payload or a tag.",
 							Ref:         ref("github.com/openshift/api/config/v1.Update"),
+						},
+					},
+					"history": {
+						SchemaProps: spec.SchemaProps{
+							Description: "history contains a list of the most recent versions applied to the cluster. This value may be empty during cluster startup, and then will be updated when a new update is being applied. The newest update is first in the list and it is ordered by recency. Updates in the history have state Completed if the rollout completed - if an update was failing or halfway applied the state will be Partial. Only a limited amount of update history is preserved.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.UpdateHistory"),
+									},
+								},
+							},
 						},
 					},
 					"generation": {
@@ -7597,11 +7773,11 @@ func schema_openshift_api_config_v1_ClusterVersionStatus(ref common.ReferenceCal
 						},
 					},
 				},
-				Required: []string{"current", "generation", "versionHash", "conditions", "availableUpdates"},
+				Required: []string{"desired", "history", "generation", "versionHash", "conditions", "availableUpdates"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.ClusterOperatorStatusCondition", "github.com/openshift/api/config/v1.Update"},
+			"github.com/openshift/api/config/v1.ClusterOperatorStatusCondition", "github.com/openshift/api/config/v1.Update", "github.com/openshift/api/config/v1.UpdateHistory"},
 	}
 }
 
@@ -7654,25 +7830,19 @@ func schema_openshift_api_config_v1_ComponentOverride(ref common.ReferenceCallba
 	}
 }
 
-func schema_openshift_api_config_v1_ConfigMapReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_openshift_api_config_v1_ConfigMapFileReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ConfigMapReference references the location of a configmap.",
+				Description: "ConfigMapFileReference references a config map in a specific namespace. The namespace must be specified at the point of use.",
 				Properties: map[string]spec.Schema{
-					"namespace": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
 					"name": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
 						},
 					},
-					"filename": {
+					"key": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Key allows pointing to a specific key/value inside of the configmap.  This is useful for logical file references.",
 							Type:        []string{"string"},
@@ -7680,7 +7850,28 @@ func schema_openshift_api_config_v1_ConfigMapReference(ref common.ReferenceCallb
 						},
 					},
 				},
-				Required: []string{"namespace", "name"},
+				Required: []string{"name"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_ConfigMapNameReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ConfigMapNameReference references a config map in a specific namespace. The namespace must be specified at the point of use.",
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "name is the metadata.name of the referenced config map",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name"},
 			},
 		},
 		Dependencies: []string{},
@@ -7899,7 +8090,16 @@ func schema_openshift_api_config_v1_DNSSpec(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"baseDomain": {
+						SchemaProps: spec.SchemaProps{
+							Description: "baseDomain is the base domain of the cluster. All managed DNS records will be sub-domains of this base.\n\nFor example, given the base domain `openshift.example.com`, an API server DNS record may be created for `cluster-api.openshift.example.com`.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"baseDomain"},
 			},
 		},
 		Dependencies: []string{},
@@ -8131,20 +8331,6 @@ func schema_openshift_api_config_v1_GenericControllerConfig(ref common.Reference
 			SchemaProps: spec.SchemaProps{
 				Description: "GenericControllerConfig provides information to configure a controller",
 				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"servingInfo": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ServingInfo is the HTTP serving information for the controller's endpoints",
@@ -8174,6 +8360,172 @@ func schema_openshift_api_config_v1_GenericControllerConfig(ref common.Reference
 		},
 		Dependencies: []string{
 			"github.com/openshift/api/config/v1.DelegatedAuthentication", "github.com/openshift/api/config/v1.DelegatedAuthorization", "github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/config/v1.LeaderElection"},
+	}
+}
+
+func schema_openshift_api_config_v1_GitHubIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GitHubIdentityProvider provides identities for users authenticating using GitHub credentials",
+				Properties: map[string]spec.Schema{
+					"clientID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientID is the oauth client ID",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clientSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientSecret is a required reference to the secret by name containing the oauth client secret. The key \"clientSecret\" is used to locate the data. If the secret or expected key is not found, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"organizations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "organizations optionally restricts which organizations are allowed to log in",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"teams": {
+						SchemaProps: spec.SchemaProps{
+							Description: "teams optionally restricts which teams are allowed to log in. Format is <org>/<team>.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"hostname": {
+						SchemaProps: spec.SchemaProps{
+							Description: "hostname is the optional domain (e.g. \"mycompany.com\") for use with a hosted instance of GitHub Enterprise. It must match the GitHub Enterprise settings value configured at /setup/settings#hostname.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is an optional reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. The key \"ca.crt\" is used to locate the data. If specified and the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. If empty, the default system roots are used. This can only be configured when hostname is set to a non-empty value. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+				},
+				Required: []string{"clientID", "clientSecret"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.SecretNameReference"},
+	}
+}
+
+func schema_openshift_api_config_v1_GitLabIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GitLabIdentityProvider provides identities for users authenticating using GitLab credentials",
+				Properties: map[string]spec.Schema{
+					"clientID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientID is the oauth client ID",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clientSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientSecret is a required reference to the secret by name containing the oauth client secret. The key \"clientSecret\" is used to locate the data. If the secret or expected key is not found, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "url is the oauth server base URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is an optional reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. The key \"ca.crt\" is used to locate the data. If specified and the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. If empty, the default system roots are used. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+				},
+				Required: []string{"clientID", "clientSecret", "url"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.SecretNameReference"},
+	}
+}
+
+func schema_openshift_api_config_v1_GoogleIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GoogleIdentityProvider provides identities for users authenticating using Google credentials",
+				Properties: map[string]spec.Schema{
+					"clientID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientID is the oauth client ID",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clientSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientSecret is a required reference to the secret by name containing the oauth client secret. The key \"clientSecret\" is used to locate the data. If the secret or expected key is not found, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"hostedDomain": {
+						SchemaProps: spec.SchemaProps{
+							Description: "hostedDomain is the optional Google App domain (e.g. \"mycompany.com\") to restrict logins to",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"clientID", "clientSecret"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.SecretNameReference"},
+	}
+}
+
+func schema_openshift_api_config_v1_HTPasswdIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HTPasswdPasswordIdentityProvider provides identities for users authenticating using htpasswd credentials",
+				Properties: map[string]spec.Schema{
+					"fileData": {
+						SchemaProps: spec.SchemaProps{
+							Description: "fileData is a required reference to a secret by name containing the data to use as the htpasswd file. The key \"htpasswd\" is used to locate the data. If the secret or expected key is not found, the identity provider is not honored. If the specified htpasswd data is not valid, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+				},
+				Required: []string{"fileData"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.SecretNameReference"},
 	}
 }
 
@@ -8279,114 +8631,179 @@ func schema_openshift_api_config_v1_IdentityProvider(ref common.ReferenceCallbac
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "IdentityProvider holds cluster-wide information about IdentityProvider.  The canonical name is `cluster`",
+				Description: "IdentityProvider provides identities for users authenticating using credentials",
 				Properties: map[string]spec.Schema{
-					"kind": {
+					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Description: "name is used to qualify the identities returned by this provider. - It MUST be unique and not shared by any other identity provider used - It MUST be a valid path segment: name cannot equal \".\" or \"..\" or contain \"/\" or \"%\" or \":\"\n  Ref: https://godoc.org/github.com/openshift/origin/pkg/user/apis/user/validation#ValidateIdentityProviderName",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"apiVersion": {
+					"challenge": {
 						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Description: "challenge indicates whether to issue WWW-Authenticate challenges for this provider",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"login": {
+						SchemaProps: spec.SchemaProps{
+							Description: "login indicates whether to use this identity provider for unauthenticated browsers to login against",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"mappingMethod": {
+						SchemaProps: spec.SchemaProps{
+							Description: "mappingMethod determines how identities from this provider are mapped to users Defaults to \"claim\"",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"metadata": {
+					"type": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Standard object's metadata.",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+							Description: "type identifies the identity provider type for this entry.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
-					"spec": {
+					"basicAuth": {
 						SchemaProps: spec.SchemaProps{
-							Description: "spec holds user settable values for configuration",
-							Ref:         ref("github.com/openshift/api/config/v1.IdentityProviderSpec"),
+							Description: "basicAuth contains configuration options for the BasicAuth IdP",
+							Ref:         ref("github.com/openshift/api/config/v1.BasicAuthIdentityProvider"),
 						},
 					},
-					"status": {
+					"github": {
 						SchemaProps: spec.SchemaProps{
-							Description: "status holds observed values from the cluster. They may not be overridden.",
-							Ref:         ref("github.com/openshift/api/config/v1.IdentityProviderStatus"),
+							Description: "github enables user authentication using GitHub credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.GitHubIdentityProvider"),
+						},
+					},
+					"gitlab": {
+						SchemaProps: spec.SchemaProps{
+							Description: "gitlab enables user authentication using GitLab credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.GitLabIdentityProvider"),
+						},
+					},
+					"google": {
+						SchemaProps: spec.SchemaProps{
+							Description: "google enables user authentication using Google credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.GoogleIdentityProvider"),
+						},
+					},
+					"htpasswd": {
+						SchemaProps: spec.SchemaProps{
+							Description: "htpasswd enables user authentication using an HTPasswd file to validate credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.HTPasswdIdentityProvider"),
+						},
+					},
+					"keystone": {
+						SchemaProps: spec.SchemaProps{
+							Description: "keystone enables user authentication using keystone password credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.KeystoneIdentityProvider"),
+						},
+					},
+					"ldap": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ldap enables user authentication using LDAP credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.LDAPIdentityProvider"),
+						},
+					},
+					"openID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "openID enables user authentication using OpenID credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.OpenIDIdentityProvider"),
+						},
+					},
+					"requestHeader": {
+						SchemaProps: spec.SchemaProps{
+							Description: "requestHeader enables user authentication using request header credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.RequestHeaderIdentityProvider"),
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
+				Required: []string{"name", "challenge", "login", "type"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.IdentityProviderSpec", "github.com/openshift/api/config/v1.IdentityProviderStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/openshift/api/config/v1.BasicAuthIdentityProvider", "github.com/openshift/api/config/v1.GitHubIdentityProvider", "github.com/openshift/api/config/v1.GitLabIdentityProvider", "github.com/openshift/api/config/v1.GoogleIdentityProvider", "github.com/openshift/api/config/v1.HTPasswdIdentityProvider", "github.com/openshift/api/config/v1.KeystoneIdentityProvider", "github.com/openshift/api/config/v1.LDAPIdentityProvider", "github.com/openshift/api/config/v1.OpenIDIdentityProvider", "github.com/openshift/api/config/v1.RequestHeaderIdentityProvider"},
 	}
 }
 
-func schema_openshift_api_config_v1_IdentityProviderList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_openshift_api_config_v1_IdentityProviderConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
+				Description: "IdentityProviderConfig contains configuration for using a specific identity provider",
 				Properties: map[string]spec.Schema{
-					"kind": {
+					"type": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Description: "type identifies the identity provider type for this entry.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"apiVersion": {
+					"basicAuth": {
 						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "basicAuth contains configuration options for the BasicAuth IdP",
+							Ref:         ref("github.com/openshift/api/config/v1.BasicAuthIdentityProvider"),
 						},
 					},
-					"metadata": {
+					"github": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Standard object's metadata.",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+							Description: "github enables user authentication using GitHub credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.GitHubIdentityProvider"),
 						},
 					},
-					"items": {
+					"gitlab": {
 						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/openshift/api/config/v1.IdentityProvider"),
-									},
-								},
-							},
+							Description: "gitlab enables user authentication using GitLab credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.GitLabIdentityProvider"),
+						},
+					},
+					"google": {
+						SchemaProps: spec.SchemaProps{
+							Description: "google enables user authentication using Google credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.GoogleIdentityProvider"),
+						},
+					},
+					"htpasswd": {
+						SchemaProps: spec.SchemaProps{
+							Description: "htpasswd enables user authentication using an HTPasswd file to validate credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.HTPasswdIdentityProvider"),
+						},
+					},
+					"keystone": {
+						SchemaProps: spec.SchemaProps{
+							Description: "keystone enables user authentication using keystone password credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.KeystoneIdentityProvider"),
+						},
+					},
+					"ldap": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ldap enables user authentication using LDAP credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.LDAPIdentityProvider"),
+						},
+					},
+					"openID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "openID enables user authentication using OpenID credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.OpenIDIdentityProvider"),
+						},
+					},
+					"requestHeader": {
+						SchemaProps: spec.SchemaProps{
+							Description: "requestHeader enables user authentication using request header credentials",
+							Ref:         ref("github.com/openshift/api/config/v1.RequestHeaderIdentityProvider"),
 						},
 					},
 				},
-				Required: []string{"items"},
+				Required: []string{"type"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.IdentityProvider", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
-	}
-}
-
-func schema_openshift_api_config_v1_IdentityProviderSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
-			},
-		},
-		Dependencies: []string{},
-	}
-}
-
-func schema_openshift_api_config_v1_IdentityProviderStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
-			},
-		},
-		Dependencies: []string{},
+			"github.com/openshift/api/config/v1.BasicAuthIdentityProvider", "github.com/openshift/api/config/v1.GitHubIdentityProvider", "github.com/openshift/api/config/v1.GitLabIdentityProvider", "github.com/openshift/api/config/v1.GoogleIdentityProvider", "github.com/openshift/api/config/v1.HTPasswdIdentityProvider", "github.com/openshift/api/config/v1.KeystoneIdentityProvider", "github.com/openshift/api/config/v1.LDAPIdentityProvider", "github.com/openshift/api/config/v1.OpenIDIdentityProvider", "github.com/openshift/api/config/v1.RequestHeaderIdentityProvider"},
 	}
 }
 
@@ -8544,15 +8961,15 @@ func schema_openshift_api_config_v1_ImageSpec(ref common.ReferenceCallback) comm
 					},
 					"additionalTrustedCA": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AdditionalTrustedCA is a reference to a ConfigMap containing additional CAs that should be trusted during imagestream import.",
-							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapReference"),
+							Description: "AdditionalTrustedCA is a reference to a ConfigMap containing additional CAs that should be trusted during imagestream import. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.ConfigMapReference", "github.com/openshift/api/config/v1.RegistryLocation"},
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.RegistryLocation"},
 	}
 }
 
@@ -8697,7 +9114,15 @@ func schema_openshift_api_config_v1_InfrastructureStatus(ref common.ReferenceCal
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"platform": {
+						SchemaProps: spec.SchemaProps{
+							Description: "platform is the underlying infrastructure provider for the cluster. This value controls whether infrastructure automation such as service load balancers, dynamic volume provisioning, machine creation and deletion, and other integrations are enabled. If None, no infrastructure automation is enabled.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
 			},
 		},
 		Dependencies: []string{},
@@ -8801,7 +9226,16 @@ func schema_openshift_api_config_v1_IngressSpec(ref common.ReferenceCallback) co
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Properties: map[string]spec.Schema{
+					"domain": {
+						SchemaProps: spec.SchemaProps{
+							Description: "domain is used to generate a default host name for a route when the route's host name is empty.  The generated host name will follow this pattern: \"<route-name>.<route-namespace>.<domain>\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"domain"},
 			},
 		},
 		Dependencies: []string{},
@@ -8816,6 +9250,60 @@ func schema_openshift_api_config_v1_IngressStatus(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_KeystoneIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KeystonePasswordIdentityProvider provides identities for users authenticating using keystone password credentials",
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "url is the remote URL to connect to",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is an optional reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. The key \"ca.crt\" is used to locate the data. If specified and the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. If empty, the default system roots are used. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+					"tlsClientCert": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tlsClientCert is an optional reference to a secret by name that contains the PEM-encoded TLS client certificate to present when connecting to the server. The key \"tls.crt\" is used to locate the data. If specified and the secret or expected key is not found, the identity provider is not honored. If the specified certificate data is not valid, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"tlsClientKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tlsClientKey is an optional reference to a secret by name that contains the PEM-encoded TLS private key for the client certificate referenced in tlsClientCert. The key \"tls.key\" is used to locate the data. If specified and the secret or expected key is not found, the identity provider is not honored. If the specified certificate data is not valid, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"domainName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "domainName is required for keystone v3",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"useUsernameIdentity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "useUsernameIdentity indicates that users should be authenticated by username, not keystone ID DEPRECATED - only use this option for legacy systems to ensure backwards compatibility",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"url", "domainName"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.SecretNameReference"},
 	}
 }
 
@@ -8843,6 +9331,130 @@ func schema_openshift_api_config_v1_KubeClientConfig(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"github.com/openshift/api/config/v1.ClientConnectionOverrides"},
+	}
+}
+
+func schema_openshift_api_config_v1_LDAPAttributeMapping(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LDAPAttributeMapping maps LDAP attributes to OpenShift identity fields",
+				Properties: map[string]spec.Schema{
+					"id": {
+						SchemaProps: spec.SchemaProps{
+							Description: "id is the list of attributes whose values should be used as the user ID. Required. First non-empty attribute is used. At least one attribute is required. If none of the listed attribute have a value, authentication fails. LDAP standard identity attribute is \"dn\"",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"preferredUsername": {
+						SchemaProps: spec.SchemaProps{
+							Description: "preferredUsername is the list of attributes whose values should be used as the preferred username. LDAP standard login attribute is \"uid\"",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "name is the list of attributes whose values should be used as the display name. Optional. If unspecified, no display name is set for the identity LDAP standard display name attribute is \"cn\"",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"email": {
+						SchemaProps: spec.SchemaProps{
+							Description: "email is the list of attributes whose values should be used as the email address. Optional. If unspecified, no email is set for the identity",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"id"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_LDAPIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LDAPPasswordIdentityProvider provides identities for users authenticating using LDAP credentials",
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "url is an RFC 2255 URL which specifies the LDAP search parameters to use. The syntax of the URL is: ldap://host:port/basedn?attribute?scope?filter",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"bindDN": {
+						SchemaProps: spec.SchemaProps{
+							Description: "bindDN is an optional DN to bind with during the search phase.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"bindPassword": {
+						SchemaProps: spec.SchemaProps{
+							Description: "bindPassword is an optional reference to a secret by name containing a password to bind with during the search phase. The key \"bindPassword\" is used to locate the data. If specified and the secret or expected key is not found, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"insecure": {
+						SchemaProps: spec.SchemaProps{
+							Description: "insecure, if true, indicates the connection should not use TLS WARNING: Should not be set to `true` with the URL scheme \"ldaps://\" as \"ldaps://\" URLs always\n         attempt to connect using TLS, even when `insecure` is set to `true`\nWhen `true`, \"ldap://\" URLS connect insecurely. When `false`, \"ldap://\" URLs are upgraded to a TLS connection using StartTLS as specified in https://tools.ietf.org/html/rfc2830.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is an optional reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. The key \"ca.crt\" is used to locate the data. If specified and the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. If empty, the default system roots are used. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+					"attributes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "attributes maps LDAP attributes to identities",
+							Ref:         ref("github.com/openshift/api/config/v1.LDAPAttributeMapping"),
+						},
+					},
+				},
+				Required: []string{"url", "insecure", "attributes"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.LDAPAttributeMapping", "github.com/openshift/api/config/v1.SecretNameReference"},
 	}
 }
 
@@ -8969,7 +9581,7 @@ func schema_openshift_api_config_v1_Network(ref common.ReferenceCallback) common
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Description: "spec holds user settable values for configuration",
+							Description: "spec holds user settable values for configuration.",
 							Ref:         ref("github.com/openshift/api/config/v1.NetworkSpec"),
 						},
 					},
@@ -9038,10 +9650,48 @@ func schema_openshift_api_config_v1_NetworkSpec(ref common.ReferenceCallback) co
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Description: "NetworkSpec is the desired network configuration. As a general rule, this SHOULD NOT be read directly. Instead, you should consume the NetworkStatus, as it indicates the currently deployed configuration. Currently, none of these fields may be changed after installation.",
+				Properties: map[string]spec.Schema{
+					"clusterNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IP address pool to use for pod IPs.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.ClusterNetworkEntry"),
+									},
+								},
+							},
+						},
+					},
+					"serviceNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IP address pool for services. Currently, we only support a single entry here.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"networkType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NetworkType is the plugin that is to be deployed (e.g. OpenShiftSDN). This should match a value that the cluster-network-operator understands, or else no networking will be installed. Currently supported values are: - OpenShiftSDN",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"clusterNetwork", "serviceNetwork", "networkType"},
 			},
 		},
-		Dependencies: []string{},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ClusterNetworkEntry"},
 	}
 }
 
@@ -9049,10 +9699,55 @@ func schema_openshift_api_config_v1_NetworkStatus(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Description: "NetworkStatus is the current network configuration.",
+				Properties: map[string]spec.Schema{
+					"clusterNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IP address pool to use for pod IPs.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.ClusterNetworkEntry"),
+									},
+								},
+							},
+						},
+					},
+					"serviceNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IP address pool for services. Currently, we only support a single entry here.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"networkType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NetworkType is the plugin that is deployed (e.g. OpenShiftSDN).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clusterNetworkMTU": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClusterNetworkMTU is the MTU for inter-pod networking.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"clusterNetwork", "serviceNetwork", "networkType", "clusterNetworkMTU"},
 			},
 		},
-		Dependencies: []string{},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ClusterNetworkEntry"},
 	}
 }
 
@@ -9060,7 +9755,7 @@ func schema_openshift_api_config_v1_OAuth(ref common.ReferenceCallback) common.O
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "OAuth holds cluster-wide information about OAuth.  The canonical name is `cluster`",
+				Description: "OAuth holds cluster-wide information about OAuth.  The canonical name is `cluster`. It is used to configure the integrated OAuth server. This configuration is only honored when the top level Authentication config has type set to IntegratedOAuth.",
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -9078,24 +9773,21 @@ func schema_openshift_api_config_v1_OAuth(ref common.ReferenceCallback) common.O
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Standard object's metadata.",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
 						},
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Description: "spec holds user settable values for configuration",
-							Ref:         ref("github.com/openshift/api/config/v1.OAuthSpec"),
+							Ref: ref("github.com/openshift/api/config/v1.OAuthSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Description: "status holds observed values from the cluster. They may not be overridden.",
-							Ref:         ref("github.com/openshift/api/config/v1.OAuthStatus"),
+							Ref: ref("github.com/openshift/api/config/v1.OAuthStatus"),
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
+				Required: []string{"metadata", "spec", "status"},
 			},
 		},
 		Dependencies: []string{
@@ -9124,8 +9816,7 @@ func schema_openshift_api_config_v1_OAuthList(ref common.ReferenceCallback) comm
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Standard object's metadata.",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
 						},
 					},
 					"items": {
@@ -9149,14 +9840,83 @@ func schema_openshift_api_config_v1_OAuthList(ref common.ReferenceCallback) comm
 	}
 }
 
+func schema_openshift_api_config_v1_OAuthRemoteConnectionInfo(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OAuthRemoteConnectionInfo holds information necessary for establishing a remote connection",
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "url is the remote URL to connect to",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is an optional reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. The key \"ca.crt\" is used to locate the data. If specified and the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. If empty, the default system roots are used. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+					"tlsClientCert": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tlsClientCert is an optional reference to a secret by name that contains the PEM-encoded TLS client certificate to present when connecting to the server. The key \"tls.crt\" is used to locate the data. If specified and the secret or expected key is not found, the identity provider is not honored. If the specified certificate data is not valid, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"tlsClientKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tlsClientKey is an optional reference to a secret by name that contains the PEM-encoded TLS private key for the client certificate referenced in tlsClientCert. The key \"tls.key\" is used to locate the data. If specified and the secret or expected key is not found, the identity provider is not honored. If the specified certificate data is not valid, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+				},
+				Required: []string{"url"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.SecretNameReference"},
+	}
+}
+
 func schema_openshift_api_config_v1_OAuthSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Description: "OAuthSpec contains desired cluster auth configuration",
+				Properties: map[string]spec.Schema{
+					"identityProviders": {
+						SchemaProps: spec.SchemaProps{
+							Description: "identityProviders is an ordered list of ways for a user to identify themselves. When this list is empty, no identities are provisioned for users.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.IdentityProvider"),
+									},
+								},
+							},
+						},
+					},
+					"tokenConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tokenConfig contains options for authorization and access tokens",
+							Ref:         ref("github.com/openshift/api/config/v1.TokenConfig"),
+						},
+					},
+					"templates": {
+						SchemaProps: spec.SchemaProps{
+							Description: "templates allow you to customize pages like the login page.",
+							Ref:         ref("github.com/openshift/api/config/v1.OAuthTemplates"),
+						},
+					},
+				},
+				Required: []string{"tokenConfig"},
 			},
 		},
-		Dependencies: []string{},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.IdentityProvider", "github.com/openshift/api/config/v1.OAuthTemplates", "github.com/openshift/api/config/v1.TokenConfig"},
 	}
 }
 
@@ -9164,7 +9924,273 @@ func schema_openshift_api_config_v1_OAuthStatus(ref common.ReferenceCallback) co
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Description: "OAuthStatus shows current known state of OAuth server in the cluster",
+				Properties:  map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_OAuthTemplates(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OAuthTemplates allow for customization of pages like the login page",
+				Properties: map[string]spec.Schema{
+					"login": {
+						SchemaProps: spec.SchemaProps{
+							Description: "login is the name of a secret that specifies a go template to use to render the login page. The key \"login.html\" is used to locate the template data. If specified and the secret or expected key is not found, the default login page is used. If the specified template is not valid, the default login page is used. If unspecified, the default login page is used. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"providerSelection": {
+						SchemaProps: spec.SchemaProps{
+							Description: "providerSelection is the name of a secret that specifies a go template to use to render the provider selection page. The key \"providers.html\" is used to locate the template data. If specified and the secret or expected key is not found, the default provider selection page is used. If the specified template is not valid, the default provider selection page is used. If unspecified, the default provider selection page is used. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"error": {
+						SchemaProps: spec.SchemaProps{
+							Description: "error is the name of a secret that specifies a go template to use to render error pages during the authentication or grant flow. The key \"errors.html\" is used to locate the template data. If specified and the secret or expected key is not found, the default error page is used. If the specified template is not valid, the default error page is used. If unspecified, the default error page is used. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.SecretNameReference"},
+	}
+}
+
+func schema_openshift_api_config_v1_ObjectReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ObjectReference contains enough information to let you inspect or modify the referred object.",
+				Properties: map[string]spec.Schema{
+					"group": {
+						SchemaProps: spec.SchemaProps{
+							Description: "group of the referent.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"resource": {
+						SchemaProps: spec.SchemaProps{
+							Description: "resource of the referent.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "namespace of the referent.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "name of the referent.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"group", "resource", "name"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_OpenIDClaims(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OpenIDClaims contains a list of OpenID claims to use when authenticating with an OpenID identity provider",
+				Properties: map[string]spec.Schema{
+					"preferredUsername": {
+						SchemaProps: spec.SchemaProps{
+							Description: "preferredUsername is the list of claims whose values should be used as the preferred username. If unspecified, the preferred username is determined from the value of the sub claim",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "name is the list of claims whose values should be used as the display name. Optional. If unspecified, no display name is set for the identity",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"email": {
+						SchemaProps: spec.SchemaProps{
+							Description: "email is the list of claims whose values should be used as the email address. Optional. If unspecified, no email is set for the identity",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_OpenIDIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OpenIDIdentityProvider provides identities for users authenticating using OpenID credentials",
+				Properties: map[string]spec.Schema{
+					"clientID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientID is the oauth client ID",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clientSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientSecret is a required reference to the secret by name containing the oauth client secret. The key \"clientSecret\" is used to locate the data. If the secret or expected key is not found, the identity provider is not honored. The namespace for this secret is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is an optional reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. The key \"ca.crt\" is used to locate the data. If specified and the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. If empty, the default system roots are used. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+					"extraScopes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "extraScopes are any scopes to request in addition to the standard \"openid\" scope.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"extraAuthorizeParameters": {
+						SchemaProps: spec.SchemaProps{
+							Description: "extraAuthorizeParameters are any custom parameters to add to the authorize request.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"urls": {
+						SchemaProps: spec.SchemaProps{
+							Description: "urls to use to authenticate",
+							Ref:         ref("github.com/openshift/api/config/v1.OpenIDURLs"),
+						},
+					},
+					"claims": {
+						SchemaProps: spec.SchemaProps{
+							Description: "claims mappings",
+							Ref:         ref("github.com/openshift/api/config/v1.OpenIDClaims"),
+						},
+					},
+				},
+				Required: []string{"clientID", "clientSecret", "urls", "claims"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference", "github.com/openshift/api/config/v1.OpenIDClaims", "github.com/openshift/api/config/v1.OpenIDURLs", "github.com/openshift/api/config/v1.SecretNameReference"},
+	}
+}
+
+func schema_openshift_api_config_v1_OpenIDURLs(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OpenIDURLs are URLs to use when authenticating with an OpenID identity provider",
+				Properties: map[string]spec.Schema{
+					"authorize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "authorize is the oauth authorization URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"token": {
+						SchemaProps: spec.SchemaProps{
+							Description: "token is the oauth token granting URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"userInfo": {
+						SchemaProps: spec.SchemaProps{
+							Description: "userInfo is the optional userinfo URL. If present, a granted access_token is used to request claims If empty, a granted id_token is parsed for claims",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"authorize", "token"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_OperandVersion(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "name is the name of the particular operand this version is for.  It usually matches container images, not operators.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "version indicates which version of a particular operand is currently being manage.  It must always match the Available condition.  If 1.0.0 is Available, then this must indicate 1.0.0 even if the operator is trying to rollout 1.1.0",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "version"},
 			},
 		},
 		Dependencies: []string{},
@@ -9268,10 +10294,27 @@ func schema_openshift_api_config_v1_ProjectSpec(ref common.ReferenceCallback) co
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{},
+				Description: "ProjectSpec holds the project creation configuration.",
+				Properties: map[string]spec.Schema{
+					"projectRequestMessage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "projectRequestMessage is the string presented to a user if they are unable to request a project via the projectrequest api endpoint",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"projectRequestTemplate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "projectRequestTemplate is the template to use for creating projects in response to projectrequest. This must point to a template in 'openshift-config' namespace. It is optional. If it is not specified, a default template is used.",
+							Ref:         ref("github.com/openshift/api/config/v1.TemplateReference"),
+						},
+					},
+				},
+				Required: []string{"projectRequestMessage"},
 			},
 		},
-		Dependencies: []string{},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.TemplateReference"},
 	}
 }
 
@@ -9280,6 +10323,193 @@ func schema_openshift_api_config_v1_ProjectStatus(ref common.ReferenceCallback) 
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Properties: map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_Proxy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Proxy holds cluster-wide information on how to configure default proxies for the cluster. The canonical name is `cluster`",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Spec holds user-settable values for the proxy configuration",
+							Ref:         ref("github.com/openshift/api/config/v1.ProxySpec"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ProxySpec", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_openshift_api_config_v1_ProxyList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Standard object's metadata.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/config/v1.Proxy"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.Proxy", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_openshift_api_config_v1_ProxySpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"httpProxy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "httpProxy is the URL of the proxy for HTTP requests.  Empty means unset and will not result in an env var.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"httpsProxy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "httpsProxy is the URL of the proxy for HTTPS requests.  Empty means unset and will not result in an env var.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"noProxy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "noProxy is the list of domains for which the proxy should not be used.  Empty means unset and will not result in an env var.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_RegistriesConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"searchRegistries": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SearchRegistries lists the registries to search for images if an image repository is not specified in an image pull spec.\n\nIf this is not set, builds will search Docker Hub (docker.io) when a repository is not specified. Setting this to an empty list will require all builds to fully qualify their image pull specs.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"insecureRegistries": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InsecureRegistries are registries which do not have a valid SSL certificate or only support HTTP connections.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"blockedRegistries": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BlockedRegistries are blacklisted from image pull/push. All other registries are allowed.\n\nOnly one of BlockedRegistries or AllowedRegistries may be set.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"allowedRegistries": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowedRegistries are whitelisted for image pull/push. All other registries are blocked.\n\nOnly one of BlockedRegistries or AllowedRegistries may be set.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 		Dependencies: []string{},
@@ -9353,6 +10583,111 @@ func schema_openshift_api_config_v1_RemoteConnectionInfo(ref common.ReferenceCal
 			},
 		},
 		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_RequestHeaderIdentityProvider(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RequestHeaderIdentityProvider provides identities for users authenticating using request header credentials",
+				Properties: map[string]spec.Schema{
+					"loginURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "loginURL is a URL to redirect unauthenticated /authorize requests to Unauthenticated requests from OAuth clients which expect interactive logins will be redirected here ${url} is replaced with the current URL, escaped to be safe in a query parameter\n  https://www.example.com/sso-login?then=${url}\n${query} is replaced with the current query string\n  https://www.example.com/auth-proxy/oauth/authorize?${query}\nRequired when login is set to true.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"challengeURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "challengeURL is a URL to redirect unauthenticated /authorize requests to Unauthenticated requests from OAuth clients which expect WWW-Authenticate challenges will be redirected here. ${url} is replaced with the current URL, escaped to be safe in a query parameter\n  https://www.example.com/sso-login?then=${url}\n${query} is replaced with the current query string\n  https://www.example.com/auth-proxy/oauth/authorize?${query}\nRequired when challenge is set to true.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ca": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ca is a required reference to a config map by name containing the PEM-encoded CA bundle. It is used as a trust anchor to validate the TLS certificate presented by the remote server. Specifically, it allows verification of incoming requests to prevent header spoofing. The key \"ca.crt\" is used to locate the data. If the config map or expected key is not found, the identity provider is not honored. If the specified ca data is not valid, the identity provider is not honored. The namespace for this config map is openshift-config.",
+							Ref:         ref("github.com/openshift/api/config/v1.ConfigMapNameReference"),
+						},
+					},
+					"clientCommonNames": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientCommonNames is an optional list of common names to require a match from. If empty, any client certificate validated against the clientCA bundle is considered authoritative.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"headers": {
+						SchemaProps: spec.SchemaProps{
+							Description: "headers is the set of headers to check for identity information",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"preferredUsernameHeaders": {
+						SchemaProps: spec.SchemaProps{
+							Description: "preferredUsernameHeaders is the set of headers to check for the preferred username",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"nameHeaders": {
+						SchemaProps: spec.SchemaProps{
+							Description: "nameHeaders is the set of headers to check for the display name",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"emailHeaders": {
+						SchemaProps: spec.SchemaProps{
+							Description: "emailHeaders is the set of headers to check for the email address",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"loginURL", "challengeURL", "ca", "headers", "preferredUsernameHeaders", "nameHeaders", "emailHeaders"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.ConfigMapNameReference"},
 	}
 }
 
@@ -9465,6 +10800,27 @@ func schema_openshift_api_config_v1_SchedulingStatus(ref common.ReferenceCallbac
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Properties: map[string]spec.Schema{},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_SecretNameReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecretNameReference references a secret in a specific namespace. The namespace must be specified at the point of use.",
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "name is the metadata.name of the referenced secret",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name"},
 			},
 		},
 		Dependencies: []string{},
@@ -9639,6 +10995,55 @@ func schema_openshift_api_config_v1_StringSourceSpec(ref common.ReferenceCallbac
 	}
 }
 
+func schema_openshift_api_config_v1_TemplateReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TemplateReference references a template in a specific namespace. The namespace must be specified at the point of use.",
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "name is the metadata.name of the referenced project request template",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_TokenConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TokenConfig holds the necessary configuration options for authorization and access tokens",
+				Properties: map[string]spec.Schema{
+					"accessTokenMaxAgeSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "accessTokenMaxAgeSeconds defines the maximum age of access tokens",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"accessTokenInactivityTimeoutSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "accessTokenInactivityTimeoutSeconds defines the default token inactivity timeout for tokens granted by any client. The value represents the maximum amount of time that can occur between consecutive uses of the token. Tokens become invalid if they are not used within this temporal window. The user will need to acquire a new token to regain access once a token times out. Valid values are integer values:\n  x < 0  Tokens time out is enabled but tokens never timeout unless configured per client (e.g. `-1`)\n  x = 0  Tokens time out is disabled (default)\n  x > 0  Tokens time out if there is no activity for x seconds\nThe current minimum allowed value for X is 300 (5 minutes)",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"accessTokenMaxAgeSeconds"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
 func schema_openshift_api_config_v1_Update(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -9663,6 +11068,75 @@ func schema_openshift_api_config_v1_Update(ref common.ReferenceCallback) common.
 			},
 		},
 		Dependencies: []string{},
+	}
+}
+
+func schema_openshift_api_config_v1_UpdateHistory(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UpdateHistory is a single attempted update to the cluster.",
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "state reflects whether the update was fully applied. The Partial state indicates the update is not fully applied, while the Completed state indicates the update was successfully rolled out at least once (all parts of the update successfully applied).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"startedTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "startedTime is the time at which the update was started.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"completionTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "completionTime, if set, is when the update was fully applied. The update that is currently being applied will have a null completion time. Completion time will always be set for entries that are not the current update (usually to the started time of the next update).",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "version is a semantic versioning identifying the update version. If the requested payload does not define a version, or if a failure occurs retrieving the payload, this value may be empty.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"payload": {
+						SchemaProps: spec.SchemaProps{
+							Description: "payload is a container image location that contains the update. This value is always populated.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"state", "startedTime", "completionTime", "payload"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_openshift_api_config_v1_WebhookTokenAuthenticator(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "webhookTokenAuthenticator holds the necessary configuration options for a remote token authenticator",
+				Properties: map[string]spec.Schema{
+					"kubeConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "kubeConfig contains kube config file data which describes how to access the remote webhook service. For further details, see: https://kubernetes.io/docs/reference/access-authn-authz/authentication/#webhook-token-authentication The key \"kubeConfig\" is used to locate the data. If the secret or expected key is not found, the webhook is not honored. If the specified kube config data is not valid, the webhook is not honored. The namespace for this secret is determined by the point of use.",
+							Ref:         ref("github.com/openshift/api/config/v1.SecretNameReference"),
+						},
+					},
+				},
+				Required: []string{"kubeConfig"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/config/v1.SecretNameReference"},
 	}
 }
 
@@ -11489,15 +12963,22 @@ func schema_openshift_api_kubecontrolplane_v1_KubeAPIServerImagePolicyConfig(ref
 							Format:      "",
 						},
 					},
-					"externalRegistryHostname": {
+					"externalRegistryHostnames": {
 						SchemaProps: spec.SchemaProps{
-							Description: "externalRegistryHostname sets the hostname for the default external image registry. The external hostname should be set only when the image registry is exposed externally. The value is used in 'publicDockerImageRepository' field in ImageStreams. The value must be in \"hostname[:port]\" format.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "externalRegistryHostnames provides the hostnames for the default external image registry. The external hostname should be set only when the image registry is exposed externally. The first value is used in 'publicDockerImageRepository' field in ImageStreams. The value must be in \"hostname[:port]\" format.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
 						},
 					},
 				},
-				Required: []string{"internalRegistryHostname", "externalRegistryHostname"},
+				Required: []string{"internalRegistryHostname", "externalRegistryHostnames"},
 			},
 		},
 		Dependencies: []string{},
@@ -17913,6 +19394,82 @@ func schema_openshift_api_openshiftcontrolplane_v1_DockerPullSecretControllerCon
 	}
 }
 
+func schema_openshift_api_openshiftcontrolplane_v1_FrontProxyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"clientCA": {
+						SchemaProps: spec.SchemaProps{
+							Description: "clientCA is a path to the CA bundle to use to verify the common name of the front proxy's client cert",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"allowedNames": {
+						SchemaProps: spec.SchemaProps{
+							Description: "allowedNames is an optional list of common names to require a match from.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"usernameHeaders": {
+						SchemaProps: spec.SchemaProps{
+							Description: "usernameHeaders is the set of headers to check for the username",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"groupHeaders": {
+						SchemaProps: spec.SchemaProps{
+							Description: "groupHeaders is the set of headers to check for groups",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"extraHeaderPrefixes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "extraHeaderPrefixes is the set of header prefixes to check for user extra",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"clientCA", "allowedNames", "usernameHeaders", "groupHeaders", "extraHeaderPrefixes"},
+			},
+		},
+		Dependencies: []string{},
+	}
+}
+
 func schema_openshift_api_openshiftcontrolplane_v1_ImageConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -18007,11 +19564,18 @@ func schema_openshift_api_openshiftcontrolplane_v1_ImagePolicyConfig(ref common.
 							Format:      "",
 						},
 					},
-					"externalRegistryHostname": {
+					"externalRegistryHostnames": {
 						SchemaProps: spec.SchemaProps{
-							Description: "externalRegistryHostname sets the hostname for the default external image registry. The external hostname should be set only when the image registry is exposed externally. The value is used in 'publicDockerImageRepository' field in ImageStreams. The value must be in \"hostname[:port]\" format.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "externalRegistryHostnames provides the hostnames for the default external image registry. The external hostname should be set only when the image registry is exposed externally. The first value is used in 'publicDockerImageRepository' field in ImageStreams. The value must be in \"hostname[:port]\" format.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
 						},
 					},
 					"additionalTrustedCA": {
@@ -18022,7 +19586,7 @@ func schema_openshift_api_openshiftcontrolplane_v1_ImagePolicyConfig(ref common.
 						},
 					},
 				},
-				Required: []string{"maxImagesBulkImportedPerRepository", "allowedRegistriesForImport", "internalRegistryHostname", "externalRegistryHostname", "additionalTrustedCA"},
+				Required: []string{"maxImagesBulkImportedPerRepository", "allowedRegistriesForImport", "internalRegistryHostname", "externalRegistryHostnames", "additionalTrustedCA"},
 			},
 		},
 		Dependencies: []string{
@@ -18220,6 +19784,12 @@ func schema_openshift_api_openshiftcontrolplane_v1_OpenShiftAPIServerConfig(ref 
 							Ref: ref("github.com/openshift/api/config/v1.KubeClientConfig"),
 						},
 					},
+					"aggregatorConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "aggregatorConfig contains information about how to verify the aggregator front proxy",
+							Ref:         ref("github.com/openshift/api/openshiftcontrolplane/v1.FrontProxyConfig"),
+						},
+					},
 					"imagePolicyConfig": {
 						SchemaProps: spec.SchemaProps{
 							Description: "imagePolicyConfig feeds the image policy admission plugin",
@@ -18258,6 +19828,13 @@ func schema_openshift_api_openshiftcontrolplane_v1_OpenShiftAPIServerConfig(ref 
 							Format:      "",
 						},
 					},
+					"enableDeprecatedOAPIThatWillBeRemovedVerySoon": {
+						SchemaProps: spec.SchemaProps{
+							Description: "enableDeprecatedOAPIThatWillBeRemovedVerySoon allows the openshift-apiserver to serve oapi endpoints.  This option is going away along with the entire API. Consider yourself warned again. Deprecated",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"apiServerArguments": {
 						SchemaProps: spec.SchemaProps{
 							Type: []string{"object"},
@@ -18279,11 +19856,11 @@ func schema_openshift_api_openshiftcontrolplane_v1_OpenShiftAPIServerConfig(ref 
 						},
 					},
 				},
-				Required: []string{"servingInfo", "corsAllowedOrigins", "auditConfig", "storageConfig", "admissionPluginConfig", "kubeClientConfig", "imagePolicyConfig", "projectConfig", "routingConfig", "serviceAccountOAuthGrantMethod", "jenkinsPipelineConfig", "cloudProviderFile", "apiServerArguments"},
+				Required: []string{"servingInfo", "corsAllowedOrigins", "auditConfig", "storageConfig", "admissionPluginConfig", "kubeClientConfig", "aggregatorConfig", "imagePolicyConfig", "projectConfig", "routingConfig", "serviceAccountOAuthGrantMethod", "jenkinsPipelineConfig", "cloudProviderFile", "apiServerArguments"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.AdmissionPluginConfig", "github.com/openshift/api/config/v1.AuditConfig", "github.com/openshift/api/config/v1.EtcdStorageConfig", "github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/config/v1.KubeClientConfig", "github.com/openshift/api/openshiftcontrolplane/v1.ImagePolicyConfig", "github.com/openshift/api/openshiftcontrolplane/v1.JenkinsPipelineConfig", "github.com/openshift/api/openshiftcontrolplane/v1.ProjectConfig", "github.com/openshift/api/openshiftcontrolplane/v1.RoutingConfig"},
+			"github.com/openshift/api/config/v1.AdmissionPluginConfig", "github.com/openshift/api/config/v1.AuditConfig", "github.com/openshift/api/config/v1.EtcdStorageConfig", "github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/config/v1.KubeClientConfig", "github.com/openshift/api/openshiftcontrolplane/v1.FrontProxyConfig", "github.com/openshift/api/openshiftcontrolplane/v1.ImagePolicyConfig", "github.com/openshift/api/openshiftcontrolplane/v1.JenkinsPipelineConfig", "github.com/openshift/api/openshiftcontrolplane/v1.ProjectConfig", "github.com/openshift/api/openshiftcontrolplane/v1.RoutingConfig"},
 	}
 }
 
@@ -18612,26 +20189,6 @@ func schema_openshift_api_openshiftcontrolplane_v1_SourceStrategyDefaultsConfig(
 	}
 }
 
-func schema_openshift_api_operator_v1_CapnsLogConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{
-					"level": {
-						SchemaProps: spec.SchemaProps{
-							Description: "level is passed to capnslog: critical, error, warning, notice, info, debug, trace",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-				Required: []string{"level"},
-			},
-		},
-		Dependencies: []string{},
-	}
-}
-
 func schema_openshift_api_operator_v1_GenerationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -18688,87 +20245,469 @@ func schema_openshift_api_operator_v1_GenerationStatus(ref common.ReferenceCallb
 	}
 }
 
-func schema_openshift_api_operator_v1_GlogConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_openshift_api_operator_v1_KubeAPIServer(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "GlogConfig holds information about configuring logging",
+				Description: "KubeAPISOperatorConfig provides information to configure an operator to manage kube-apiserver.",
 				Properties: map[string]spec.Schema{
-					"level": {
+					"kind": {
 						SchemaProps: spec.SchemaProps{
-							Description: "level is passed to glog.",
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/openshift/api/operator/v1.KubeAPIServerSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/openshift/api/operator/v1.KubeAPIServerStatus"),
+						},
+					},
+				},
+				Required: []string{"metadata", "spec", "status"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.KubeAPIServerSpec", "github.com/openshift/api/operator/v1.KubeAPIServerStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_openshift_api_operator_v1_KubeAPIServerList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubeAPISOperatorConfigList is a collection of items",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Standard object's metadata.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Items contains the items",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.KubeAPIServer"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.KubeAPIServer", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_openshift_api_operator_v1_KubeAPIServerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"managementState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "managementState indicates whether and how the operator should manage the component",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"logLevel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "logLevel is an intent based logging for an overall component.  It does not give fine grained control, but it is a simple way to manage coarse grained logging choices that operators have to interpret for their operands.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"operandSpecs": {
+						SchemaProps: spec.SchemaProps{
+							Description: "operandSpecs provide customization for functional units within the component",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperandSpec"),
+									},
+								},
+							},
+						},
+					},
+					"unsupportedConfigOverrides": {
+						SchemaProps: spec.SchemaProps{
+							Description: "unsupportedConfigOverrides holds a sparse config that will override any previously set options.  It only needs to be the fields to override it will end up overlaying in the following order: 1. hardcoded defaults 2. observedConfig 3. unsupportedConfigOverrides",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"observedConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedConfig holds a sparse config that controller has observed from the cluster state.  It exists in spec because it is an input to the level for the operator",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"forceRedeploymentReason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "forceRedeploymentReason can be used to force the redeployment of the kube-apiserver by providing a unique string. This provides a mechanism to kick a previously failed deployment and provide a reason why you think it will work this time instead of failing again on the same config.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"managementState", "logLevel", "operandSpecs", "unsupportedConfigOverrides", "observedConfig", "forceRedeploymentReason"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.OperandSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+	}
+}
+
+func schema_openshift_api_operator_v1_KubeAPIServerStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedGeneration is the last generation change you've dealt with",
 							Type:        []string{"integer"},
 							Format:      "int64",
 						},
 					},
-					"vmodule": {
+					"conditions": {
 						SchemaProps: spec.SchemaProps{
-							Description: "vmodule is passed to glog.",
+							Description: "conditions is a list of conditions and their status",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperatorCondition"),
+									},
+								},
+							},
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "version is the level this availability applies to",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-				},
-				Required: []string{"level", "vmodule"},
-			},
-		},
-		Dependencies: []string{},
-	}
-}
-
-func schema_openshift_api_operator_v1_JavaLog(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Properties: map[string]spec.Schema{
-					"level": {
+					"readyReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "level is passed to jsr47: fatal, error, warning, info, fine, finer, finest",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "readyReplicas indicates how many replicas are ready and at the desired state",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"generations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "generations are used to determine when an item needs to be reconciled or has changed in a way that needs a reaction.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.GenerationStatus"),
+									},
+								},
+							},
+						},
+					},
+					"latestAvailableRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "latestAvailableRevision is the deploymentID of the most recent deployment",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"nodeStatuses": {
+						SchemaProps: spec.SchemaProps{
+							Description: "nodeStatuses track the deployment values and errors across individual nodes",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.NodeStatus"),
+									},
+								},
+							},
 						},
 					},
 				},
-				Required: []string{"level"},
-			},
-		},
-		Dependencies: []string{},
-	}
-}
-
-func schema_openshift_api_operator_v1_LoggingConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LoggingConfig holds information about configuring logging",
-				Properties: map[string]spec.Schema{
-					"type": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"glog": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/openshift/api/operator/v1.GlogConfig"),
-						},
-					},
-					"capnsLog": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/openshift/api/operator/v1.CapnsLogConfig"),
-						},
-					},
-					"java": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/openshift/api/operator/v1.JavaLog"),
-						},
-					},
-				},
-				Required: []string{"type"},
+				Required: []string{"version", "readyReplicas", "generations", "latestAvailableRevision", "nodeStatuses"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/operator/v1.CapnsLogConfig", "github.com/openshift/api/operator/v1.GlogConfig", "github.com/openshift/api/operator/v1.JavaLog"},
+			"github.com/openshift/api/operator/v1.GenerationStatus", "github.com/openshift/api/operator/v1.NodeStatus", "github.com/openshift/api/operator/v1.OperatorCondition"},
+	}
+}
+
+func schema_openshift_api_operator_v1_KubeControllerManager(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubeControllerManager provides information to configure an operator to manage kube-controller-manager.",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/openshift/api/operator/v1.KubeControllerManagerSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/openshift/api/operator/v1.KubeControllerManagerStatus"),
+						},
+					},
+				},
+				Required: []string{"metadata", "spec", "status"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.KubeControllerManagerSpec", "github.com/openshift/api/operator/v1.KubeControllerManagerStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_openshift_api_operator_v1_KubeControllerManagerList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubeControllerManagerList is a collection of items",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Standard object's metadata.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Items contains the items",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.KubeControllerManager"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.KubeControllerManager", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_openshift_api_operator_v1_KubeControllerManagerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"managementState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "managementState indicates whether and how the operator should manage the component",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"logLevel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "logLevel is an intent based logging for an overall component.  It does not give fine grained control, but it is a simple way to manage coarse grained logging choices that operators have to interpret for their operands.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"operandSpecs": {
+						SchemaProps: spec.SchemaProps{
+							Description: "operandSpecs provide customization for functional units within the component",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperandSpec"),
+									},
+								},
+							},
+						},
+					},
+					"unsupportedConfigOverrides": {
+						SchemaProps: spec.SchemaProps{
+							Description: "unsupportedConfigOverrides holds a sparse config that will override any previously set options.  It only needs to be the fields to override it will end up overlaying in the following order: 1. hardcoded defaults 2. observedConfig 3. unsupportedConfigOverrides",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"observedConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedConfig holds a sparse config that controller has observed from the cluster state.  It exists in spec because it is an input to the level for the operator",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"forceRedeploymentReason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "forceRedeploymentReason can be used to force the redeployment of the kube-controller-manager by providing a unique string. This provides a mechanism to kick a previously failed deployment and provide a reason why you think it will work this time instead of failing again on the same config.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"managementState", "logLevel", "operandSpecs", "unsupportedConfigOverrides", "observedConfig", "forceRedeploymentReason"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.OperandSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+	}
+}
+
+func schema_openshift_api_operator_v1_KubeControllerManagerStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedGeneration is the last generation change you've dealt with",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"conditions": {
+						SchemaProps: spec.SchemaProps{
+							Description: "conditions is a list of conditions and their status",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperatorCondition"),
+									},
+								},
+							},
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "version is the level this availability applies to",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"readyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "readyReplicas indicates how many replicas are ready and at the desired state",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"generations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "generations are used to determine when an item needs to be reconciled or has changed in a way that needs a reaction.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.GenerationStatus"),
+									},
+								},
+							},
+						},
+					},
+					"latestAvailableRevision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "latestAvailableRevision is the deploymentID of the most recent deployment",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"nodeStatuses": {
+						SchemaProps: spec.SchemaProps{
+							Description: "nodeStatuses track the deployment values and errors across individual nodes",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.NodeStatus"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"version", "readyReplicas", "generations", "latestAvailableRevision", "nodeStatuses"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.GenerationStatus", "github.com/openshift/api/operator/v1.NodeStatus", "github.com/openshift/api/operator/v1.OperatorCondition"},
 	}
 }
 
@@ -18828,6 +20767,13 @@ func schema_openshift_api_operator_v1_MyOperatorResourceSpec(ref common.Referenc
 							Format:      "",
 						},
 					},
+					"logLevel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "logLevel is an intent based logging for an overall component.  It does not give fine grained control, but it is a simple way to manage coarse grained logging choices that operators have to interpret for their operands.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"operandSpecs": {
 						SchemaProps: spec.SchemaProps{
 							Description: "operandSpecs provide customization for functional units within the component",
@@ -18854,7 +20800,7 @@ func schema_openshift_api_operator_v1_MyOperatorResourceSpec(ref common.Referenc
 						},
 					},
 				},
-				Required: []string{"managementState", "operandSpecs", "unsupportedConfigOverrides", "observedConfig"},
+				Required: []string{"managementState", "logLevel", "operandSpecs", "unsupportedConfigOverrides", "observedConfig"},
 			},
 		},
 		Dependencies: []string{
@@ -18867,6 +20813,13 @@ func schema_openshift_api_operator_v1_MyOperatorResourceStatus(ref common.Refere
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedGeneration is the last generation change you've dealt with",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
 					"conditions": {
 						SchemaProps: spec.SchemaProps{
 							Description: "conditions is a list of conditions and their status",
@@ -18972,6 +20925,212 @@ func schema_openshift_api_operator_v1_NodeStatus(ref common.ReferenceCallback) c
 	}
 }
 
+func schema_openshift_api_operator_v1_OpenShiftAPIServer(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OpenShiftAPIServer provides information to configure an operator to manage openshift-apiserver.",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/openshift/api/operator/v1.OpenShiftAPIServerSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/openshift/api/operator/v1.OpenShiftAPIServerStatus"),
+						},
+					},
+				},
+				Required: []string{"metadata", "spec", "status"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.OpenShiftAPIServerSpec", "github.com/openshift/api/operator/v1.OpenShiftAPIServerStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_openshift_api_operator_v1_OpenShiftAPIServerList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OpenShiftAPIServerList is a collection of items",
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Standard object's metadata.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Items contains the items",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OpenShiftAPIServer"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.OpenShiftAPIServer", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_openshift_api_operator_v1_OpenShiftAPIServerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"managementState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "managementState indicates whether and how the operator should manage the component",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"logLevel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "logLevel is an intent based logging for an overall component.  It does not give fine grained control, but it is a simple way to manage coarse grained logging choices that operators have to interpret for their operands.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"operandSpecs": {
+						SchemaProps: spec.SchemaProps{
+							Description: "operandSpecs provide customization for functional units within the component",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperandSpec"),
+									},
+								},
+							},
+						},
+					},
+					"unsupportedConfigOverrides": {
+						SchemaProps: spec.SchemaProps{
+							Description: "unsupportedConfigOverrides holds a sparse config that will override any previously set options.  It only needs to be the fields to override it will end up overlaying in the following order: 1. hardcoded defaults 2. observedConfig 3. unsupportedConfigOverrides",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"observedConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedConfig holds a sparse config that controller has observed from the cluster state.  It exists in spec because it is an input to the level for the operator",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+				},
+				Required: []string{"managementState", "logLevel", "operandSpecs", "unsupportedConfigOverrides", "observedConfig"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.OperandSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+	}
+}
+
+func schema_openshift_api_operator_v1_OpenShiftAPIServerStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedGeneration is the last generation change you've dealt with",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"conditions": {
+						SchemaProps: spec.SchemaProps{
+							Description: "conditions is a list of conditions and their status",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperatorCondition"),
+									},
+								},
+							},
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "version is the level this availability applies to",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"readyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "readyReplicas indicates how many replicas are ready and at the desired state",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"generations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "generations are used to determine when an item needs to be reconciled or has changed in a way that needs a reaction.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.GenerationStatus"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"version", "readyReplicas", "generations"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.GenerationStatus", "github.com/openshift/api/operator/v1.OperatorCondition"},
+	}
+}
+
 func schema_openshift_api_operator_v1_OperandContainerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -18990,18 +21149,12 @@ func schema_openshift_api_operator_v1_OperandContainerSpec(ref common.ReferenceC
 							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
 						},
 					},
-					"logging": {
-						SchemaProps: spec.SchemaProps{
-							Description: "logging contains parameters for setting log values on the operand. Nil means to accept the defaults.",
-							Ref:         ref("github.com/openshift/api/operator/v1.LoggingConfig"),
-						},
-					},
 				},
 				Required: []string{"name"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/operator/v1.LoggingConfig", "k8s.io/api/core/v1.ResourceRequirements"},
+			"k8s.io/api/core/v1.ResourceRequirements"},
 	}
 }
 
@@ -19110,6 +21263,13 @@ func schema_openshift_api_operator_v1_OperatorSpec(ref common.ReferenceCallback)
 							Format:      "",
 						},
 					},
+					"logLevel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "logLevel is an intent based logging for an overall component.  It does not give fine grained control, but it is a simple way to manage coarse grained logging choices that operators have to interpret for their operands.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"operandSpecs": {
 						SchemaProps: spec.SchemaProps{
 							Description: "operandSpecs provide customization for functional units within the component",
@@ -19136,7 +21296,7 @@ func schema_openshift_api_operator_v1_OperatorSpec(ref common.ReferenceCallback)
 						},
 					},
 				},
-				Required: []string{"managementState", "operandSpecs", "unsupportedConfigOverrides", "observedConfig"},
+				Required: []string{"managementState", "logLevel", "operandSpecs", "unsupportedConfigOverrides", "observedConfig"},
 			},
 		},
 		Dependencies: []string{
@@ -19149,6 +21309,13 @@ func schema_openshift_api_operator_v1_OperatorStatus(ref common.ReferenceCallbac
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedGeneration is the last generation change you've dealt with",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
 					"conditions": {
 						SchemaProps: spec.SchemaProps{
 							Description: "conditions is a list of conditions and their status",
@@ -19226,12 +21393,87 @@ func schema_openshift_api_operator_v1_ResourcePatch(ref common.ReferenceCallback
 	}
 }
 
+func schema_openshift_api_operator_v1_StaticPodOperatorSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "StaticPodOperatorSpec is spec for controllers that manage static pods.",
+				Properties: map[string]spec.Schema{
+					"managementState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "managementState indicates whether and how the operator should manage the component",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"logLevel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "logLevel is an intent based logging for an overall component.  It does not give fine grained control, but it is a simple way to manage coarse grained logging choices that operators have to interpret for their operands.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"operandSpecs": {
+						SchemaProps: spec.SchemaProps{
+							Description: "operandSpecs provide customization for functional units within the component",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperandSpec"),
+									},
+								},
+							},
+						},
+					},
+					"unsupportedConfigOverrides": {
+						SchemaProps: spec.SchemaProps{
+							Description: "unsupportedConfigOverrides holds a sparse config that will override any previously set options.  It only needs to be the fields to override it will end up overlaying in the following order: 1. hardcoded defaults 2. observedConfig 3. unsupportedConfigOverrides",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"observedConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedConfig holds a sparse config that controller has observed from the cluster state.  It exists in spec because it is an input to the level for the operator",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"failedRevisionLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "failedRevisionLimit is the number of failed static pod installer revisions to keep on disk and in the api -1 = unlimited, 0 or unset = 5 (default)",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"succeededRevisionLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "succeededRevisionLimit is the number of successful static pod installer revisions to keep on disk and in the api -1 = unlimited, 0 or unset = 5 (default)",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"managementState", "logLevel", "operandSpecs", "unsupportedConfigOverrides", "observedConfig"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/operator/v1.OperandSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+	}
+}
+
 func schema_openshift_api_operator_v1_StaticPodOperatorStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Description: "StaticPodOperatorStatus is status for controllers that manage static pods.  There are different needs because individual node status must be tracked.",
 				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "observedGeneration is the last generation change you've dealt with",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
 					"conditions": {
 						SchemaProps: spec.SchemaProps{
 							Description: "conditions is a list of conditions and their status",
@@ -22838,21 +25080,27 @@ func schema_openshift_api_servicecertsigner_v1alpha1_APIServiceCABundleInjectorC
 							Ref:         ref("github.com/openshift/api/config/v1.HTTPServingInfo"),
 						},
 					},
+					"leaderElection": {
+						SchemaProps: spec.SchemaProps{
+							Description: "leaderElection provides information to elect a leader. Only override this if you have a specific need",
+							Ref:         ref("github.com/openshift/api/config/v1.LeaderElection"),
+						},
+					},
 					"authentication": {
 						SchemaProps: spec.SchemaProps{
 							Description: "authentication allows configuration of authentication for the endpoints",
-							Ref:         ref("github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthentication"),
+							Ref:         ref("github.com/openshift/api/config/v1.DelegatedAuthentication"),
 						},
 					},
 					"authorization": {
 						SchemaProps: spec.SchemaProps{
 							Description: "authorization allows configuration of authentication for the endpoints",
-							Ref:         ref("github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthorization"),
+							Ref:         ref("github.com/openshift/api/config/v1.DelegatedAuthorization"),
 						},
 					},
 					"caBundleFile": {
 						SchemaProps: spec.SchemaProps{
-							Description: "caBundleFile holds the ca bundle to apply to APIServices",
+							Description: "caBundleFile holds the ca bundle to apply to APIServices.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -22862,7 +25110,7 @@ func schema_openshift_api_servicecertsigner_v1alpha1_APIServiceCABundleInjectorC
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthentication", "github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthorization"},
+			"github.com/openshift/api/config/v1.DelegatedAuthentication", "github.com/openshift/api/config/v1.DelegatedAuthorization", "github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/config/v1.LeaderElection"},
 	}
 }
 
@@ -22892,21 +25140,27 @@ func schema_openshift_api_servicecertsigner_v1alpha1_ConfigMapCABundleInjectorCo
 							Ref:         ref("github.com/openshift/api/config/v1.HTTPServingInfo"),
 						},
 					},
+					"leaderElection": {
+						SchemaProps: spec.SchemaProps{
+							Description: "leaderElection provides information to elect a leader. Only override this if you have a specific need",
+							Ref:         ref("github.com/openshift/api/config/v1.LeaderElection"),
+						},
+					},
 					"authentication": {
 						SchemaProps: spec.SchemaProps{
 							Description: "authentication allows configuration of authentication for the endpoints",
-							Ref:         ref("github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthentication"),
+							Ref:         ref("github.com/openshift/api/config/v1.DelegatedAuthentication"),
 						},
 					},
 					"authorization": {
 						SchemaProps: spec.SchemaProps{
 							Description: "authorization allows configuration of authentication for the endpoints",
-							Ref:         ref("github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthorization"),
+							Ref:         ref("github.com/openshift/api/config/v1.DelegatedAuthorization"),
 						},
 					},
 					"caBundleFile": {
 						SchemaProps: spec.SchemaProps{
-							Description: "caBundleFile holds the ca bundle to apply to ConfigMaps",
+							Description: "caBundleFile holds the ca bundle to apply to ConfigMaps.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -22916,47 +25170,7 @@ func schema_openshift_api_servicecertsigner_v1alpha1_ConfigMapCABundleInjectorCo
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthentication", "github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthorization"},
-	}
-}
-
-func schema_openshift_api_servicecertsigner_v1alpha1_DelegatedAuthentication(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "DelegatedAuthentication allows authentication to be disabled.",
-				Properties: map[string]spec.Schema{
-					"disabled": {
-						SchemaProps: spec.SchemaProps{
-							Description: "disabled indicates that authentication should be disabled.  By default it will use delegated authentication.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{},
-	}
-}
-
-func schema_openshift_api_servicecertsigner_v1alpha1_DelegatedAuthorization(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "DelegatedAuthorization allows authorization to be disabled.",
-				Properties: map[string]spec.Schema{
-					"disabled": {
-						SchemaProps: spec.SchemaProps{
-							Description: "disabled indicates that authorization should be disabled.  By default it will use delegated authorization.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{},
+			"github.com/openshift/api/config/v1.DelegatedAuthentication", "github.com/openshift/api/config/v1.DelegatedAuthorization", "github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/config/v1.LeaderElection"},
 	}
 }
 
@@ -23064,31 +25278,36 @@ func schema_openshift_api_servicecertsigner_v1alpha1_ServiceCertSignerOperatorCo
 							Format:      "",
 						},
 					},
-					"imagePullSpec": {
+					"logLevel": {
 						SchemaProps: spec.SchemaProps{
-							Description: "imagePullSpec is the image to use for the component.",
+							Description: "logLevel is an intent based logging for an overall component.  It does not give fine grained control, but it is a simple way to manage coarse grained logging choices that operators have to interpret for their operands.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"imagePullPolicy": {
+					"operandSpecs": {
 						SchemaProps: spec.SchemaProps{
-							Description: "imagePullPolicy specifies the image pull policy. One of Always, Never, IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "operandSpecs provide customization for functional units within the component",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.OperandSpec"),
+									},
+								},
+							},
 						},
 					},
-					"version": {
+					"unsupportedConfigOverrides": {
 						SchemaProps: spec.SchemaProps{
-							Description: "version is the desired state in major.minor.micro-patch.  Usually patch is ignored.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "unsupportedConfigOverrides holds a sparse config that will override any previously set options.  It only needs to be the fields to override it will end up overlaying in the following order: 1. hardcoded defaults 2. observedConfig 3. unsupportedConfigOverrides",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
-					"logging": {
+					"observedConfig": {
 						SchemaProps: spec.SchemaProps{
-							Description: "logging contains glog parameters for the component pods.  It's always a command line arg for the moment",
-							Ref:         ref("github.com/openshift/api/operator/v1alpha1.LoggingConfig"),
+							Description: "observedConfig holds a sparse config that controller has observed from the cluster state.  It exists in spec because it is an input to the level for the operator",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
 					"serviceServingCertSignerConfig": {
@@ -23110,11 +25329,11 @@ func schema_openshift_api_servicecertsigner_v1alpha1_ServiceCertSignerOperatorCo
 						},
 					},
 				},
-				Required: []string{"managementState", "imagePullSpec", "imagePullPolicy", "version", "serviceServingCertSignerConfig", "apiServiceCABundleInjectorConfig", "configMapCABundleInjectorConfig"},
+				Required: []string{"managementState", "logLevel", "operandSpecs", "unsupportedConfigOverrides", "observedConfig", "serviceServingCertSignerConfig", "apiServiceCABundleInjectorConfig", "configMapCABundleInjectorConfig"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/operator/v1alpha1.LoggingConfig", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"github.com/openshift/api/operator/v1.OperandSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -23137,43 +25356,45 @@ func schema_openshift_api_servicecertsigner_v1alpha1_ServiceCertSignerOperatorCo
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/openshift/api/operator/v1alpha1.OperatorCondition"),
+										Ref: ref("github.com/openshift/api/operator/v1.OperatorCondition"),
 									},
 								},
 							},
 						},
 					},
-					"state": {
+					"version": {
 						SchemaProps: spec.SchemaProps{
-							Description: "state indicates what the operator has observed to be its current operational status.",
+							Description: "version is the level this availability applies to",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"taskSummary": {
+					"readyReplicas": {
 						SchemaProps: spec.SchemaProps{
-							Description: "taskSummary is a high level summary of what the controller is currently attempting to do.  It is high-level, human-readable and not guaranteed in any way. (I needed this for debugging and realized it made a great summary).",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "readyReplicas indicates how many replicas are ready and at the desired state",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
-					"currentVersionAvailability": {
+					"generations": {
 						SchemaProps: spec.SchemaProps{
-							Description: "currentVersionAvailability is availability information for the current version.  If it is unmanged or removed, this doesn't exist.",
-							Ref:         ref("github.com/openshift/api/operator/v1alpha1.VersionAvailability"),
-						},
-					},
-					"targetVersionAvailability": {
-						SchemaProps: spec.SchemaProps{
-							Description: "targetVersionAvailability is availability information for the target version if we are migrating",
-							Ref:         ref("github.com/openshift/api/operator/v1alpha1.VersionAvailability"),
+							Description: "generations are used to determine when an item needs to be reconciled or has changed in a way that needs a reaction.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/openshift/api/operator/v1.GenerationStatus"),
+									},
+								},
+							},
 						},
 					},
 				},
+				Required: []string{"version", "readyReplicas", "generations"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/operator/v1alpha1.OperatorCondition", "github.com/openshift/api/operator/v1alpha1.VersionAvailability"},
+			"github.com/openshift/api/operator/v1.GenerationStatus", "github.com/openshift/api/operator/v1.OperatorCondition"},
 	}
 }
 
@@ -23203,21 +25424,27 @@ func schema_openshift_api_servicecertsigner_v1alpha1_ServiceServingCertSignerCon
 							Ref:         ref("github.com/openshift/api/config/v1.HTTPServingInfo"),
 						},
 					},
+					"leaderElection": {
+						SchemaProps: spec.SchemaProps{
+							Description: "leaderElection provides information to elect a leader. Only override this if you have a specific need",
+							Ref:         ref("github.com/openshift/api/config/v1.LeaderElection"),
+						},
+					},
 					"authentication": {
 						SchemaProps: spec.SchemaProps{
 							Description: "authentication allows configuration of authentication for the endpoints",
-							Ref:         ref("github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthentication"),
+							Ref:         ref("github.com/openshift/api/config/v1.DelegatedAuthentication"),
 						},
 					},
 					"authorization": {
 						SchemaProps: spec.SchemaProps{
 							Description: "authorization allows configuration of authentication for the endpoints",
-							Ref:         ref("github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthorization"),
+							Ref:         ref("github.com/openshift/api/config/v1.DelegatedAuthorization"),
 						},
 					},
 					"signer": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Signer holds the signing information used to automatically sign serving certificates.",
+							Description: "signer holds the signing information used to automatically sign serving certificates.",
 							Ref:         ref("github.com/openshift/api/config/v1.CertInfo"),
 						},
 					},
@@ -23226,7 +25453,7 @@ func schema_openshift_api_servicecertsigner_v1alpha1_ServiceServingCertSignerCon
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/config/v1.CertInfo", "github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthentication", "github.com/openshift/api/servicecertsigner/v1alpha1.DelegatedAuthorization"},
+			"github.com/openshift/api/config/v1.CertInfo", "github.com/openshift/api/config/v1.DelegatedAuthentication", "github.com/openshift/api/config/v1.DelegatedAuthorization", "github.com/openshift/api/config/v1.HTTPServingInfo", "github.com/openshift/api/config/v1.LeaderElection"},
 	}
 }
 

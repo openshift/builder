@@ -24,6 +24,23 @@ libpod to manage containers.
 **cgroup_manager**=""
   Specify the CGroup Manager to use; valid values are "systemd" and "cgroupfs"
 
+**init_path**=""
+  Path to the container-init binary, which forwards signals and reaps processes within containers.  Note that the container-init binary will only be used when the `--init` for podman-create and podman-run is set.
+
+**hooks_dir**=["*path*", ...]
+
+  Each `*.json` file in the path configures a hook for Podman containers.  For more details on the syntax of the JSON files and the semantics of hook injection, see `oci-hooks(5)`.  Podman and libpod currently support both the 1.0.0 and 0.1.0 hook schemas, although the 0.1.0 schema is deprecated.
+
+  Paths listed later in the array higher precedence (`oci-hooks(5)` discusses directory precedence).
+
+  For the annotation conditions, libpod uses any annotations set in the generated OCI configuration.
+
+  For the bind-mount conditions, only mounts explicitly requested by the caller via `--volume` are considered.  Bind mounts that libpod inserts by default (e.g. `/dev/shm`) are not considered.
+
+  Podman and libpod currently support an additional `precreate` state which is called before the runtime's `create` operation.  Unlike the other stages, which receive the container state on their standard input, `precreate` hooks receive the proposed runtime configuration on their standard input.  They may alter that configuration as they see fit, and write the altered form to their standard output.
+
+  **WARNING**: the `precreate` hook lets you do powerful things, such as adding additional mounts to the runtime configuration.  That power also makes it easy to break things.  Before reporting libpod errors, try running your container with `precreate` hooks disabled to see if the problem is due to one of your hooks.
+
 **static_dir**=""
   Directory for persistent libpod files (database, etc)
   By default this will be configured relative to where containers/storage

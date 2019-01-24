@@ -10,6 +10,7 @@ source /tmp/libpod/$SCRIPT_BASE/lib.sh
 
 req_env_var "
 SCRIPT_BASE $SCRIPT_BASE
+FEDORA_CNI_COMMIT $FEDORA_CNI_COMMIT
 CNI_COMMIT $CNI_COMMIT
 CRIO_COMMIT $CRIO_COMMIT
 CRIU_COMMIT $CRIU_COMMIT
@@ -27,8 +28,8 @@ ooe.sh sudo dnf install -y \
     atomic-registries \
     btrfs-progs-devel \
     bzip2 \
-    conmon \
     device-mapper-devel \
+    emacs-nox \
     findutils \
     git \
     glib2-devel \
@@ -65,11 +66,14 @@ ooe.sh sudo dnf install -y \
     runc \
     skopeo-containers \
     slirp4netns \
+    unzip \
+    vim \
     which \
     xz
 
 install_varlink
 
+CNI_COMMIT=$FEDORA_CNI_COMMIT
 install_cni_plugins
 
 install_buildah

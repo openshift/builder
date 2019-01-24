@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -46,7 +45,6 @@ import (
 	imageapi "github.com/openshift/origin/pkg/image/apis/image"
 	imagetypeclientset "github.com/openshift/origin/pkg/image/generated/internalclientset/typed/image/internalversion"
 	"github.com/openshift/origin/test/extended/testdata"
-	"github.com/openshift/origin/test/util"
 )
 
 const pvPrefix = "pv-"
@@ -54,7 +52,7 @@ const nfsPrefix = "nfs-"
 
 // WaitForOpenShiftNamespaceImageStreams waits for the standard set of imagestreams to be imported
 func WaitForOpenShiftNamespaceImageStreams(oc *CLI) error {
-	langs := []string{"ruby", "nodejs", "perl", "php", "python", "wildfly", "mysql", "postgresql", "mongodb", "jenkins"}
+	langs := []string{"ruby", "nodejs", "perl", "php", "python", "mysql", "postgresql", "mongodb", "jenkins"}
 	scan := func() bool {
 		for _, lang := range langs {
 			e2e.Logf("Checking language %v \n", lang)
@@ -97,7 +95,7 @@ func WaitForOpenShiftNamespaceImageStreams(oc *CLI) error {
 // imagestreams from the OpenShift namespace
 func CheckOpenShiftNamespaceImageStreams(oc *CLI) {
 	missing := false
-	langs := []string{"ruby", "nodejs", "perl", "php", "python", "wildfly", "mysql", "postgresql", "mongodb", "jenkins"}
+	langs := []string{"ruby", "nodejs", "perl", "php", "python", "mysql", "postgresql", "mongodb", "jenkins"}
 	for _, lang := range langs {
 		_, err := oc.ImageClient().Image().ImageStreams("openshift").Get(lang, metav1.GetOptions{})
 		if err != nil {
@@ -320,6 +318,10 @@ func GetMasterThreadDump(oc *CLI) {
 	e2e.Logf("\n\n got error on oc get --raw /debug/pprof/goroutine?godebug=2: %v\n\n", err)
 }
 
+func PreTestDump() {
+	// dump any state we want to know prior to running tests
+}
+
 // ExamineDiskUsage will dump df output on the testing system; leveraging this as part of diagnosing
 // the registry's disk filling up during external tests on jenkins
 func ExamineDiskUsage() {
@@ -334,16 +336,6 @@ func ExamineDiskUsage() {
 				}
 		                DumpDockerInfo()
 	*/
-}
-
-// DumpDockerInfo runs `docker info` and logs it to the job output
-func DumpDockerInfo() {
-	out, err := exec.Command("/bin/docker", "info").Output()
-	if err == nil {
-		e2e.Logf("\n\n docker info output: \n%s\n\n", string(out))
-	} else {
-		e2e.Logf("\n\n got error on docker inspect %v\n\n", err)
-	}
 }
 
 // ExaminePodDiskUsage will dump df/du output on registry pod; leveraging this as part of diagnosing
@@ -526,9 +518,17 @@ func (t *BuildResult) dumpRegistryLogs() {
 	// Changing the namespace on the derived client still changes it on the original client
 	// because the kubeFramework field is only copied by reference. Saving the original namespace
 	// here so we can restore it when done with registry logs
+	// TODO remove the default/docker-registry log retrieval when we are fully migrated to 4.0 for our test env.
 	savedNamespace := t.Oc.Namespace()
 	oadm := t.Oc.AsAdmin().SetNamespace("default")
 	out, err := oadm.Run("logs").Args("dc/docker-registry", "--since="+since.String()).Output()
+	if err != nil {
+		e2e.Logf("Error during log retrieval: %+v\n", err)
+	} else {
+		e2e.Logf("%s\n", out)
+	}
+	oadm = t.Oc.AsAdmin().SetNamespace("openshift-image-registry")
+	out, err = oadm.Run("logs").Args("deployment/image-registry", "--since="+since.String()).Output()
 	if err != nil {
 		e2e.Logf("Error during log retrieval: %+v\n", err)
 	} else {
@@ -550,6 +550,24 @@ func (t *BuildResult) Logs() (string, error) {
 	}
 
 	buildOuput, err := t.Oc.Run("logs").Args("-f", t.BuildPath, "--timestamps").Output()
+	if err != nil {
+		return "", fmt.Errorf("Error retrieving logs for %#v: %v", *t, err)
+	}
+
+	return buildOuput, nil
+}
+
+// LogsNoTimestamp returns the logs associated with this build.
+func (t *BuildResult) LogsNoTimestamp() (string, error) {
+	if t == nil || t.BuildPath == "" {
+		return "", fmt.Errorf("Not enough information to retrieve logs for %#v", *t)
+	}
+
+	if t.LogDumper != nil {
+		return t.LogDumper(t.Oc, t)
+	}
+
+	buildOuput, err := t.Oc.Run("logs").Args("-f", t.BuildPath).Output()
 	if err != nil {
 		return "", fmt.Errorf("Error retrieving logs for %#v: %v", *t, err)
 	}
@@ -684,7 +702,7 @@ func WaitForABuild(c buildv1clienttyped.BuildInterface, name string, isOK, isFai
 		return err
 	}
 	// wait longer for the build to run to completion
-	err = wait.Poll(5*time.Second, 60*time.Minute, func() (bool, error) {
+	err = wait.Poll(5*time.Second, 10*time.Minute, func() (bool, error) {
 		list, err := c.List(metav1.ListOptions{FieldSelector: fields.Set{"metadata.name": name}.AsSelector().String()})
 		if err != nil {
 			e2e.Logf("error listing builds: %v", err)
@@ -1346,23 +1364,6 @@ func (r *podExecutor) CopyFromHost(local, remote string) error {
 	return err
 }
 
-// CreateTempFile stores the specified data in a temp dir/temp file
-// for the test who calls it
-func CreateTempFile(data string) (string, error) {
-	testDir, err := ioutil.TempDir(util.GetBaseDir(), "test-files")
-	if err != nil {
-		return "", err
-	}
-	testFile, err := ioutil.TempFile(testDir, "test-file")
-	if err != nil {
-		return "", err
-	}
-	if err := ioutil.WriteFile(testFile.Name(), []byte(data), 0666); err != nil {
-		return "", err
-	}
-	return testFile.Name(), nil
-}
-
 type GitRepo struct {
 	baseTempDir  string
 	upstream     git.Repository
@@ -1398,7 +1399,7 @@ func (r GitRepo) Remove() {
 
 // NewGitRepo creates temporary test directories with local and "remote" git repo
 func NewGitRepo(repoName string) (GitRepo, error) {
-	testDir, err := ioutil.TempDir(util.GetBaseDir(), repoName)
+	testDir, err := ioutil.TempDir(os.TempDir(), repoName)
 	if err != nil {
 		return GitRepo{}, err
 	}
@@ -1459,16 +1460,59 @@ func GetRouterPodTemplate(oc *CLI) (*corev1.PodTemplateSpec, string, error) {
 		if !errors.IsNotFound(err) {
 			return nil, "", err
 		}
+		deploy, err = k8sappsclient.Deployments(ns).Get("router-default", metav1.GetOptions{})
+		if err == nil {
+			return &deploy.Spec.Template, ns, nil
+		}
+		if !errors.IsNotFound(err) {
+			return nil, "", err
+		}
 	}
 	return nil, "", errors.NewNotFound(schema.GroupResource{Group: "apps.openshift.io", Resource: "deploymentconfigs"}, "router")
 }
 
+// FindImageFormatString returns a format string for components on the cluster. It returns false
+// if no format string could be inferred from the cluster. OpenShift 4.0 clusters will not be able
+// to infer an image format string, so you must wrap this method in one that can locate your specific
+// image.
 func FindImageFormatString(oc *CLI) (string, bool) {
-	// the router is expected to be on all clusters
-	// TODO: switch this to read from the global config
+	// legacy support for 3.x clusters
 	template, _, err := GetRouterPodTemplate(oc)
 	if err == nil {
-		return strings.Replace(template.Spec.Containers[0].Image, "haproxy-router", "${component}", -1), true
+		if strings.Contains(template.Spec.Containers[0].Image, "haproxy-router") {
+			return strings.Replace(template.Spec.Containers[0].Image, "haproxy-router", "${component}", -1), true
+		}
 	}
+	// in openshift 4.0, no image format can be calculated on cluster
 	return "openshift/origin-${component}:latest", false
+}
+
+func FindCLIImage(oc *CLI) (string, bool) {
+	// look up image stream
+	is, err := oc.AdminImageClient().ImageV1().ImageStreams("openshift").Get("cli", metav1.GetOptions{})
+	if err == nil {
+		for _, tag := range is.Spec.Tags {
+			if tag.Name == "latest" && tag.From != nil && tag.From.Kind == "DockerImage" {
+				return tag.From.Name, true
+			}
+		}
+	}
+
+	format, ok := FindImageFormatString(oc)
+	return strings.Replace(format, "${component}", "cli", -1), ok
+}
+
+func FindRouterImage(oc *CLI) (string, bool) {
+	format, ok := FindImageFormatString(oc)
+	return strings.Replace(format, "${component}", "haproxy-router", -1), ok
+}
+
+func IsClusterOperated(oc *CLI) bool {
+	configclient := oc.AdminConfigClient().ConfigV1()
+	o, err := configclient.Images().Get("cluster", metav1.GetOptions{})
+	if o == nil || err != nil {
+		e2e.Logf("Could not find image config object, assuming non-4.0 installed cluster: %v", err)
+		return false
+	}
+	return true
 }

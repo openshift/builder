@@ -1,10 +1,10 @@
 package shared
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"github.com/cri-o/ocicni/pkg/ocicni"
-	"github.com/docker/go-units"
+	"github.com/google/shlex"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,9 +13,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containers/image/types"
 	"github.com/containers/libpod/libpod"
+	"github.com/containers/libpod/libpod/image"
 	"github.com/containers/libpod/pkg/inspect"
 	cc "github.com/containers/libpod/pkg/spec"
+	"github.com/containers/libpod/pkg/util"
+	"github.com/cri-o/ocicni/pkg/ocicni"
+	"github.com/docker/go-units"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -40,6 +45,7 @@ type PsOptions struct {
 	Sort      string
 	Label     string
 	Namespace bool
+	Sync      bool
 }
 
 // BatchContainerStruct is the return obkect from BatchContainer and contains
@@ -121,6 +127,12 @@ func NewBatchContainer(ctr *libpod.Container, opts PsOptions) (PsContainerOutput
 		pso       PsContainerOutput
 	)
 	batchErr := ctr.Batch(func(c *libpod.Container) error {
+		if opts.Sync {
+			if err := c.Sync(); err != nil {
+				return err
+			}
+		}
+
 		conState, err = c.State()
 		if err != nil {
 			return errors.Wrapf(err, "unable to obtain container state")
@@ -433,8 +445,7 @@ func getStrFromSquareBrackets(cmd string) string {
 
 // GetCtrInspectInfo takes container inspect data and collects all its info into a ContainerData
 // structure for inspection related methods
-func GetCtrInspectInfo(ctr *libpod.Container, ctrInspectData *inspect.ContainerInspectData) (*inspect.ContainerData, error) {
-	config := ctr.Config()
+func GetCtrInspectInfo(config *libpod.ContainerConfig, ctrInspectData *inspect.ContainerInspectData, createArtifact *cc.CreateConfig) (*inspect.ContainerData, error) {
 	spec := config.Spec
 
 	cpus, mems, period, quota, realtimePeriod, realtimeRuntime, shares := getCPUInfo(spec)
@@ -442,16 +453,6 @@ func GetCtrInspectInfo(ctr *libpod.Container, ctrInspectData *inspect.ContainerI
 	memKernel, memReservation, memSwap, memSwappiness, memDisableOOMKiller := getMemoryInfo(spec)
 	pidsLimit := getPidsInfo(spec)
 	cgroup := getCgroup(spec)
-
-	var createArtifact cc.CreateConfig
-	artifact, err := ctr.GetArtifact("create-config")
-	if err == nil {
-		if err := json.Unmarshal(artifact, &createArtifact); err != nil {
-			return nil, err
-		}
-	} else {
-		logrus.Errorf("couldn't get some inspect information, error getting artifact %q: %v", ctr.ID(), err)
-	}
 
 	data := &inspect.ContainerData{
 		ctrInspectData,
@@ -480,7 +481,7 @@ func GetCtrInspectInfo(ctr *libpod.Container, ctrInspectData *inspect.ContainerI
 			PidsLimit:            pidsLimit,
 			Privileged:           config.Privileged,
 			ReadonlyRootfs:       spec.Root.Readonly,
-			Runtime:              ctr.RuntimeName(),
+			Runtime:              config.OCIRuntime,
 			NetworkMode:          string(createArtifact.NetMode),
 			IpcMode:              string(createArtifact.IpcMode),
 			Cgroup:               cgroup,
@@ -588,4 +589,91 @@ func portsToString(ports []ocicni.PortMapping) string {
 		portDisplay = append(portDisplay, fmt.Sprintf("%s:%d->%d/%s", hostIP, v.HostPort, v.ContainerPort, v.Protocol))
 	}
 	return strings.Join(portDisplay, ", ")
+}
+
+// GetRunlabel is a helper function for runlabel; it gets the image if needed and begins the
+// contruction of the runlabel output and environment variables
+func GetRunlabel(label string, runlabelImage string, ctx context.Context, runtime *libpod.Runtime, pull bool, inputCreds string, dockerRegistryOptions image.DockerRegistryOptions, authfile string, signaturePolicyPath string, output io.Writer) (string, string, error) {
+	var (
+		newImage  *image.Image
+		err       error
+		imageName string
+	)
+	if pull {
+		var registryCreds *types.DockerAuthConfig
+		if inputCreds != "" {
+			creds, err := util.ParseRegistryCreds(inputCreds)
+			if err != nil {
+				return "", "", err
+			}
+			registryCreds = creds
+		}
+		dockerRegistryOptions.DockerRegistryCreds = registryCreds
+		newImage, err = runtime.ImageRuntime().New(ctx, runlabelImage, signaturePolicyPath, authfile, output, &dockerRegistryOptions, image.SigningOptions{}, false)
+	} else {
+		newImage, err = runtime.ImageRuntime().NewFromLocal(runlabelImage)
+	}
+	if err != nil {
+		return "", "", errors.Wrapf(err, "unable to find image")
+	}
+
+	if len(newImage.Names()) < 1 {
+		imageName = newImage.ID()
+	} else {
+		imageName = newImage.Names()[0]
+	}
+
+	runLabel, err := newImage.GetLabel(ctx, label)
+	return runLabel, imageName, err
+}
+
+// GenerateRunlabelCommand generates the command that will eventually be execucted by podman
+func GenerateRunlabelCommand(runLabel, imageName, name string, opts map[string]string, extraArgs []string) ([]string, []string, error) {
+	// If no name is provided, we use the image's basename instead
+	if name == "" {
+		baseName, err := image.GetImageBaseName(imageName)
+		if err != nil {
+			return nil, nil, err
+		}
+		name = baseName
+	}
+	// The user provided extra arguments that need to be tacked onto the label's command
+	if len(extraArgs) > 0 {
+		runLabel = fmt.Sprintf("%s %s", runLabel, strings.Join(extraArgs, " "))
+	}
+	cmd, err := GenerateCommand(runLabel, imageName, name)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "unable to generate command")
+	}
+	env := GenerateRunEnvironment(name, imageName, opts)
+	env = append(env, "PODMAN_RUNLABEL_NESTED=1")
+
+	envmap := envSliceToMap(env)
+
+	envmapper := func(k string) string {
+		switch k {
+		case "OPT1":
+			return envmap["OPT1"]
+		case "OPT2":
+			return envmap["OPT2"]
+		case "OPT3":
+			return envmap["OPT3"]
+		}
+		return ""
+	}
+	newS := os.Expand(strings.Join(cmd, " "), envmapper)
+	cmd, err = shlex.Split(newS)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cmd, env, nil
+}
+
+func envSliceToMap(env []string) map[string]string {
+	m := make(map[string]string)
+	for _, i := range env {
+		split := strings.Split(i, "=")
+		m[split[0]] = strings.Join(split[1:], " ")
+	}
+	return m
 }

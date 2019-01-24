@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/containers/libpod/cmd/podman/formats"
-	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/cmd/podman/shared"
-	"github.com/containers/libpod/libpod"
+	"github.com/containers/libpod/libpod/adapter"
+	cc "github.com/containers/libpod/pkg/spec"
 	"github.com/containers/libpod/pkg/util"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
@@ -63,7 +64,7 @@ func inspectCmd(c *cli.Context) error {
 		return err
 	}
 
-	runtime, err := libpodruntime.GetRuntime(c)
+	runtime, err := adapter.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
@@ -87,6 +88,9 @@ func inspectCmd(c *cli.Context) error {
 	}
 
 	inspectedObjects, iterateErr := iterateInput(getContext(), c, args, runtime, inspectType)
+	if iterateErr != nil {
+		return iterateErr
+	}
 
 	var out formats.Writer
 	if outputFormat != "" && outputFormat != formats.JSONString {
@@ -97,12 +101,11 @@ func inspectCmd(c *cli.Context) error {
 		out = formats.JSONStructArray{Output: inspectedObjects}
 	}
 
-	formats.Writer(out).Out()
-	return iterateErr
+	return formats.Writer(out).Out()
 }
 
 // func iterateInput iterates the images|containers the user has requested and returns the inspect data and error
-func iterateInput(ctx context.Context, c *cli.Context, args []string, runtime *libpod.Runtime, inspectType string) ([]interface{}, error) {
+func iterateInput(ctx context.Context, c *cli.Context, args []string, runtime *adapter.LocalRuntime, inspectType string) ([]interface{}, error) {
 	var (
 		data           interface{}
 		inspectedItems []interface{}
@@ -119,16 +122,21 @@ func iterateInput(ctx context.Context, c *cli.Context, args []string, runtime *l
 			}
 			libpodInspectData, err := ctr.Inspect(c.Bool("size"))
 			if err != nil {
-				inspectError = errors.Wrapf(err, "error getting libpod container inspect data %q", ctr.ID)
+				inspectError = errors.Wrapf(err, "error getting libpod container inspect data %s", ctr.ID())
 				break
 			}
-			data, err = shared.GetCtrInspectInfo(ctr, libpodInspectData)
+			artifact, err := getArtifact(ctr)
+			if inspectError != nil {
+				inspectError = err
+				break
+			}
+			data, err = shared.GetCtrInspectInfo(ctr.Config(), libpodInspectData, artifact)
 			if err != nil {
 				inspectError = errors.Wrapf(err, "error parsing container data %q", ctr.ID())
 				break
 			}
 		case inspectTypeImage:
-			image, err := runtime.ImageRuntime().NewFromLocal(input)
+			image, err := runtime.NewImageFromLocal(input)
 			if err != nil {
 				inspectError = errors.Wrapf(err, "error getting image %q", input)
 				break
@@ -141,7 +149,7 @@ func iterateInput(ctx context.Context, c *cli.Context, args []string, runtime *l
 		case inspectAll:
 			ctr, err := runtime.LookupContainer(input)
 			if err != nil {
-				image, err := runtime.ImageRuntime().NewFromLocal(input)
+				image, err := runtime.NewImageFromLocal(input)
 				if err != nil {
 					inspectError = errors.Wrapf(err, "error getting image %q", input)
 					break
@@ -154,12 +162,17 @@ func iterateInput(ctx context.Context, c *cli.Context, args []string, runtime *l
 			} else {
 				libpodInspectData, err := ctr.Inspect(c.Bool("size"))
 				if err != nil {
-					inspectError = errors.Wrapf(err, "error getting libpod container inspect data %q", ctr.ID)
+					inspectError = errors.Wrapf(err, "error getting libpod container inspect data %s", ctr.ID())
 					break
 				}
-				data, err = shared.GetCtrInspectInfo(ctr, libpodInspectData)
+				artifact, inspectError := getArtifact(ctr)
+				if inspectError != nil {
+					inspectError = err
+					break
+				}
+				data, err = shared.GetCtrInspectInfo(ctr.Config(), libpodInspectData, artifact)
 				if err != nil {
-					inspectError = errors.Wrapf(err, "error parsing container data %q", ctr.ID)
+					inspectError = errors.Wrapf(err, "error parsing container data %s", ctr.ID())
 					break
 				}
 			}
@@ -169,4 +182,16 @@ func iterateInput(ctx context.Context, c *cli.Context, args []string, runtime *l
 		}
 	}
 	return inspectedItems, inspectError
+}
+
+func getArtifact(ctr *adapter.Container) (*cc.CreateConfig, error) {
+	var createArtifact cc.CreateConfig
+	artifact, err := ctr.GetArtifact("create-config")
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(artifact, &createArtifact); err != nil {
+		return nil, err
+	}
+	return &createArtifact, nil
 }

@@ -31,7 +31,8 @@ var staticSuites = []*ginkgo.TestSuite{
 		Matches: func(name string) bool {
 			return strings.Contains(name, "[Suite:openshift/conformance/parallel")
 		},
-		Parallelism: 30,
+		Parallelism:          30,
+		MaximumAllowedFlakes: 5,
 	},
 	{
 		Name: "openshift/conformance/serial",
@@ -61,6 +62,8 @@ var staticSuites = []*ginkgo.TestSuite{
 			return strings.Contains(name, "[Feature:Builds]")
 		},
 		Parallelism: 7,
+		// TODO: Builds are really flaky right now, remove when we land perf updates and fix io on workers
+		MaximumAllowedFlakes: 3,
 		// Jenkins tests can take a really long time
 		TestTimeout: 60 * time.Minute,
 	},
@@ -85,30 +88,39 @@ var staticSuites = []*ginkgo.TestSuite{
 		TestTimeout: 20 * time.Minute,
 	},
 	{
-		Name: "openshift/smoke-4",
+		Name: "openshift/jenkins-e2e",
 		Description: templates.LongDesc(`
-		Tests that verify a 4.X cluster (using the new operator based core) is ready. This
-		suite will be removed in favor of openshift/conformance once all functionality is
-		available.
+		Tests that exercise the OpenShift / Jenkins integrations provided by the OpenShift Jenkins image/plugins and the Pipeline Build Strategy.
 		`),
 		Matches: func(name string) bool {
-			return strings.Contains(name, "[Suite:openshift/smoke-4]") && strings.Contains(name, "[Suite:openshift/conformance/")
+			return strings.Contains(name, "openshift pipeline")
 		},
-		AllowPassWithFlakes: true,
-		Parallelism:         30,
+		Parallelism: 3,
+		TestTimeout: 20 * time.Minute,
 	},
 	{
-		Name: "openshift/all",
+		Name: "openshift/scalability",
+		Description: templates.LongDesc(`
+		Tests that verify the scalability characteristics of the cluster. Currently this is focused on core performance behaviors and preventing regressions.
+		`),
+		Matches: func(name string) bool {
+			return strings.Contains(name, "[Suite:openshift/scalability]")
+		},
+		Parallelism: 1,
+		TestTimeout: 20 * time.Minute,
+	},
+	{
+		Name: "openshift/conformance-excluded",
+		Description: templates.LongDesc(`
+		Run only tests that are excluded from conformance. Makes identifying omitted tests easier.
+		`),
+		Matches: func(name string) bool { return !strings.Contains(name, "[Suite:openshift/conformance/") },
+	},
+	{
+		Name: "all",
 		Description: templates.LongDesc(`
 		Run all tests.
 		`),
 		Matches: func(name string) bool { return true },
-	},
-	{
-		Name: "kubernetes/all",
-		Description: templates.LongDesc(`
-		Run all Kubernetes tests.
-		`),
-		Matches: func(name string) bool { return strings.Contains(name, "[k8s.io]") },
 	},
 }

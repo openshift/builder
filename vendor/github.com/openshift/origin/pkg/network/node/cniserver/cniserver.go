@@ -59,7 +59,6 @@ const CNIServerConfigFilePath string = CNIServerRunDir + "/" + CNIServerConfigFi
 type Config struct {
 	MTU                uint32 `json:"mtu"`
 	ServiceNetworkCIDR string `json:"serviceNetworkCIDR"`
-	DNSIP              string `json:"dnsIP"`
 }
 
 // Explicit type for CNI commands the server handles
@@ -94,6 +93,8 @@ type PodRequest struct {
 	Netns string
 	// for an ADD request, the host side of the created veth
 	HostVeth string
+	// for an ADD request, the (optional) already-assigned IP
+	AssignedIP string
 	// Channel for returning the operation result to the CNIServer
 	Result chan *PodResult
 }

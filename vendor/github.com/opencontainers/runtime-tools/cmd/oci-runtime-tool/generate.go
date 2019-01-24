@@ -94,17 +94,19 @@ var generateFlags = []cli.Flag{
 	cli.StringFlag{Name: "os", Value: runtime.GOOS, Usage: "operating system the container is created for"},
 	cli.StringFlag{Name: "output", Usage: "output file (defaults to stdout)"},
 	cli.BoolFlag{Name: "privileged", Usage: "enable privileged container settings"},
-	cli.StringSliceFlag{Name: "process-cap-add-ambient", Usage: "add Linux ambient capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-add-bounding", Usage: "add Linux bounding capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-add-effective", Usage: "add Linux effective capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-add-inheritable", Usage: "add Linux inheritable capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-add-permitted", Usage: "add Linux permitted capabilities"},
+	cli.StringFlag{Name: "process-cap-add", Usage: "add Linux capabilities to all 5 capability sets"},
+	cli.StringFlag{Name: "process-cap-add-ambient", Usage: "add Linux ambient capabilities"},
+	cli.StringFlag{Name: "process-cap-add-bounding", Usage: "add Linux bounding capabilities"},
+	cli.StringFlag{Name: "process-cap-add-effective", Usage: "add Linux effective capabilities"},
+	cli.StringFlag{Name: "process-cap-add-inheritable", Usage: "add Linux inheritable capabilities"},
+	cli.StringFlag{Name: "process-cap-add-permitted", Usage: "add Linux permitted capabilities"},
+	cli.StringFlag{Name: "process-cap-drop", Usage: "drop Linux capabilities to all 5 capability sets"},
 	cli.BoolFlag{Name: "process-cap-drop-all", Usage: "drop all Linux capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-drop-ambient", Usage: "drop Linux ambient capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-drop-bounding", Usage: "drop Linux bounding capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-drop-effective", Usage: "drop Linux effective capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-drop-inheritable", Usage: "drop Linux inheritable capabilities"},
-	cli.StringSliceFlag{Name: "process-cap-drop-permitted", Usage: "drop Linux permitted capabilities"},
+	cli.StringFlag{Name: "process-cap-drop-ambient", Usage: "drop Linux ambient capabilities"},
+	cli.StringFlag{Name: "process-cap-drop-bounding", Usage: "drop Linux bounding capabilities"},
+	cli.StringFlag{Name: "process-cap-drop-effective", Usage: "drop Linux effective capabilities"},
+	cli.StringFlag{Name: "process-cap-drop-inheritable", Usage: "drop Linux inheritable capabilities"},
+	cli.StringFlag{Name: "process-cap-drop-permitted", Usage: "drop Linux permitted capabilities"},
 	cli.StringFlag{Name: "process-consolesize", Usage: "specifies the console size in characters (width:height)"},
 	cli.StringFlag{Name: "process-cwd", Value: "/", Usage: "current working directory for the process"},
 	cli.IntFlag{Name: "process-gid", Usage: "gid for the process"},
@@ -126,6 +128,14 @@ var generateFlags = []cli.Flag{
 	cli.StringFlag{Name: "solaris-max-shm-memory", Usage: "Specifies the maximum amount of shared memory"},
 	cli.StringFlag{Name: "solaris-milestone", Usage: "Specifies the SMF FMRI"},
 	cli.StringFlag{Name: "template", Usage: "base template to use for creating the configuration"},
+	cli.StringSliceFlag{Name: "vm-hypervisor-parameters", Usage: "specifies an array of parameters to pass to the hypervisor"},
+	cli.StringFlag{Name: "vm-hypervisor-path", Usage: "specifies the path to the hypervisor binary that manages the container virtual machine"},
+	cli.StringFlag{Name: "vm-image-format", Usage: "set the format of the container virtual machine root image"},
+	cli.StringFlag{Name: "vm-image-path", Usage: "set path to the container virtual machine root image"},
+	cli.StringFlag{Name: "vm-kernel-initrd", Usage: "set path to an initial ramdisk to be used by the container virtual machine"},
+	cli.StringSliceFlag{Name: "vm-kernel-parameters", Usage: "specifies an array of parameters to pass to the kernel"},
+	cli.StringFlag{Name: "vm-kernel-path", Usage: "set path to the kernel used to boot the container virtual machine"},
+	cli.StringSliceFlag{Name: "windows-devices", Usage: "specifies a list of devices to be mapped into the container"},
 	cli.StringFlag{Name: "windows-hyperv-utilityVMPath", Usage: "specifies the path to the image used for the utility VM"},
 	cli.BoolFlag{Name: "windows-ignore-flushes-during-boot", Usage: "ignore flushes during boot"},
 	cli.StringSliceFlag{Name: "windows-layer-folders", Usage: "specifies a list of layer folders the container image relies on"},
@@ -331,91 +341,121 @@ func setupSpec(g *generate.Generator, context *cli.Context) error {
 		g.ClearProcessCapabilities()
 	}
 
+	if context.IsSet("process-cap-add") {
+		addCaps := context.String("process-cap-add")
+		parts := strings.Split(addCaps, ",")
+		for _, part := range parts {
+			if err := g.AddProcessCapability(part); err != nil {
+				return err
+			}
+		}
+	}
+
 	if context.IsSet("process-cap-add-ambient") {
-		addCaps := context.StringSlice("process-cap-add-ambient")
-		for _, cap := range addCaps {
-			if err := g.AddProcessCapabilityAmbient(cap); err != nil {
+		addCaps := context.String("process-cap-add-ambient")
+		parts := strings.Split(addCaps, ",")
+		for _, part := range parts {
+			if err := g.AddProcessCapabilityAmbient(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-add-bounding") {
-		addCaps := context.StringSlice("process-cap-add-bounding")
-		for _, cap := range addCaps {
-			if err := g.AddProcessCapabilityBounding(cap); err != nil {
+		addCaps := context.String("process-cap-add-bounding")
+		parts := strings.Split(addCaps, ",")
+		for _, part := range parts {
+			if err := g.AddProcessCapabilityBounding(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-add-effective") {
-		addCaps := context.StringSlice("process-cap-add-effective")
-		for _, cap := range addCaps {
-			if err := g.AddProcessCapabilityEffective(cap); err != nil {
+		addCaps := context.String("process-cap-add-effective")
+		parts := strings.Split(addCaps, ",")
+		for _, part := range parts {
+			if err := g.AddProcessCapabilityEffective(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-add-inheritable") {
-		addCaps := context.StringSlice("process-cap-add-inheritable")
-		for _, cap := range addCaps {
-			if err := g.AddProcessCapabilityInheritable(cap); err != nil {
+		addCaps := context.String("process-cap-add-inheritable")
+		parts := strings.Split(addCaps, ",")
+		for _, part := range parts {
+			if err := g.AddProcessCapabilityInheritable(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-add-permitted") {
-		addCaps := context.StringSlice("process-cap-add-permitted")
-		for _, cap := range addCaps {
-			if err := g.AddProcessCapabilityPermitted(cap); err != nil {
+		addCaps := context.String("process-cap-add-permitted")
+		parts := strings.Split(addCaps, ",")
+		for _, part := range parts {
+			if err := g.AddProcessCapabilityPermitted(part); err != nil {
+				return err
+			}
+		}
+	}
+
+	if context.IsSet("process-cap-drop") {
+		addCaps := context.String("process-cap-drop")
+		parts := strings.Split(addCaps, ",")
+		for _, part := range parts {
+			if err := g.DropProcessCapability(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-drop-ambient") {
-		dropCaps := context.StringSlice("process-cap-drop-ambient")
-		for _, cap := range dropCaps {
-			if err := g.DropProcessCapabilityAmbient(cap); err != nil {
+		dropCaps := context.String("process-cap-drop-ambient")
+		parts := strings.Split(dropCaps, ",")
+		for _, part := range parts {
+			if err := g.DropProcessCapabilityAmbient(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-drop-bounding") {
-		dropCaps := context.StringSlice("process-cap-drop-bounding")
-		for _, cap := range dropCaps {
-			if err := g.DropProcessCapabilityBounding(cap); err != nil {
+		dropCaps := context.String("process-cap-drop-bounding")
+		parts := strings.Split(dropCaps, ",")
+		for _, part := range parts {
+			if err := g.DropProcessCapabilityBounding(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-drop-effective") {
-		dropCaps := context.StringSlice("process-cap-drop-effective")
-		for _, cap := range dropCaps {
-			if err := g.DropProcessCapabilityEffective(cap); err != nil {
+		dropCaps := context.String("process-cap-drop-effective")
+		parts := strings.Split(dropCaps, ",")
+		for _, part := range parts {
+			if err := g.DropProcessCapabilityEffective(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-drop-inheritable") {
-		dropCaps := context.StringSlice("process-cap-drop-inheritable")
-		for _, cap := range dropCaps {
-			if err := g.DropProcessCapabilityInheritable(cap); err != nil {
+		dropCaps := context.String("process-cap-drop-inheritable")
+		parts := strings.Split(dropCaps, ",")
+		for _, part := range parts {
+			if err := g.DropProcessCapabilityInheritable(part); err != nil {
 				return err
 			}
 		}
 	}
 
 	if context.IsSet("process-cap-drop-permitted") {
-		dropCaps := context.StringSlice("process-cap-drop-permitted")
-		for _, cap := range dropCaps {
-			if err := g.DropProcessCapabilityPermitted(cap); err != nil {
+		dropCaps := context.String("process-cap-drop-permitted")
+		parts := strings.Split(dropCaps, ",")
+		for _, part := range parts {
+			if err := g.DropProcessCapabilityPermitted(part); err != nil {
 				return err
 			}
 		}
@@ -852,6 +892,44 @@ func setupSpec(g *generate.Generator, context *cli.Context) error {
 		g.SetSolarisMilestone(context.String("solaris-milestone"))
 	}
 
+	if context.IsSet("vm-hypervisor-path") {
+		if err := g.SetVMHypervisorPath(context.String("vm-hypervisor-path")); err != nil {
+			return err
+		}
+	}
+
+	if context.IsSet("vm-hypervisor-parameters") {
+		g.SetVMHypervisorParameters(context.StringSlice("vm-hypervisor-parameters"))
+	}
+
+	if context.IsSet("vm-kernel-path") {
+		if err := g.SetVMKernelPath(context.String("vm-kernel-path")); err != nil {
+			return err
+		}
+	}
+
+	if context.IsSet("vm-kernel-parameters") {
+		g.SetVMKernelParameters(context.StringSlice("vm-kernel-parameters"))
+	}
+
+	if context.IsSet("vm-kernel-initrd") {
+		if err := g.SetVMKernelInitRD(context.String("vm-kernel-initrd")); err != nil {
+			return err
+		}
+	}
+
+	if context.IsSet("vm-image-path") {
+		if err := g.SetVMImagePath(context.String("vm-image-path")); err != nil {
+			return err
+		}
+	}
+
+	if context.IsSet("vm-image-format") {
+		if err := g.SetVMImageFormat(context.String("vm-image-format")); err != nil {
+			return err
+		}
+	}
+
 	if context.IsSet("windows-hyperv-utilityVMPath") {
 		g.SetWindowsHypervUntilityVMPath(context.String("windows-hyperv-utilityVMPath"))
 	}
@@ -864,6 +942,19 @@ func setupSpec(g *generate.Generator, context *cli.Context) error {
 		folders := context.StringSlice("windows-layer-folders")
 		for _, folder := range folders {
 			g.AddWindowsLayerFolders(folder)
+		}
+	}
+
+	if context.IsSet("windows-devices") {
+		devices := context.StringSlice("windows-devices")
+		for _, device := range devices {
+			id, idType, err := parseWindowsDevices(device)
+			if err != nil {
+				return err
+			}
+			if err := g.AddWindowsDevices(id, idType); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1016,6 +1107,17 @@ func parseNamespace(ns string) (string, string, error) {
 	}
 
 	return nsType, nsPath, nil
+}
+
+func parseWindowsDevices(device string) (string, string, error) {
+	parts := strings.Split(device, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid windows device value: %s", device)
+	}
+
+	id := parts[0]
+	idType := parts[1]
+	return id, idType, nil
 }
 
 var deviceType = map[string]bool{

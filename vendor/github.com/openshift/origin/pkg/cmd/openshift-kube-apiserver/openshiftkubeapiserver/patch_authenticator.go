@@ -35,6 +35,7 @@ import (
 	"github.com/openshift/origin/pkg/cmd/server/bootstrappolicy"
 	cmdutil "github.com/openshift/origin/pkg/cmd/util"
 	oauthvalidation "github.com/openshift/origin/pkg/oauth/apis/oauth/validation"
+	"github.com/openshift/origin/pkg/oauthserver/authenticator/password/bootstrap"
 	"github.com/openshift/origin/pkg/oauthserver/authenticator/request/paramtoken"
 	usercache "github.com/openshift/origin/pkg/user/cache"
 )
@@ -79,10 +80,22 @@ func NewAuthenticator(
 		userClient.User().Users(),
 		apiClientCAs,
 		usercache.NewGroupCache(groupInformer),
+		bootstrap.NewBootstrapUserDataGetter(kubeExternalClient.CoreV1(), kubeExternalClient.CoreV1()),
 	)
 }
 
-func newAuthenticator(serviceAccountPublicKeyFiles []string, oauthConfig *osinv1.OAuthConfig, authConfig kubecontrolplanev1.MasterAuthConfig, accessTokenGetter oauthclient.OAuthAccessTokenInterface, oauthClientLister oauthclientlister.OAuthClientLister, tokenGetter serviceaccount.ServiceAccountTokenGetter, userGetter usertypedclient.UserInterface, apiClientCAs *x509.CertPool, groupMapper oauth.UserToGroupMapper) (authenticator.Request, map[string]genericapiserver.PostStartHookFunc, error) {
+func newAuthenticator(
+	serviceAccountPublicKeyFiles []string,
+	oauthConfig *osinv1.OAuthConfig,
+	authConfig kubecontrolplanev1.MasterAuthConfig,
+	accessTokenGetter oauthclient.OAuthAccessTokenInterface,
+	oauthClientLister oauthclientlister.OAuthClientLister,
+	tokenGetter serviceaccount.ServiceAccountTokenGetter,
+	userGetter usertypedclient.UserInterface,
+	apiClientCAs *x509.CertPool,
+	groupMapper oauth.UserToGroupMapper,
+	bootstrapUserDataGetter bootstrap.BootstrapUserDataGetter,
+) (authenticator.Request, map[string]genericapiserver.PostStartHookFunc, error) {
 	postStartHooks := map[string]genericapiserver.PostStartHookFunc{}
 	authenticators := []authenticator.Request{}
 	tokenAuthenticators := []authenticator.Token{}
@@ -107,7 +120,18 @@ func newAuthenticator(serviceAccountPublicKeyFiles []string, oauthConfig *osinv1
 	}
 
 	// OAuth token
-	if oauthConfig != nil {
+	// this looks weird because it no longer belongs here (needs to be a remote token auth backed by osin)
+	if oauthConfig != nil || len(authConfig.OAuthMetadataFile) > 0 {
+		// if we have no OAuthConfig but have an OAuthMetadataFile, we still need to honor OAuth tokens
+		// to keep the checks below simple, we build an empty OAuthConfig
+		// since we do not know anything about the remote OAuth server's config,
+		// we assume it supports the bootstrap oauth user by setting a non-nil session config
+		if oauthConfig == nil {
+			oauthConfig = &osinv1.OAuthConfig{
+				SessionConfig: &osinv1.SessionConfig{},
+			}
+		}
+
 		validators := []oauth.OAuthTokenValidator{oauth.NewExpirationValidator(), oauth.NewUIDValidator()}
 		if inactivityTimeout := oauthConfig.TokenConfig.AccessTokenInactivityTimeoutSeconds; inactivityTimeout != nil {
 			timeoutValidator := oauth.NewTimeoutValidator(accessTokenGetter, oauthClientLister, *inactivityTimeout, oauthvalidation.MinimumInactivityTimeoutSeconds)
@@ -121,6 +145,12 @@ func newAuthenticator(serviceAccountPublicKeyFiles []string, oauthConfig *osinv1
 		tokenAuthenticators = append(tokenAuthenticators,
 			// if you have an OAuth bearer token, you're a human (usually)
 			group.NewTokenGroupAdder(oauthTokenAuthenticator, []string{bootstrappolicy.AuthenticatedOAuthGroup}))
+
+		if oauthConfig.SessionConfig != nil {
+			tokenAuthenticators = append(tokenAuthenticators,
+				// bootstrap oauth user that can do anything, backed by a secret
+				oauth.NewBootstrapAuthenticator(accessTokenGetter, bootstrapUserDataGetter, validators...))
+		}
 	}
 
 	for _, wta := range authConfig.WebhookTokenAuthenticators {

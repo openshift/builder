@@ -13,6 +13,7 @@ import (
 	"github.com/containers/libpod/libpod/image"
 	"github.com/containers/libpod/pkg/inspect"
 	"github.com/containers/libpod/pkg/namespaces"
+	"github.com/containers/libpod/pkg/rootless"
 	cc "github.com/containers/libpod/pkg/spec"
 	"github.com/containers/libpod/pkg/util"
 	"github.com/docker/docker/pkg/signal"
@@ -24,7 +25,7 @@ func (i *LibpodAPI) CreateContainer(call iopodman.VarlinkCall, config iopodman.C
 	rtc := i.Runtime.GetConfig()
 	ctx := getContext()
 
-	newImage, err := i.Runtime.ImageRuntime().New(ctx, config.Image, rtc.SignaturePolicyPath, "", os.Stderr, nil, image.SigningOptions{}, false, false)
+	newImage, err := i.Runtime.ImageRuntime().New(ctx, config.Image, rtc.SignaturePolicyPath, "", os.Stderr, nil, image.SigningOptions{}, false)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
@@ -40,7 +41,9 @@ func (i *LibpodAPI) CreateContainer(call iopodman.VarlinkCall, config iopodman.C
 		return call.ReplyErrorOccurred(err.Error())
 	}
 
-	options, err := createConfig.GetContainerCreateOptions(i.Runtime)
+	// TODO fix when doing remote client and dealing with the ability to create a container
+	// within a non-existing pod (i.e. --pod new:foobar)
+	options, err := createConfig.GetContainerCreateOptions(i.Runtime, nil)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
@@ -81,7 +84,7 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 	// ENTRYPOINT
 	// User input entrypoint takes priority over image entrypoint
 	if len(entrypoint) == 0 {
-		entrypoint = data.ContainerConfig.Entrypoint
+		entrypoint = data.Config.Entrypoint
 	}
 	// if entrypoint=, we need to clear the entrypoint
 	if len(entrypoint) == 1 && strings.Join(create.Entrypoint, "") == "" {
@@ -95,9 +98,9 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 	if len(inputCommand) > 0 {
 		// User command overrides data CMD
 		command = append(command, inputCommand...)
-	} else if len(data.ContainerConfig.Cmd) > 0 && len(command) == 0 {
+	} else if len(data.Config.Cmd) > 0 && len(command) == 0 {
 		// If not user command, add CMD
-		command = append(command, data.ContainerConfig.Cmd...)
+		command = append(command, data.Config.Cmd...)
 	}
 
 	if create.Resources.Blkio_weight != 0 {
@@ -114,11 +117,11 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 
 	user := create.User
 	if user == "" {
-		user = data.ContainerConfig.User
+		user = data.Config.User
 	}
 
 	// EXPOSED PORTS
-	portBindings, err := cc.ExposedPorts(create.Exposed_ports, create.Publish, create.Publish_all, data.ContainerConfig.ExposedPorts)
+	portBindings, err := cc.ExposedPorts(create.Exposed_ports, create.Publish, create.Publish_all, data.Config.ExposedPorts)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +129,11 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 	// NETWORK MODE
 	networkMode := create.Net_mode
 	if networkMode == "" {
-		networkMode = "bridge"
+		if rootless.IsRootless() {
+			networkMode = "slirp4netns"
+		} else {
+			networkMode = "bridge"
+		}
 	}
 
 	// WORKING DIR
@@ -138,7 +145,7 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 	imageID := data.ID
 	config := &cc.CreateConfig{
 		Runtime:           runtime,
-		BuiltinImgVolumes: data.ContainerConfig.Volumes,
+		BuiltinImgVolumes: data.Config.Volumes,
 		ConmonPidFile:     create.Conmon_pidfile,
 		ImageVolumeType:   create.Image_volume_type,
 		CapAdd:            create.Cap_add,

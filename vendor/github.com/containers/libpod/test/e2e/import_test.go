@@ -1,3 +1,5 @@
+// +build !remoteclient
+
 package integration
 
 import (
@@ -106,7 +108,7 @@ var _ = Describe("Podman import", func() {
 		results.WaitWithDefaultTimeout()
 		Expect(results.ExitCode()).To(Equal(0))
 		imageData := results.InspectImageJSON()
-		Expect(imageData[0].ContainerConfig.Cmd[0]).To(Equal("/bin/bash"))
+		Expect(imageData[0].Config.Cmd[0]).To(Equal("/bin/bash"))
 	})
 
 })

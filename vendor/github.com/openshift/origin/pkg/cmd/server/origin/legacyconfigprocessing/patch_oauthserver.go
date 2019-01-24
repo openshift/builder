@@ -3,12 +3,10 @@ package legacyconfigprocessing
 import (
 	"net/http"
 
-	"github.com/openshift/origin/pkg/oauthserver/oauthserver"
 	genericapiserver "k8s.io/apiserver/pkg/server"
-	"k8s.io/client-go/kubernetes"
 
-	routeclient "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
 	configapi "github.com/openshift/origin/pkg/cmd/server/apis/config"
+	"github.com/openshift/origin/pkg/oauthserver/oauthserver"
 )
 
 // TODO this is taking a very large config for a small piece of it.  The information must be broken up at some point so that
@@ -23,18 +21,6 @@ func NewOAuthServerConfigFromMasterConfig(genericConfig *genericapiserver.Config
 	oauthServerConfig.GenericConfig.SecureServing = genericConfig.SecureServing
 	oauthServerConfig.GenericConfig.AuditBackend = genericConfig.AuditBackend
 	oauthServerConfig.GenericConfig.AuditPolicyChecker = genericConfig.AuditPolicyChecker
-
-	routeClient, err := routeclient.NewForConfig(genericConfig.LoopbackClientConfig)
-	if err != nil {
-		return nil, err
-	}
-	kubeClient, err := kubernetes.NewForConfig(genericConfig.LoopbackClientConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	oauthServerConfig.ExtraOAuthConfig.RouteClient = routeClient
-	oauthServerConfig.ExtraOAuthConfig.KubeClient = kubeClient
 
 	// Build the list of valid redirect_uri prefixes for a login using the openshift-web-console client to redirect to
 	oauthServerConfig.ExtraOAuthConfig.AssetPublicAddresses = []string{oauthConfig.AssetPublicURL}

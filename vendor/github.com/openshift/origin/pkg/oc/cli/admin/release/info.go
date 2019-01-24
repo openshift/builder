@@ -20,12 +20,15 @@ import (
 	"github.com/spf13/cobra"
 
 	digest "github.com/opencontainers/go-digest"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
 
 	imageapi "github.com/openshift/api/image/v1"
+	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	"github.com/openshift/origin/pkg/image/apis/image/docker10"
 	imagereference "github.com/openshift/origin/pkg/image/apis/image/reference"
 	"github.com/openshift/origin/pkg/oc/cli/image/extract"
@@ -48,15 +51,17 @@ func NewInfo(f kcmdutil.Factory, parentName string, streams genericclioptions.IO
 			Experimental: This command is under active development and may change without notice.
 		`),
 		Run: func(cmd *cobra.Command, args []string) {
-			kcmdutil.CheckErr(o.Complete(cmd, args))
+			kcmdutil.CheckErr(o.Complete(f, cmd, args))
+			kcmdutil.CheckErr(o.Validate())
 			kcmdutil.CheckErr(o.Run())
 		},
 	}
 	flags := cmd.Flags()
 	flags.StringVar(&o.From, "changes-from", o.From, "Show changes from this image to the requested image.")
 	flags.BoolVar(&o.ShowCommit, "commits", o.ShowCommit, "Display information about the source an image was created with.")
-	flags.BoolVar(&o.ShowPullSpec, "pullspecs", o.ShowCommit, "Display the pull spec of the image instead of the digest.")
-	// flags.BoolVar(&o.Verify, "verify", o.Verify, "Verify the payload is consistent by checking the referenced images.")
+	flags.BoolVar(&o.ShowPullSpec, "pullspecs", o.ShowCommit, "Display the pull spec of each image instead of the digest.")
+	flags.StringVar(&o.ImageFor, "image-for", o.ImageFor, "Print the pull spec of the specified image or an error if it does not exist.")
+	flags.StringVarP(&o.Output, "output", "o", o.Output, "Display the release info in an alternative format: json")
 	return cmd
 }
 
@@ -66,16 +71,55 @@ type InfoOptions struct {
 	Images []string
 	From   string
 
+	Output       string
+	ImageFor     string
 	ShowCommit   bool
 	ShowPullSpec bool
 	Verify       bool
 }
 
-func (o *InfoOptions) Complete(cmd *cobra.Command, args []string) error {
+func (o *InfoOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		cfg, err := f.ToRESTConfig()
+		if err != nil {
+			return fmt.Errorf("info expects one argument, or a connection to a 4.0 OpenShift server: %v", err)
+		}
+		client, err := configv1client.NewForConfig(cfg)
+		if err != nil {
+			return fmt.Errorf("info expects one argument, or a connection to a 4.0 OpenShift server: %v", err)
+		}
+		cv, err := client.Config().ClusterVersions().Get("version", metav1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return fmt.Errorf("you must be connected to a v4.0 OpenShift server to fetch the current version")
+			}
+			return fmt.Errorf("info expects one argument, or a connection to a 4.0 OpenShift server: %v", err)
+		}
+		image := cv.Status.Desired.Payload
+		if len(image) == 0 && cv.Spec.DesiredUpdate != nil {
+			image = cv.Spec.DesiredUpdate.Payload
+		}
+		if len(image) == 0 {
+			return fmt.Errorf("the server is not reporting a release image at this time, please specify an image to view")
+		}
+		args = []string{image}
+	}
 	if len(args) < 1 {
 		return fmt.Errorf("info expects at least one argument, a release image pull spec")
 	}
 	o.Images = args
+	return nil
+}
+
+func (o *InfoOptions) Validate() error {
+	if len(o.ImageFor) > 0 && len(o.Output) > 0 {
+		return fmt.Errorf("--output and --image-for may not both be specified")
+	}
+	switch o.Output {
+	case "", "json":
+	default:
+		return fmt.Errorf("--output only supports 'json'")
+	}
 	return nil
 }
 
@@ -84,7 +128,7 @@ func (o *InfoOptions) Run() error {
 		return fmt.Errorf("must specify a release image as an argument")
 	}
 	if len(o.From) > 0 && len(o.Images) != 1 {
-		return fmt.Errorf("must specify a release image as argument when comparing to another release image")
+		return fmt.Errorf("must specify a single release image as argument when comparing to another release image")
 	}
 
 	if len(o.From) > 0 {
@@ -112,16 +156,50 @@ func (o *InfoOptions) Run() error {
 		return describeReleaseDiff(o.Out, diff, o.ShowCommit)
 	}
 
+	var exitErr error
 	for _, image := range o.Images {
-		release, err := o.LoadReleaseInfo(image)
+		if err := o.describeImage(image); err != nil {
+			exitErr = kcmdutil.ErrExit
+			fmt.Fprintf(o.ErrOut, "error: %v\n", err)
+			continue
+		}
+	}
+	return exitErr
+}
+
+func (o *InfoOptions) describeImage(image string) error {
+	release, err := o.LoadReleaseInfo(image)
+	if err != nil {
+		return err
+	}
+	if len(o.Output) > 0 {
+		data, err := json.MarshalIndent(release, "", "  ")
 		if err != nil {
 			return err
 		}
-		if err := describeReleaseInfo(o.Out, release, o.ShowCommit, o.ShowPullSpec); err != nil {
+		fmt.Fprintln(o.Out, string(data))
+		return nil
+	}
+	if len(o.ImageFor) > 0 {
+		spec, err := findImageSpec(release.References, o.ImageFor, image)
+		if err != nil {
 			return err
 		}
+		fmt.Fprintln(o.Out, spec)
+		return nil
 	}
-	return nil
+	return describeReleaseInfo(o.Out, release, o.ShowCommit, o.ShowPullSpec)
+}
+
+func findImageSpec(image *imageapi.ImageStream, tagName, imageName string) (string, error) {
+	for _, tag := range image.Spec.Tags {
+		if tag.Name == tagName {
+			if tag.From != nil && tag.From.Kind == "DockerImage" && len(tag.From.Name) > 0 {
+				return tag.From.Name, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no image tag %q exists in the release image %s", tagName, imageName)
 }
 
 func calculateDiff(from, to *ReleaseInfo) (*ReleaseDiff, error) {
@@ -205,14 +283,15 @@ type ReleaseManifestDiff struct {
 }
 
 type ReleaseInfo struct {
-	Image      imagereference.DockerImageReference
-	Digest     digest.Digest
-	Config     *docker10.DockerImageConfig
-	Metadata   *CincinnatiMetadata
-	References *imageapi.ImageStream
+	Image      string                              `json:"image"`
+	ImageRef   imagereference.DockerImageReference `json:"-"`
+	Digest     digest.Digest                       `json:"digest"`
+	Config     *docker10.DockerImageConfig         `json:"config"`
+	Metadata   *CincinnatiMetadata                 `json:"metadata"`
+	References *imageapi.ImageStream               `json:"references"`
 
-	ManifestFiles map[string][]byte
-	UnknownFiles  []string
+	ManifestFiles map[string][]byte `json:"-"`
+	UnknownFiles  []string          `json:"-"`
 }
 
 func (i *ReleaseInfo) PreferredName() string {
@@ -241,14 +320,15 @@ func (o *InfoOptions) LoadReleaseInfo(image string) (*ReleaseInfo, error) {
 	}
 	opts := extract.NewOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
 
-	release := &ReleaseInfo{}
+	release := &ReleaseInfo{
+		Image: image,
+	}
 
 	opts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {
 		release.Digest = dgst
 		release.Config = config
 	}
 	opts.OnlyFiles = true
-	opts.RemovePermissions = true
 	opts.Mappings = []extract.Mapping{
 		{
 			ImageRef: ref,
@@ -273,7 +353,7 @@ func (o *InfoOptions) LoadReleaseInfo(image string) (*ReleaseInfo, error) {
 				return true, nil
 			}
 			release.References = is
-		case "cincinnati":
+		case "release-metadata":
 			data, err := ioutil.ReadAll(r)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("unable to read release metadata: %v", err))

@@ -15,19 +15,19 @@ const (
 	expKey = "exp"
 )
 
-type Authenticator struct {
+type sessionAuthenticator struct {
 	store  Store
 	maxAge time.Duration
 }
 
-func NewAuthenticator(store Store, maxAge time.Duration) *Authenticator {
-	return &Authenticator{
+func NewAuthenticator(store Store, maxAge time.Duration) SessionAuthenticator {
+	return &sessionAuthenticator{
 		store:  store,
 		maxAge: maxAge,
 	}
 }
 
-func (a *Authenticator) AuthenticateRequest(req *http.Request) (user.Info, bool, error) {
+func (a *sessionAuthenticator) AuthenticateRequest(req *http.Request) (user.Info, bool, error) {
 	values := a.store.Get(req)
 
 	expires, ok := values.GetInt64(expKey)
@@ -55,22 +55,11 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (user.Info, bool,
 	}, true, nil
 }
 
-func (a *Authenticator) AuthenticationSucceeded(user user.Info, state string, w http.ResponseWriter, req *http.Request) (bool, error) {
-	return false, a.put(w, user.GetName(), user.GetUID(), time.Now().Add(a.maxAge).Unix())
+func (a *sessionAuthenticator) AuthenticationSucceeded(user user.Info, state string, w http.ResponseWriter, req *http.Request) (bool, error) {
+	return false, putUser(a.store, w, user, a.maxAge)
 }
 
-func (a *Authenticator) InvalidateAuthentication(w http.ResponseWriter, req *http.Request) error {
+func (a *sessionAuthenticator) InvalidateAuthentication(w http.ResponseWriter, _ user.Info) error {
 	// zero out all fields
-	return a.put(w, "", "", 0)
-}
-
-func (a *Authenticator) put(w http.ResponseWriter, name, uid string, expires int64) error {
-	values := Values{}
-
-	values[userNameKey] = name
-	values[userUIDKey] = uid
-
-	values[expKey] = expires
-
-	return a.store.Put(w, values)
+	return putUser(a.store, w, &user.DefaultInfo{}, 0)
 }

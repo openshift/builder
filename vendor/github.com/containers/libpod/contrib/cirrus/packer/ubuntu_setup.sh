@@ -21,11 +21,14 @@ install_ooe
 export GOPATH="$(mktemp -d)"
 trap "sudo rm -rf $GOPATH" EXIT
 
+# Avoid getting stuck waiting for user input
+export DEBIAN_FRONTEND=noninteractive
+
 # Try twice as workaround for minor networking problems
 echo "Updating system and installing package dependencies"
-ooe.sh sudo apt-get -qq update || sudo apt-get -qq update
-ooe.sh sudo apt-get -qq upgrade || sudo apt-get -qq upgrade
-ooe.sh sudo apt-get -qq install --no-install-recommends \
+ooe.sh sudo -E apt-get -qq update || sudo -E apt-get -qq update
+ooe.sh sudo -E apt-get -qq upgrade || sudo -E apt-get -qq upgrade
+ooe.sh sudo -E apt-get -qq install --no-install-recommends \
     apparmor \
     autoconf \
     automake \
@@ -34,6 +37,7 @@ ooe.sh sudo apt-get -qq install --no-install-recommends \
     build-essential \
     curl \
     e2fslibs-dev \
+    emacs-nox \
     gawk \
     gettext \
     go-md2man \
@@ -54,6 +58,8 @@ ooe.sh sudo apt-get -qq install --no-install-recommends \
     libostree-dev \
     libprotobuf-c0-dev \
     libprotobuf-dev \
+    libseccomp-dev \
+    libseccomp2 \
     libtool \
     libudev-dev \
     lsof \
@@ -71,6 +77,7 @@ ooe.sh sudo apt-get -qq install --no-install-recommends \
     python3-setuptools \
     socat \
     unzip \
+    vim \
     xz-utils
 
 echo "Fixing Ubuntu kernel not enabling swap accounting by default"

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
+	cc "github.com/containers/libpod/pkg/spec"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -25,9 +27,9 @@ var (
 			Name:  "interactive, i",
 			Usage: "Keep STDIN open even if not attached",
 		},
-		cli.BoolFlag{
+		cli.BoolTFlag{
 			Name:  "sig-proxy",
-			Usage: "proxy received signals to the process",
+			Usage: "proxy received signals to the process (default true if attaching, false otherwise)",
 		},
 		LatestFlag,
 	}
@@ -65,8 +67,14 @@ func startCmd(c *cli.Context) error {
 		return err
 	}
 
-	if c.Bool("sig-proxy") && !attach {
-		return errors.Wrapf(libpod.ErrInvalidArg, "you cannot use sig-proxy without --attach")
+	sigProxy := c.BoolT("sig-proxy")
+
+	if sigProxy && !attach {
+		if c.IsSet("sig-proxy") {
+			return errors.Wrapf(libpod.ErrInvalidArg, "you cannot use sig-proxy without --attach")
+		} else {
+			sigProxy = false
+		}
 	}
 
 	runtime, err := libpodruntime.GetRuntime(c)
@@ -109,7 +117,7 @@ func startCmd(c *cli.Context) error {
 			}
 
 			// attach to the container and also start it not already running
-			err = startAttachCtr(ctr, os.Stdout, os.Stderr, inputStream, c.String("detach-keys"), c.Bool("sig-proxy"), !ctrRunning)
+			err = startAttachCtr(ctr, os.Stdout, os.Stderr, inputStream, c.String("detach-keys"), sigProxy, !ctrRunning)
 			if ctrRunning {
 				return err
 			}
@@ -132,6 +140,18 @@ func startCmd(c *cli.Context) error {
 		}
 		// Handle non-attach start
 		if err := ctr.Start(ctx); err != nil {
+			var createArtifact cc.CreateConfig
+			artifact, artifactErr := ctr.GetArtifact("create-config")
+			if artifactErr == nil {
+				if jsonErr := json.Unmarshal(artifact, &createArtifact); jsonErr != nil {
+					logrus.Errorf("unable to detect if container %s should be deleted", ctr.ID())
+				}
+				if createArtifact.Rm {
+					if rmErr := runtime.RemoveContainer(ctx, ctr, true); rmErr != nil {
+						logrus.Errorf("unable to remove container %s after it failed to start", ctr.ID())
+					}
+				}
+			}
 			if lastError != nil {
 				fmt.Fprintln(os.Stderr, lastError)
 			}

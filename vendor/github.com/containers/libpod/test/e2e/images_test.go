@@ -63,6 +63,10 @@ var _ = Describe("Podman images", func() {
 		session.LineInOutputContainsTag("foo", "c")
 		session.LineInOutputContainsTag("bar", "a")
 		session.LineInOutputContainsTag("bar", "b")
+		session = podmanTest.Podman([]string{"images", "-qn"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		Expect(len(session.OutputToStringArray())).To(BeNumerically("==", 2))
 	})
 
 	It("podman images with digests", func() {
@@ -102,6 +106,9 @@ var _ = Describe("Podman images", func() {
 	})
 
 	It("podman images filter before image", func() {
+		if podmanTest.RemoteTest {
+			Skip("Does not work on remote client")
+		}
 		dockerfile := `FROM docker.io/library/alpine:latest
 `
 		podmanTest.BuildImage(dockerfile, "foobar.com/before:latest", "false")
@@ -112,6 +119,9 @@ var _ = Describe("Podman images", func() {
 	})
 
 	It("podman images filter after image", func() {
+		if podmanTest.RemoteTest {
+			Skip("Does not work on remote client")
+		}
 		rmi := podmanTest.Podman([]string{"rmi", "busybox"})
 		rmi.WaitWithDefaultTimeout()
 		Expect(rmi.ExitCode()).To(Equal(0))
@@ -126,6 +136,9 @@ var _ = Describe("Podman images", func() {
 	})
 
 	It("podman images filter dangling", func() {
+		if podmanTest.RemoteTest {
+			Skip("Does not work on remote client")
+		}
 		dockerfile := `FROM docker.io/library/alpine:latest
 `
 		podmanTest.BuildImage(dockerfile, "foobar.com/before:latest", "false")
@@ -137,6 +150,9 @@ var _ = Describe("Podman images", func() {
 	})
 
 	It("podman check for image with sha256: prefix", func() {
+		if podmanTest.RemoteTest {
+			Skip("Does not work on remote client")
+		}
 		session := podmanTest.Podman([]string{"inspect", "--format=json", ALPINE})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
@@ -171,6 +187,9 @@ var _ = Describe("Podman images", func() {
 	})
 
 	It("podman images --all flag", func() {
+		if podmanTest.RemoteTest {
+			Skip("Does not work on remote client")
+		}
 		dockerfile := `FROM docker.io/library/alpine:latest
 RUN mkdir hello
 RUN touch test.txt

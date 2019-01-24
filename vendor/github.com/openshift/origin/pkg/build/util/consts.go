@@ -89,6 +89,7 @@ const (
 	StatusMessageCannotCreateBuildPodSpec        = "Failed to create pod spec."
 	StatusMessageCannotCreateBuildPod            = "Failed creating build pod."
 	StatusMessageCannotCreateCAConfigMap         = "Failed creating build certificate authority configMap."
+	StatusMessageCannotCreateBuildSysConfigMap   = "Failed creating build system config configMap."
 	StatusMessageInvalidOutputRef                = "Output image could not be resolved."
 	StatusMessageInvalidImageRef                 = "Referenced image could not be resolved."
 	StatusMessageBuildPodDeleted                 = "The pod for this build was deleted before the build completed."
@@ -113,7 +114,12 @@ const (
 	// performing a custom build, if needed.
 	CustomBuildStrategyBaseImageKey = "OPENSHIFT_CUSTOM_BUILD_BASE_IMAGE"
 
-	// AdditionalTrustedCAKey is the ConfigMap key for the certificate bundle containing additional
-	// trusted CAs used by builds.
-	AdditionalTrustedCAKey = "additional-ca.crt"
+	// RegistryConfKey is the ConfigMap key for the build pod's registry configuration file.
+	RegistryConfKey = "registry.conf"
+
+	// SignaturePolicyKey is the ConfigMap key for the build pod's image signature policy file.
+	SignaturePolicyKey = "policy.json"
+
+	// ServiceCAKey is the ConfigMap key for the service signing certificate authority mounted into build pods.
+	ServiceCAKey = "service-ca.crt"
 )

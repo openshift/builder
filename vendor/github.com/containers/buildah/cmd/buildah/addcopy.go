@@ -13,9 +13,13 @@ import (
 
 var (
 	addAndCopyFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "add-history",
+			Usage: "add an entry for this operation to the image's history.  Use BUILDAH_HISTORY environment variable to override. (default false)",
+		},
 		cli.StringFlag{
 			Name:  "chown",
-			Usage: "Set the user and group ownership of the destination content",
+			Usage: "set the user and group ownership of the destination content",
 		},
 		cli.BoolFlag{
 			Name:  "quiet, q",
@@ -23,30 +27,32 @@ var (
 		},
 	}
 	addDescription  = "Adds the contents of a file, URL, or directory to a container's working\n   directory.  If a local file appears to be an archive, its contents are\n   extracted and added instead of the archive file itself."
-	copyDescription = "Copies the contents of a file, URL, or directory into a container's working\n   directory"
+	copyDescription = "Copies the contents of a file, URL, or directory into a container's working\n   directory."
 
 	addCommand = cli.Command{
-		Name:           "add",
-		Usage:          "Add content to the container",
-		Description:    addDescription,
-		Flags:          addAndCopyFlags,
-		Action:         addCmd,
-		ArgsUsage:      "CONTAINER-NAME-OR-ID [FILE | DIRECTORY | URL] [[...] DESTINATION]",
-		SkipArgReorder: true,
+		Name:                   "add",
+		Usage:                  "Add content to the container",
+		Description:            addDescription,
+		Flags:                  addAndCopyFlags,
+		Action:                 addCmd,
+		ArgsUsage:              "CONTAINER-NAME-OR-ID [FILE | DIRECTORY | URL] [[...] DESTINATION]",
+		SkipArgReorder:         true,
+		UseShortOptionHandling: true,
 	}
 
 	copyCommand = cli.Command{
-		Name:           "copy",
-		Usage:          "Copy content into the container",
-		Description:    copyDescription,
-		Flags:          sortFlags(addAndCopyFlags),
-		Action:         copyCmd,
-		ArgsUsage:      "CONTAINER-NAME-OR-ID [FILE | DIRECTORY | URL] [[...] DESTINATION]",
-		SkipArgReorder: true,
+		Name:                   "copy",
+		Usage:                  "Copy content into the container",
+		Description:            copyDescription,
+		Flags:                  sortFlags(addAndCopyFlags),
+		Action:                 copyCmd,
+		ArgsUsage:              "CONTAINER-NAME-OR-ID [FILE | DIRECTORY | URL] [[...] DESTINATION]",
+		SkipArgReorder:         true,
+		UseShortOptionHandling: true,
 	}
 )
 
-func addAndCopyCmd(c *cli.Context, extractLocalArchives bool) error {
+func addAndCopyCmd(c *cli.Context, verb string, extractLocalArchives bool) error {
 	args := c.Args()
 	if len(args) == 0 {
 		return errors.Errorf("container ID must be specified")
@@ -95,13 +101,14 @@ func addAndCopyCmd(c *cli.Context, extractLocalArchives bool) error {
 	if !c.Bool("quiet") {
 		fmt.Printf("%s\n", digester.Digest().Hex())
 	}
-	return nil
+	conditionallyAddHistory(builder, c, "/bin/sh -c #(nop) %s file:%s", verb, digester.Digest().Hex())
+	return builder.Save()
 }
 
 func addCmd(c *cli.Context) error {
-	return addAndCopyCmd(c, true)
+	return addAndCopyCmd(c, "ADD", true)
 }
 
 func copyCmd(c *cli.Context) error {
-	return addAndCopyCmd(c, false)
+	return addAndCopyCmd(c, "COPY", false)
 }

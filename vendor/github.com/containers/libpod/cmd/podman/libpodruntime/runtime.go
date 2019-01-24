@@ -4,38 +4,27 @@ import (
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/libpod/pkg/util"
-	"github.com/containers/storage"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
 // GetRuntime generates a new libpod runtime configured by command line options
 func GetRuntime(c *cli.Context) (*libpod.Runtime, error) {
-	storageOpts, err := util.GetDefaultStoreOptions()
-	if err != nil {
-		return nil, err
-	}
-	return GetRuntimeWithStorageOpts(c, &storageOpts)
-}
-
-// GetContainerRuntime generates a new libpod runtime configured by command line options for containers
-func GetContainerRuntime(c *cli.Context) (*libpod.Runtime, error) {
-	mappings, err := util.ParseIDMapping(c.StringSlice("uidmap"), c.StringSlice("gidmap"), c.String("subuidmap"), c.String("subgidmap"))
-	if err != nil {
-		return nil, err
-	}
-	storageOpts, err := util.GetDefaultStoreOptions()
-	if err != nil {
-		return nil, err
-	}
-	storageOpts.UIDMap = mappings.UIDMap
-	storageOpts.GIDMap = mappings.GIDMap
-	return GetRuntimeWithStorageOpts(c, &storageOpts)
-}
-
-// GetRuntime generates a new libpod runtime configured by command line options
-func GetRuntimeWithStorageOpts(c *cli.Context, storageOpts *storage.StoreOptions) (*libpod.Runtime, error) {
 	options := []libpod.RuntimeOption{}
+
+	storageOpts, volumePath, err := util.GetDefaultStoreOptions()
+	if err != nil {
+		return nil, err
+	}
+
+	if c.IsSet("uidmap") || c.IsSet("gidmap") || c.IsSet("subuidmap") || c.IsSet("subgidmap") {
+		mappings, err := util.ParseIDMapping(c.StringSlice("uidmap"), c.StringSlice("gidmap"), c.String("subuidmap"), c.String("subgidmap"))
+		if err != nil {
+			return nil, err
+		}
+		storageOpts.UIDMap = mappings.UIDMap
+		storageOpts.GIDMap = mappings.GIDMap
+	}
 
 	if c.GlobalIsSet("root") {
 		storageOpts.GraphRoot = c.GlobalString("root")
@@ -53,7 +42,7 @@ func GetRuntimeWithStorageOpts(c *cli.Context, storageOpts *storage.StoreOptions
 		storageOpts.GraphDriverOptions = c.GlobalStringSlice("storage-opt")
 	}
 
-	options = append(options, libpod.WithStorageConfig(*storageOpts))
+	options = append(options, libpod.WithStorageConfig(storageOpts))
 
 	// TODO CLI flags for image config?
 	// TODO CLI flag for signature policy?
@@ -90,8 +79,8 @@ func GetRuntimeWithStorageOpts(c *cli.Context, storageOpts *storage.StoreOptions
 	if c.GlobalIsSet("default-mounts-file") {
 		options = append(options, libpod.WithDefaultMountsFile(c.GlobalString("default-mounts-file")))
 	}
-	if c.GlobalIsSet("hooks-dir-path") {
-		options = append(options, libpod.WithHooksDir(c.GlobalString("hooks-dir-path")))
+	if c.GlobalIsSet("hooks-dir") {
+		options = append(options, libpod.WithHooksDir(c.GlobalStringSlice("hooks-dir")...))
 	}
 
 	// TODO flag to set CNI plugins dir?
@@ -104,6 +93,7 @@ func GetRuntimeWithStorageOpts(c *cli.Context, storageOpts *storage.StoreOptions
 	if c.IsSet("infra-command") {
 		options = append(options, libpod.WithDefaultInfraCommand(c.String("infra-command")))
 	}
+	options = append(options, libpod.WithVolumePath(volumePath))
 	if c.IsSet("config") {
 		return libpod.NewRuntimeFromConfig(c.String("config"), options...)
 	}

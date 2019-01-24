@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -59,6 +60,7 @@ func InitStandardFlags() {
 }
 
 func InitTest() {
+	InitDefaultEnvironmentVariables()
 	// interpret synthetic input in `--ginkgo.focus` and/or `--ginkgo.skip`
 	ginkgo.BeforeEach(checkSyntheticInput)
 
@@ -188,6 +190,15 @@ func AnnotateTestSuite() {
 		}
 		node.SetText(node.Text() + labels)
 	})
+}
+
+// ProwGCPSetup makes sure certain required env vars are available in the case
+// that extended tests are invoked directly via calls to ginkgo/extended.test
+func InitDefaultEnvironmentVariables() {
+	if ad := os.Getenv("ARTIFACT_DIR"); len(strings.TrimSpace(ad)) == 0 {
+		os.Setenv("ARTIFACT_DIR", filepath.Join(os.TempDir(), "artifacts"))
+		e2e.Logf("ARTIFACT_DIR env setting now %s", os.Getenv("ARTIFACT_DIR"))
+	}
 }
 
 // TODO: Use either explicit tags (k8s.io) or https://github.com/onsi/ginkgo/pull/228 to implement this.
@@ -335,7 +346,6 @@ var (
 		// tests that are known broken and need to be fixed upstream or in openshift
 		// always add an issue here
 		"[Disabled:Broken]": {
-			`EmptyDir wrapper volumes should not conflict`,                   // uses git volume https://bugzilla.redhat.com/show_bug.cgi?id=1622195
 			`\[Feature:BlockVolume\]`,                                        // directory failure https://bugzilla.redhat.com/show_bug.cgi?id=1622193
 			`\[Feature:Example\]`,                                            // has cleanup issues
 			`mount an API token into pods`,                                   // We add 6 secrets, not 1
@@ -353,6 +363,10 @@ var (
 			`\[NodeFeature:Sysctls\]`, // needs SCC support
 
 			`validates that there is no conflict between pods with same hostPort but different hostIP and protocol`, // https://github.com/kubernetes/kubernetes/issues/61018
+
+			`Pod should perfer to scheduled to nodes pod can tolerate`, // broken due to multi-zone cluster in 1.11, enable in 1.12
+
+			`Services should be able to create a functioning NodePort service`, // https://github.com/openshift/origin/issues/21708
 
 			`SSH`,                // TRIAGE
 			`SELinux relabeling`, // https://github.com/openshift/origin/issues/7287 still broken
@@ -394,63 +408,19 @@ var (
 			`Service endpoints latency`, // requires low latency
 			`Clean up pods on node`,     // schedules up to max pods per node
 			`should allow starting 95 pods per node`,
+			`DynamicProvisioner should test that deleting a claim before the volume is provisioned deletes the volume`, // test is very disruptive to other tests
 
 			`Should be able to support the 1.7 Sample API Server using the current Aggregator`, // down apiservices break other clients today https://bugzilla.redhat.com/show_bug.cgi?id=1623195
 		},
-		// tests that will pass in 4.0
-		// TODO: this will be removed once 4.0 passes all conformance tests
-		"[Suite:openshift/smoke-4]": {
-			`Managed cluster should start all core operators`,
-
-			regexp.QuoteMeta("[sig-storage] Subpath [Volume type"),
-			regexp.QuoteMeta("[sig-storage] Volume Placement"),
-			regexp.QuoteMeta("[sig-storage] Subpath Atomic writer volumes should support subpaths with"),
-			regexp.QuoteMeta("[sig-storage] Secrets should be consumable from pods in volume"),
-			regexp.QuoteMeta("[sig-storage] Projected should be consumable"),
-			regexp.QuoteMeta("[sig-storage] HostPath should give a volume the correct mode"),
-			regexp.QuoteMeta("[sig-storage] HostPath should support r/w"),
-			regexp.QuoteMeta("[sig-storage] Dynamic Provisioning DynamicProvisioner"),
-			regexp.QuoteMeta("[sig-storage] ConfigMap should be consumable from pods"),
-			regexp.QuoteMeta("[sig-storage] ConfigMap should be consumable from pods"),
-			regexp.QuoteMeta("[sig-storage] Downward API volume should"),
-			regexp.QuoteMeta("[sig-storage] CSI Volumes CSI plugin test using CSI driver: hostPath should provision storage"),
-			regexp.QuoteMeta("[sig-scheduling] ResourceQuota should"),
-			regexp.QuoteMeta("[sig-scheduling] LimitRange should create a LimitRange with defaults"),
-			regexp.QuoteMeta("[sig-network] Services should"),
-			regexp.QuoteMeta("[sig-network] Networking Granular Checks: Pods should function for"),
-			regexp.QuoteMeta("[sig-network] DNS"),
-			regexp.QuoteMeta("[sig-cli] Kubectl client [k8s.io]"),
-			regexp.QuoteMeta("[sig-auth] [Feature:NodeAuthorizer]"),
-			regexp.QuoteMeta("[sig-auth] PodSecurityPolicy should"),
-			regexp.QuoteMeta("[sig-apps] ReplicaSet should"),
-			regexp.QuoteMeta("[sig-apps] Job should"),
-			regexp.QuoteMeta("[sig-apps] DisruptionController"),
-			regexp.QuoteMeta("[sig-apps] Deployment deployment"),
-			regexp.QuoteMeta("[sig-apps] CronJob should"),
-			regexp.QuoteMeta("[sig-api-machinery]"),
-			regexp.QuoteMeta("[k8s.io] [sig-node] Security Context [Feature:SecurityContext]"),
-			regexp.QuoteMeta("[k8s.io] [sig-node] Events should be sent by kubelets"),
-			regexp.QuoteMeta("[k8s.io] Pods should"),
-			regexp.QuoteMeta("[k8s.io] Docker Containers should"),
-			regexp.QuoteMeta("[Feature:DeploymentConfig] deploymentconfigs with multiple image change triggers"),
-			regexp.QuoteMeta("[Conformance][templates] templateinstance object kinds test should create and delete objects from varying API groups"),
-			regexp.QuoteMeta("[Conformance][Area:Networking][Feature:Router]"),
-			regexp.QuoteMeta("[Area:Networking] NetworkPolicy"),
-			regexp.QuoteMeta("[Area:Networking] network isolation"),
-			regexp.QuoteMeta("[Area:Networking] services when using a plugin"),
+		"[Suite:openshift/scalability]": {
+			`Density .* should allow starting 30 pods per node .*Deployment.* with 0 secrets, 2 configmaps and 0 daemons`,
+			`Density .* should allow starting 100 pods per node .*ReplicationController.* with 0 secrets, 0 configmaps and 0 daemons`,
+			`Load capacity .* should be able to handle 30 pods per node .*Job.* with 0 secrets, 0 configmaps and 0 daemons`,
 		},
 	}
 
 	// labelExcludes temporarily block tests out of a specific suite
-	labelExcludes = map[string][]string{
-		"[Suite:openshift/smoke-4]": {
-			`\[sig-network\] Services .* NodePort`,
-			`DynamicProvisioner deletion should be idempotent`,
-			`Kubectl taint \[Serial\]`,
-			// flaking, very slow
-			`100 namespaces in 150 seconds`,
-		},
-	}
+	labelExcludes = map[string][]string{}
 
 	excludedTests = []string{
 		`\[Disabled:.+\]`,

@@ -44,7 +44,7 @@ func runCmd(c *cli.Context) error {
 		rootless.SetSkipStorageSetup(true)
 	}
 
-	runtime, err := libpodruntime.GetContainerRuntime(c)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
@@ -115,6 +115,11 @@ func runCmd(c *cli.Context) error {
 		exitCode = 127
 		if strings.Index(err.Error(), "permission denied") > -1 {
 			exitCode = 126
+		}
+		if c.IsSet("rm") {
+			if deleteError := runtime.RemoveContainer(ctx, ctr, true); deleteError != nil {
+				logrus.Errorf("unable to remove container %s after failing to start and attach to it", ctr.ID())
+			}
 		}
 		return err
 	}

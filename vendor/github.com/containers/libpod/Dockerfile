@@ -1,4 +1,4 @@
-FROM golang:1.10
+FROM golang:1.11
 
 RUN echo 'deb http://httpredir.debian.org/debian jessie-backports main' > /etc/apt/sources.list.d/backports.list
 
@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y \
     libudev-dev \
     protobuf-c-compiler \
     protobuf-compiler \
-    python-minimal \
     libglib2.0-dev \
     libapparmor-dev \
     btrfs-tools \
@@ -37,11 +36,6 @@ RUN apt-get update && apt-get install -y \
     liblzma-dev \
     netcat \
     socat \
-    python3-pip \
-    python3-dateutil \
-    python3-setuptools \
-    python3-psutil \
-    python3-pytoml \
     lsof \
     xz-utils \
     --no-install-recommends \
@@ -52,7 +46,7 @@ ADD . /go/src/github.com/containers/libpod
 RUN set -x && cd /go/src/github.com/containers/libpod && make install.libseccomp.sudo
 
 # Install runc
-ENV RUNC_COMMIT 78ef28e63bec2ee4c139b5e3e0d691eb9bdc748d
+ENV RUNC_COMMIT 96ec2177ae841256168fcf76954f7177af9446eb
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
 	&& git clone https://github.com/opencontainers/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
@@ -64,7 +58,7 @@ RUN set -x \
 	&& rm -rf "$GOPATH"
 
 # Install conmon
-ENV CRIO_COMMIT 662dbb31b5d4f5ed54511a47cde7190c61c28677
+ENV CRIO_COMMIT 7a283c391abb7bd25086a8ff91dbb36ebdd24466
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
 	&& git clone https://github.com/kubernetes-sigs/cri-o.git "$GOPATH/src/github.com/kubernetes-sigs/cri-o.git" \
@@ -112,8 +106,7 @@ RUN set -x \
       && go get -u github.com/mailru/easyjson/... \
       && install -D -m 755 "$GOPATH"/bin/easyjson /usr/bin/
 
-# Install criu
-ENV CRIU_COMMIT 584cbe4643c3fc7dc901ff08bf923ca0fe7326f9
+# Install latest stable criu version
 RUN set -x \
       && cd /tmp \
       && git clone https://github.com/checkpoint-restore/criu.git \
@@ -129,9 +122,6 @@ COPY cni/87-podman-bridge.conflist /etc/cni/net.d/87-podman-bridge.conflist
 
 # Make sure we have some policy for pulling images
 RUN mkdir -p /etc/containers && curl https://raw.githubusercontent.com/projectatomic/registries/master/registries.fedora -o /etc/containers/registries.conf
-
-# Install python3 varlink module from pypi
-RUN pip3 install varlink
 
 COPY test/policy.json /etc/containers/policy.json
 COPY test/redhat_sigstore.yaml /etc/containers/registries.d/registry.access.redhat.com.yaml

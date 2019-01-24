@@ -7,6 +7,7 @@ import (
 	g "github.com/onsi/ginkgo"
 	o "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
 	kapierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -41,7 +42,7 @@ var _ = g.Describe("[Conformance][Area:Networking][Feature:Router]", func() {
 				if err != nil {
 					panic(err)
 				}
-				exutil.DumpPodsCommand(oc.AdminKubeClient(), ns, selector, "cat /var/lib/haproxy/router/routes.json /var/lib//var/lib/haproxy/conf/haproxy.config")
+				exutil.DumpPodsCommand(oc.AdminKubeClient(), ns, selector, "cat /var/lib/haproxy/router/routes.json /var/lib/haproxy/conf/haproxy.config")
 			}
 		}
 	})
@@ -50,7 +51,7 @@ var _ = g.Describe("[Conformance][Area:Networking][Feature:Router]", func() {
 
 	g.BeforeEach(func() {
 		var err error
-		host, err = waitForFirstRouterEndpointIP(oc)
+		host, err = waitForRouterServiceIP(oc)
 		if kapierrs.IsNotFound(err) {
 			g.Skip("no router installed on the cluster")
 			return
@@ -103,24 +104,40 @@ var _ = g.Describe("[Conformance][Area:Networking][Feature:Router]", func() {
 	})
 })
 
-func waitForFirstRouterEndpointIP(oc *exutil.CLI) (string, error) {
-	// wait for at least one router endpoint to be up router endpoints to show up
+func waitForRouterServiceIP(oc *exutil.CLI) (string, error) {
+	return waitForNamedRouterServiceIP(oc, "router-default")
+}
+
+func waitForRouterMetricsIP(oc *exutil.CLI) (string, error) {
+	return waitForNamedRouterServiceIP(oc, "router-internal-default")
+}
+
+func waitForNamedRouterServiceIP(oc *exutil.CLI, name string) (string, error) {
+	_, ns, err := exutil.GetRouterPodTemplate(oc)
+	if err != nil {
+		return "", err
+	}
+
+	// wait for the service to show up
 	var host string
-	err := wait.PollImmediate(2*time.Second, 120*time.Second, func() (bool, error) {
-		currlabel := "router=router"
-		for _, ns := range []string{"default", "openshift-ingress", "tectonic-ingress"} {
-			//Search the router by label
-			if ns == "openshift-ingress" {
-				currlabel = "router=router-default"
+	err = wait.PollImmediate(2*time.Second, 60*time.Second, func() (bool, error) {
+		svc, err := oc.AdminKubeClient().CoreV1().Services(ns).Get(name, metav1.GetOptions{})
+		if kapierrs.IsNotFound(err) {
+			// see if an older service named 'router' exists.
+			svc, err = oc.AdminKubeClient().CoreV1().Services(ns).Get("router", metav1.GetOptions{})
+			if kapierrs.IsNotFound(err) {
+				return false, nil
 			}
-			podList, err := oc.AdminKubeClient().CoreV1().Pods(ns).List(metav1.ListOptions{LabelSelector: currlabel})
-			if podList.Items != nil && len(podList.Items) > 0 {
-				host = podList.Items[0].Status.PodIP
-				return true, nil
-			}
-			o.Expect(err).NotTo(o.HaveOccurred())
 		}
-		return false, nil
+		o.Expect(err).NotTo(o.HaveOccurred())
+		host = svc.Spec.ClusterIP
+		if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+			if len(svc.Status.LoadBalancer.Ingress) == 0 || len(svc.Status.LoadBalancer.Ingress[0].Hostname) == 0 {
+				return false, nil
+			}
+			host = svc.Status.LoadBalancer.Ingress[0].Hostname
+		}
+		return true, nil
 	})
 	return host, err
 }

@@ -3,9 +3,11 @@ package main
 import (
 	js "encoding/json"
 	"fmt"
+	"os"
 
 	of "github.com/containers/libpod/cmd/podman/formats"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
+	"github.com/containers/libpod/pkg/rootless"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -22,13 +24,18 @@ var (
 
 	mountFlags = []cli.Flag{
 		cli.BoolFlag{
-			Name:  "notruncate",
-			Usage: "do not truncate output",
+			Name:  "all, a",
+			Usage: "Mount all containers",
 		},
 		cli.StringFlag{
 			Name:  "format",
 			Usage: "Change the output format to Go template",
 		},
+		cli.BoolFlag{
+			Name:  "notruncate",
+			Usage: "do not truncate output",
+		},
+		LatestFlag,
 	}
 	mountCommand = cli.Command{
 		Name:         "mount",
@@ -52,6 +59,9 @@ func mountCmd(c *cli.Context) error {
 	if err := validateFlags(c, mountFlags); err != nil {
 		return err
 	}
+	if os.Geteuid() != 0 {
+		rootless.SetSkipStorageSetup(true)
+	}
 
 	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
@@ -59,33 +69,52 @@ func mountCmd(c *cli.Context) error {
 	}
 	defer runtime.Shutdown(false)
 
+	if os.Geteuid() != 0 {
+		if driver := runtime.GetConfig().StorageConfig.GraphDriverName; driver != "vfs" {
+			// Do not allow to mount a graphdriver that is not vfs if we are creating the userns as part
+			// of the mount command.
+			return fmt.Errorf("cannot mount using driver %s in rootless mode", driver)
+		}
+
+		became, ret, err := rootless.BecomeRootInUserNS()
+		if err != nil {
+			return err
+		}
+		if became {
+			os.Exit(ret)
+		}
+	}
+
+	if c.Bool("all") && c.Bool("latest") {
+		return errors.Errorf("--all and --latest cannot be used together")
+	}
+
+	mountContainers, err := getAllOrLatestContainers(c, runtime, -1, "all")
+	if err != nil {
+		if len(mountContainers) == 0 {
+			return err
+		}
+		fmt.Println(err.Error())
+	}
+
 	formats := map[string]bool{
 		"":            true,
 		of.JSONString: true,
 	}
 
-	args := c.Args()
 	json := c.String("format") == of.JSONString
 	if !formats[c.String("format")] {
 		return errors.Errorf("%q is not a supported format", c.String("format"))
 	}
 
 	var lastError error
-	if len(args) > 0 {
-		for _, name := range args {
+	if len(mountContainers) > 0 {
+		for _, ctr := range mountContainers {
 			if json {
 				if lastError != nil {
 					logrus.Error(lastError)
 				}
 				lastError = errors.Wrapf(err, "json option cannot be used with a container id")
-				continue
-			}
-			ctr, err := runtime.LookupContainer(name)
-			if err != nil {
-				if lastError != nil {
-					logrus.Error(lastError)
-				}
-				lastError = errors.Wrapf(err, "error looking up container %q", name)
 				continue
 			}
 			mountPoint, err := ctr.Mount()

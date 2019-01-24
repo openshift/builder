@@ -2,6 +2,7 @@ package varlinkapi
 
 import (
 	"encoding/json"
+	"github.com/containers/libpod/pkg/rootless"
 	"syscall"
 
 	"github.com/containers/libpod/cmd/podman/shared"
@@ -12,6 +13,10 @@ import (
 // CreatePod ...
 func (i *LibpodAPI) CreatePod(call iopodman.VarlinkCall, create iopodman.PodCreate) error {
 	var options []libpod.PodCreateOption
+
+	if create.InfraCommand != "" || create.InfraImage != "" {
+		return call.ReplyErrorOccurred("the infra-command and infra-image options are not supported yet")
+	}
 	if create.CgroupParent != "" {
 		options = append(options, libpod.WithPodCgroupParent(create.CgroupParent))
 	}
@@ -26,6 +31,21 @@ func (i *LibpodAPI) CreatePod(call iopodman.VarlinkCall, create iopodman.PodCrea
 	}
 	if len(create.Share) == 0 && create.Infra {
 		return call.ReplyErrorOccurred("You must share kernel namespaces to run an infra container")
+	}
+
+	if len(create.Publish) > 0 {
+		if !create.Infra {
+			return call.ReplyErrorOccurred("you must have an infra container to publish port bindings to the host")
+		}
+		if rootless.IsRootless() {
+			return call.ReplyErrorOccurred("rootless networking does not allow port binding to the host")
+		}
+		portBindings, err := shared.CreatePortBindings(create.Publish)
+		if err != nil {
+			return err
+		}
+		options = append(options, libpod.WithInfraContainerPorts(portBindings))
+
 	}
 	if create.Infra {
 		options = append(options, libpod.WithInfraContainer())
@@ -120,12 +140,12 @@ func (i *LibpodAPI) StartPod(call iopodman.VarlinkCall, name string) error {
 }
 
 // StopPod ...
-func (i *LibpodAPI) StopPod(call iopodman.VarlinkCall, name string) error {
+func (i *LibpodAPI) StopPod(call iopodman.VarlinkCall, name string, timeout int64) error {
 	pod, err := i.Runtime.LookupPod(name)
 	if err != nil {
 		return call.ReplyPodNotFound(name)
 	}
-	ctrErrs, err := pod.Stop(getContext(), true)
+	ctrErrs, err := pod.StopWithTimeout(getContext(), true, int(timeout))
 	callErr := handlePodCall(call, pod, ctrErrs, err)
 	if callErr != nil {
 		return err

@@ -11,7 +11,7 @@ import (
 	exutil "github.com/openshift/origin/test/extended/util"
 )
 
-var _ = g.Describe("[Feature:Builds][Slow][Smoke] result image should have proper labels set", func() {
+var _ = g.Describe("[Feature:Builds] result image should have proper labels set", func() {
 	defer g.GinkgoRecover()
 	var (
 		imageStreamFixture = exutil.FixturePath("..", "integration", "testdata", "test-image-stream.json")
@@ -23,7 +23,7 @@ var _ = g.Describe("[Feature:Builds][Slow][Smoke] result image should have prope
 	g.Context("", func() {
 
 		g.BeforeEach(func() {
-			exutil.DumpDockerInfo()
+			exutil.PreTestDump()
 		})
 
 		g.JustBeforeEach(func() {
@@ -111,7 +111,6 @@ func ExpectOpenShiftLabels(labels map[string]string) error {
 		"io.openshift.build.commit.ref",
 		"io.openshift.build.commit.message",
 		"io.openshift.build.source-location",
-		"io.openshift.build.source-context-dir",
 		"user-specified-label",
 	}
 

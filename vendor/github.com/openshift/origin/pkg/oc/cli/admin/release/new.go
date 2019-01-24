@@ -42,7 +42,11 @@ func NewNewOptions(streams genericclioptions.IOStreams) *NewOptions {
 	return &NewOptions{
 		IOStreams:      streams,
 		MaxPerRegistry: 4,
-		AlwaysInclude:  []string{"cluster-version-operator", "cli"},
+		// TODO: only cluster-version-operator and maybe CLI should be in this list,
+		//   the others should always be referenced by the cluster-bootstrap or
+		//   another operator.
+		AlwaysInclude:  []string{"cluster-version-operator", "cli", "installer"},
+		ToImageBaseTag: "cluster-version-operator",
 	}
 }
 
@@ -52,6 +56,8 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 		Use:   "new [SRC=DST ...]",
 		Short: "Create a new OpenShift release",
 		Long: templates.LongDesc(`
+			Build a new OpenShift release image that will update a cluster
+
 			OpenShift uses long-running active management processes called "operators" to
 			keep the cluster running and manage component lifecycle. This command
 			composes a set of images and operator definitions into a single update payload
@@ -94,6 +100,7 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 	flags.StringVar(&o.FromImageStream, "from-image-stream", o.FromImageStream, "Look at all tags in the provided image stream and build a release payload from them.")
 	flags.StringVar(&o.FromDirectory, "from-dir", o.FromDirectory, "Use this directory as the source for the release payload.")
 	flags.StringVar(&o.FromReleaseImage, "from-release", o.FromReleaseImage, "Use an existing release image as input.")
+	flags.StringVar(&o.ReferenceMode, "reference-mode", o.ReferenceMode, "By default, the image reference from an image stream points to the public registry for the stream and the image digest. Pass 'source' to build references to the originating image.")
 
 	// properties of the release
 	flags.StringVar(&o.Name, "name", o.Name, "The name of the release. Will default to the current time.")
@@ -115,6 +122,7 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 	flags.StringVar(&o.ToFile, "to-file", o.ToFile, "Output the release to a tar file instead of creating an image.")
 	flags.StringVar(&o.ToImage, "to-image", o.ToImage, "The location to upload the release image to.")
 	flags.StringVar(&o.ToImageBase, "to-image-base", o.ToImageBase, "If specified, the image to add the release layer on top of.")
+	flags.StringVar(&o.ToImageBaseTag, "to-image-base-tag", o.ToImageBaseTag, "If specified, the image tag in the input to add the release layer on top of. Defaults to cluster-version-operator.")
 
 	// misc
 	flags.StringVarP(&o.Output, "output", "o", o.Output, "Output the mapping definition in this format.")
@@ -137,6 +145,7 @@ type NewOptions struct {
 
 	FromImageStream string
 	Namespace       string
+	ReferenceMode   string
 
 	Exclude       []string
 	AlwaysInclude []string
@@ -147,10 +156,11 @@ type NewOptions struct {
 
 	DryRun bool
 
-	ToFile      string
-	ToDir       string
-	ToImage     string
-	ToImageBase string
+	ToFile         string
+	ToDir          string
+	ToImage        string
+	ToImageBase    string
+	ToImageBaseTag string
 
 	Mirror string
 
@@ -264,10 +274,14 @@ func (o *NewOptions) Run() error {
 	now := time.Now().UTC()
 	name := o.Name
 	if len(name) == 0 {
-		name = "0.0.1-" + now.Format("2006-01-02T150405Z")
+		name = "0.0.1-" + now.Format("2006-01-02-150405")
 	}
 
 	var cm *CincinnatiMetadata
+	// TODO: remove this once all code creates semantic versions
+	if _, err := semver.Parse(name); err == nil {
+		o.ForceManifest = true
+	}
 	if len(o.PreviousVersions) > 0 || len(o.ReleaseMetadata) > 0 || o.ForceManifest {
 		cm = &CincinnatiMetadata{Kind: "cincinnati-metadata-v0"}
 		semverName, err := semver.Parse(name)
@@ -388,8 +402,14 @@ func (o *NewOptions) Run() error {
 			return err
 		}
 
-		switch {
-		case len(inputIS.Status.PublicDockerImageRepository) > 0:
+		switch o.ReferenceMode {
+		case "public", "", "source":
+			forceExternal := o.ReferenceMode == "public" || o.ReferenceMode == ""
+			internal := inputIS.Status.DockerImageRepository
+			external := inputIS.Status.PublicDockerImageRepository
+			if forceExternal && len(external) == 0 {
+				return fmt.Errorf("only image streams with public image repositories can be the source for releases when using the default --reference-mode")
+			}
 			for _, tag := range inputIS.Status.Tags {
 				if exclude.Has(tag.Tag) {
 					glog.V(2).Infof("Excluded status tag %s", tag.Tag)
@@ -398,24 +418,63 @@ func (o *NewOptions) Run() error {
 				if len(tag.Items) == 0 {
 					continue
 				}
+
+				// attempt to identify the source image
+				source := tag.Items[0].DockerImageReference
 				if len(tag.Items[0].Image) == 0 {
-					glog.V(2).Infof("Ignored tag %q because it had no image id", tag.Tag)
+					glog.V(2).Infof("Ignored tag %q because it had no image id or reference", tag.Tag)
 					continue
+				}
+				// eliminate status tag references that point to the outside
+				if len(source) > 0 {
+					if len(internal) > 0 && strings.HasPrefix(tag.Items[0].DockerImageReference, internal) {
+						glog.V(2).Infof("Can't use tag %q source %s because it points to the internal registry", tag.Tag, source)
+						source = ""
+					}
 				}
 				ref := findSpecTag(inputIS.Spec.Tags, tag.Tag)
 				if ref == nil {
 					ref = &imageapi.TagReference{Name: tag.Tag}
 				} else {
+					// prevent unimported images from being skipped
+					if ref.Generation != nil && *ref.Generation != tag.Items[0].Generation {
+						return fmt.Errorf("the tag %q in the source input stream has not been imported yet", tag.Tag)
+					}
+					// use the tag ref as the source
+					if ref.From != nil && ref.From.Kind == "DockerImage" && !strings.HasPrefix(ref.From.Name, internal) {
+						if from, err := imagereference.Parse(ref.From.Name); err == nil {
+							from.Tag = ""
+							from.ID = tag.Items[0].Image
+							source = from.Exact()
+						} else {
+							glog.V(2).Infof("Can't use tag %q from %s because it isn't a valid image reference", tag.Tag, ref.From.Name)
+						}
+					}
 					ref = ref.DeepCopy()
 				}
-				ref.From = &corev1.ObjectReference{Kind: "DockerImage", Name: inputIS.Status.PublicDockerImageRepository + "@" + tag.Items[0].Image}
+				// default to the external registry name
+				if (forceExternal || len(source) == 0) && len(external) > 0 {
+					source = external + "@" + tag.Items[0].Image
+				}
+				if len(source) == 0 {
+					glog.V(2).Infof("Can't use tag %q because we cannot locate or calculate a source location", tag.Tag)
+					continue
+				}
+				sourceRef, err := imagereference.Parse(source)
+				if err != nil {
+					return fmt.Errorf("the tag %q points to source %q which is not valid", tag.Tag, source)
+				}
+				sourceRef.Tag = ""
+				sourceRef.ID = tag.Items[0].Image
+				source = sourceRef.Exact()
+
+				ref.From = &corev1.ObjectReference{Kind: "DockerImage", Name: source}
 				is.Spec.Tags = append(is.Spec.Tags, *ref)
 				ordered = append(ordered, tag.Tag)
 			}
 			fmt.Fprintf(o.ErrOut, "info: Found %d images in image stream\n", len(inputIS.Status.Tags))
 		default:
-			// TODO: add support for internal and referential
-			return fmt.Errorf("only image streams with public image repositories can be the source for a release payload")
+			return fmt.Errorf("supported reference modes are: \"public\" (default) and \"source\"")
 		}
 
 	case len(o.FromDirectory) > 0:
@@ -534,7 +593,7 @@ func (o *NewOptions) Run() error {
 		if err != nil {
 			return err
 		}
-		if err := payload.Rewrite(true, targetFn); err != nil {
+		if _, err := payload.Rewrite(true, targetFn); err != nil {
 			return fmt.Errorf("failed to update contents for input mappings: %v", err)
 		}
 	}
@@ -670,14 +729,12 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 					labels = imageConfig.Config.Labels
 				}
 
-				if len(labels["vcs-ref"]) > 0 {
-					if tag.Annotations == nil {
-						tag.Annotations = make(map[string]string)
-					}
-					tag.Annotations["io.openshift.build.commit.id"] = labels["vcs-ref"]
-					tag.Annotations["io.openshift.build.commit.ref"] = labels["io.openshift.build.commit.ref"]
-					tag.Annotations["io.openshift.build.source-location"] = labels["vcs-url"]
+				if tag.Annotations == nil {
+					tag.Annotations = make(map[string]string)
 				}
+				tag.Annotations["io.openshift.build.commit.id"] = labels["io.openshift.build.commit.id"]
+				tag.Annotations["io.openshift.build.commit.ref"] = labels["io.openshift.build.commit.ref"]
+				tag.Annotations["io.openshift.build.source-location"] = labels["io.openshift.build.source-location"]
 
 				if len(labels["io.openshift.release.operator"]) == 0 {
 					glog.V(2).Infof("Image %s has no io.openshift.release.operator label, skipping", m.ImageRef)
@@ -716,12 +773,22 @@ func (o *NewOptions) mirrorImages(is *imageapi.ImageStream, payload *Payload) er
 	if err != nil {
 		return err
 	}
-	if err := payload.Rewrite(false, targetFn); err != nil {
+	replacements, err := payload.Rewrite(false, targetFn)
+	if err != nil {
 		return fmt.Errorf("failed to update contents after mirroring: %v", err)
 	}
-	is, err = payload.References()
-	if err != nil {
-		return fmt.Errorf("unable to recalculate image references: %v", err)
+	for i := range is.Spec.Tags {
+		tag := &is.Spec.Tags[i]
+		if tag.From == nil || tag.From.Kind != "DockerImage" {
+			continue
+		}
+		if value, ok := replacements[tag.From.Name]; ok {
+			tag.From.Name = value
+		}
+	}
+	if glog.V(4) {
+		data, _ := json.MarshalIndent(is, "", "  ")
+		glog.Infof("Image references updated to:\n%s", string(data))
 	}
 	return nil
 }
@@ -796,9 +863,21 @@ func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time)
 		if len(toRef.Tag) == 0 {
 			toRef.Tag = o.Name
 		}
+		toImageBase := o.ToImageBase
+		if len(toImageBase) == 0 && len(o.ToImageBaseTag) > 0 {
+			for _, tag := range is.Spec.Tags {
+				if tag.From != nil && tag.From.Kind == "DockerImage" && tag.Name == o.ToImageBaseTag {
+					toImageBase = tag.From.Name
+				}
+			}
+			if len(toImageBase) == 0 {
+				return fmt.Errorf("--to-image-base-tag did not point to a tag in the input")
+			}
+		}
+
 		options := imageappend.NewAppendImageOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
 		options.DryRun = o.DryRun
-		options.From = o.ToImageBase
+		options.From = toImageBase
 		options.ConfigurationCallback = func(dgst digest.Digest, config *docker10.DockerImageConfig) error {
 			// reset any base image info
 			if len(config.OS) == 0 {
@@ -896,13 +975,13 @@ func writePayload(w io.Writer, now time.Time, is *imageapi.ImageStream, cm *Cinc
 		return nil, err
 	}
 
-	// write cincinnati metadata to release-manifests/cincinnati
+	// write cincinnati metadata to release-manifests/release-metadata
 	if cm != nil {
 		data, err := json.MarshalIndent(cm, "", "  ")
 		if err != nil {
 			return nil, err
 		}
-		if err := tw.WriteHeader(&tar.Header{Mode: 0444, ModTime: now, Typeflag: tar.TypeReg, Name: path.Join(append(append([]string{}, parts...), "cincinnati")...), Size: int64(len(data))}); err != nil {
+		if err := tw.WriteHeader(&tar.Header{Mode: 0444, ModTime: now, Typeflag: tar.TypeReg, Name: path.Join(append(append([]string{}, parts...), "release-metadata")...), Size: int64(len(data))}); err != nil {
 			return nil, err
 		}
 		if _, err := tw.Write(data); err != nil {
@@ -1029,13 +1108,13 @@ func copyPayload(w io.Writer, now time.Time, is *imageapi.ImageStream, cm *Cinci
 	}
 
 	// write cincinnati if passed to us
-	takeFileByName(&contents, "cincinnati")
+	takeFileByName(&contents, "release-metadata")
 	if cm != nil {
 		data, err := json.MarshalIndent(cm, "", "  ")
 		if err != nil {
 			return err
 		}
-		if err := tw.WriteHeader(&tar.Header{Mode: 0444, ModTime: now, Typeflag: tar.TypeReg, Name: path.Join(append(append([]string{}, parts...), "cincinnati")...), Size: int64(len(data))}); err != nil {
+		if err := tw.WriteHeader(&tar.Header{Mode: 0444, ModTime: now, Typeflag: tar.TypeReg, Name: path.Join(append(append([]string{}, parts...), "release-metadata")...), Size: int64(len(data))}); err != nil {
 			return err
 		}
 		if _, err := tw.Write(data); err != nil {

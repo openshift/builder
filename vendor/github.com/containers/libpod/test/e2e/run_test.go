@@ -1,8 +1,11 @@
+// +build !remoteclient
+
 package integration
 
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,6 +85,18 @@ var _ = Describe("Podman run", func() {
 
 	It("podman run a container based on remote image", func() {
 		session := podmanTest.Podman([]string{"run", "-dt", BB_GLIBC, "ls"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+	})
+
+	It("podman run a container with --init", func() {
+		session := podmanTest.Podman([]string{"run", "--init", ALPINE, "ls"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+	})
+
+	It("podman run a container with --init and --init-path", func() {
+		session := podmanTest.Podman([]string{"run", "--init", "--init-path", "/usr/libexec/podman/catatonit", ALPINE, "ls"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
 	})
@@ -252,6 +267,9 @@ var _ = Describe("Podman run", func() {
 	})
 
 	It("podman run blkio-weight test", func() {
+		if _, err := os.Stat("/sys/fs/cgroup/blkio/blkio.weight"); os.IsNotExist(err) {
+			Skip("Kernel does not support blkio.weight")
+		}
 		session := podmanTest.Podman([]string{"run", "--rm", "--blkio-weight=15", ALPINE, "cat", "/sys/fs/cgroup/blkio/blkio.weight"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
@@ -287,14 +305,27 @@ var _ = Describe("Podman run", func() {
 	})
 
 	It("podman run notify_socket", func() {
-		sock := "/run/notify"
+		host := GetHostDistributionInfo()
+		if host.Distribution != "rhel" && host.Distribution != "centos" && host.Distribution != "fedora" {
+			Skip("this test requires a working runc")
+		}
+		sock := filepath.Join(podmanTest.TempDir, "notify")
+		addr := net.UnixAddr{
+			Name: sock,
+			Net:  "unixgram",
+		}
+		socket, err := net.ListenUnixgram("unixgram", &addr)
+		Expect(err).To(BeNil())
+		defer os.Remove(sock)
+		defer socket.Close()
+
 		os.Setenv("NOTIFY_SOCKET", sock)
+		defer os.Unsetenv("NOTIFY_SOCKET")
+
 		session := podmanTest.Podman([]string{"run", "--rm", ALPINE, "printenv", "NOTIFY_SOCKET"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
-		match, _ := session.GrepString(sock)
-		Expect(match).Should(BeTrue())
-		os.Unsetenv("NOTIFY_SOCKET")
+		Expect(len(session.OutputToStringArray())).To(BeNumerically(">", 0))
 	})
 
 	It("podman run log-opt", func() {
@@ -322,7 +353,7 @@ var _ = Describe("Podman run", func() {
 		hooksDir := tempdir + "/hooks"
 		os.Mkdir(hooksDir, 0755)
 		fileutils.CopyFile("hooks/hooks.json", hooksDir)
-		os.Setenv("HOOK_OPTION", fmt.Sprintf("--hooks-dir-path=%s", hooksDir))
+		os.Setenv("HOOK_OPTION", fmt.Sprintf("--hooks-dir=%s", hooksDir))
 		os.Remove(hcheck)
 		session := podmanTest.Podman([]string{"run", ALPINE, "ls"})
 		session.Wait(10)
@@ -567,6 +598,21 @@ USER mail`
 		Expect(session.ExitCode()).To(Equal(0))
 	})
 
+	It("podman run --volumes flag with empty host dir", func() {
+		vol1 := filepath.Join(podmanTest.TempDir, "vol-test1")
+		err := os.MkdirAll(vol1, 0755)
+		Expect(err).To(BeNil())
+
+		session := podmanTest.Podman([]string{"run", "--volume", ":/myvol1:z", ALPINE, "touch", "/myvol2/foo.txt"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).ToNot(Equal(0))
+		Expect(session.ErrorToString()).To(ContainSubstring("directory cannot be empty"))
+		session = podmanTest.Podman([]string{"run", "--volume", vol1 + ":", ALPINE, "touch", "/myvol2/foo.txt"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).ToNot(Equal(0))
+		Expect(session.ErrorToString()).To(ContainSubstring("directory cannot be empty"))
+	})
+
 	It("podman run --mount flag with multiple mounts", func() {
 		vol1 := filepath.Join(podmanTest.TempDir, "vol-test1")
 		err := os.MkdirAll(vol1, 0755)
@@ -613,5 +659,50 @@ USER mail`
 		// make sure it's only shared (and not 'shared,slave')
 		isSharedOnly := !strings.Contains(shared[0], "shared,")
 		Expect(isSharedOnly).Should(BeTrue())
+	})
+
+	It("podman run --pod automatically", func() {
+		session := podmanTest.Podman([]string{"run", "--pod", "new:foobar", ALPINE, "ls"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+
+		check := podmanTest.Podman([]string{"pod", "ps", "--no-trunc"})
+		check.WaitWithDefaultTimeout()
+		match, _ := check.GrepString("foobar")
+		Expect(match).To(BeTrue())
+	})
+
+	It("podman run --rm should work", func() {
+		session := podmanTest.Podman([]string{"run", "--rm", ALPINE, "ls"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+
+		numContainers := podmanTest.NumberOfContainers()
+		Expect(numContainers).To(Equal(0))
+	})
+
+	It("podman run --rm failed container should delete itself", func() {
+		session := podmanTest.Podman([]string{"run", "--rm", ALPINE, "foo"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Not(Equal(0)))
+
+		numContainers := podmanTest.NumberOfContainers()
+		Expect(numContainers).To(Equal(0))
+	})
+
+	It("podman run failed container should NOT delete itself", func() {
+		session := podmanTest.Podman([]string{"run", ALPINE, "foo"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Not(Equal(0)))
+
+		numContainers := podmanTest.NumberOfContainers()
+		Expect(numContainers).To(Equal(1))
+	})
+	It("podman run readonly container should NOT mount /dev/shm read/only", func() {
+		session := podmanTest.Podman([]string{"run", "--read-only", ALPINE, "mount"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+
+		Expect(session.OutputToString()).To(Not(ContainSubstring("/dev/shm type tmpfs (ro,")))
 	})
 })
