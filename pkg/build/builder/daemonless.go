@@ -51,14 +51,21 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		return fmt.Errorf("error parsing image name %s: %v", ref, err)
 	}
 	if ref.Registry == "" {
+		// Due to https://github.com/containers/image/issues/572, buildah will default
+		// the registry to docker.io. If docker.io is not in the registry search path
+		// (set in /etc/registries.conf), buildah may be able to pull the image,
+		// but will not be able to use it when it runs build commands.
 		glog.V(2).Infof("defaulting registry to docker.io for image %s", imageName)
-		ref.Registry = "docker.io"
 	}
 
 	if authConfig.Username != "" && authConfig.Password != "" {
-		glog.V(2).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
-		if err := config.SetAuthentication(&systemContext, ref.Registry, authConfig.Username, authConfig.Password); err != nil {
-			return err
+		if ref.Registry == "" {
+			glog.V(0).Infof("WARNING: authentication was provided, but no registry was specified for image %s.", imageName)
+		} else {
+			glog.V(2).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
+			if err := config.SetAuthentication(&systemContext, ref.Registry, authConfig.Username, authConfig.Password); err != nil {
+				return err
+			}
 		}
 	}
 
