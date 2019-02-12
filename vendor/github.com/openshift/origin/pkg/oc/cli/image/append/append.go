@@ -22,10 +22,10 @@ import (
 	"github.com/docker/distribution/registry/client"
 	digest "github.com/opencontainers/go-digest"
 
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
 
 	"github.com/openshift/origin/pkg/image/apis/image/docker10"
 	imagereference "github.com/openshift/origin/pkg/image/apis/image/reference"
@@ -87,6 +87,7 @@ type AppendImageOptions struct {
 
 	FilterOptions imagemanifest.FilterOptions
 
+	RegistryConfig string
 	MaxPerRegistry int
 
 	DryRun   bool
@@ -122,6 +123,7 @@ func NewCmdAppendImage(name string, streams genericclioptions.IOStreams) *cobra.
 	flag := cmd.Flags()
 	o.FilterOptions.Bind(flag)
 
+	flag.StringVarP(&o.RegistryConfig, "registry-config", "a", o.RegistryConfig, "Path to your registry credentials (defaults to ~/.docker/config.json)")
 	flag.BoolVar(&o.DryRun, "dry-run", o.DryRun, "Print the actions that would be taken and exit without writing to the destination.")
 	flag.BoolVar(&o.Insecure, "insecure", o.Insecure, "Allow push and pull operations to registries to be made over HTTP")
 
@@ -212,6 +214,12 @@ func (o *AppendImageOptions) Run() error {
 		return err
 	}
 	creds := dockercredentials.NewLocal()
+	if len(o.RegistryConfig) > 0 {
+		creds, err = dockercredentials.NewFromFile(o.RegistryConfig)
+		if err != nil {
+			return fmt.Errorf("unable to load --registry-config: %v", err)
+		}
+	}
 	ctx := context.Background()
 	fromContext := registryclient.NewContext(rt, insecureRT).WithCredentials(creds)
 	toContext := registryclient.NewContext(rt, insecureRT).WithActions("push").WithCredentials(creds)

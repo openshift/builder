@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"syscall"
 	"time"
@@ -20,7 +21,7 @@ import (
 // ListContainers ...
 func (i *LibpodAPI) ListContainers(call iopodman.VarlinkCall) error {
 	var (
-		listContainers []iopodman.ListContainerData
+		listContainers []iopodman.Container
 	)
 
 	containers, err := i.Runtime.GetAllContainers()
@@ -43,10 +44,10 @@ func (i *LibpodAPI) ListContainers(call iopodman.VarlinkCall) error {
 }
 
 // GetContainer ...
-func (i *LibpodAPI) GetContainer(call iopodman.VarlinkCall, name string) error {
-	ctr, err := i.Runtime.LookupContainer(name)
+func (i *LibpodAPI) GetContainer(call iopodman.VarlinkCall, id string) error {
+	ctr, err := i.Runtime.LookupContainer(id)
 	if err != nil {
-		return call.ReplyContainerNotFound(name)
+		return call.ReplyContainerNotFound(id)
 	}
 	opts := shared.PsOptions{
 		Namespace: true,
@@ -194,15 +195,25 @@ func (i *LibpodAPI) ListContainerChanges(call iopodman.VarlinkCall, name string)
 }
 
 // ExportContainer ...
-func (i *LibpodAPI) ExportContainer(call iopodman.VarlinkCall, name, path string) error {
+func (i *LibpodAPI) ExportContainer(call iopodman.VarlinkCall, name, outPath string) error {
 	ctr, err := i.Runtime.LookupContainer(name)
 	if err != nil {
 		return call.ReplyContainerNotFound(name)
 	}
-	if err := ctr.Export(path); err != nil {
+	outputFile, err := ioutil.TempFile("", "varlink_recv")
+	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
-	return call.ReplyExportContainer(path)
+
+	defer outputFile.Close()
+	if outPath == "" {
+		outPath = outputFile.Name()
+	}
+	if err := ctr.Export(outPath); err != nil {
+		return call.ReplyErrorOccurred(err.Error())
+	}
+	return call.ReplyExportContainer(outPath)
+
 }
 
 // GetContainerStats ...
@@ -234,11 +245,6 @@ func (i *LibpodAPI) GetContainerStats(call iopodman.VarlinkCall, name string) er
 		Pids:         int64(containerStats.PIDs),
 	}
 	return call.ReplyGetContainerStats(cs)
-}
-
-// ResizeContainerTty ...
-func (i *LibpodAPI) ResizeContainerTty(call iopodman.VarlinkCall) error {
-	return call.ReplyMethodNotImplemented("ResizeContainerTty")
 }
 
 // StartContainer ...
@@ -313,16 +319,6 @@ func (i *LibpodAPI) KillContainer(call iopodman.VarlinkCall, name string, signal
 	return call.ReplyKillContainer(ctr.ID())
 }
 
-// UpdateContainer ...
-func (i *LibpodAPI) UpdateContainer(call iopodman.VarlinkCall) error {
-	return call.ReplyMethodNotImplemented("UpdateContainer")
-}
-
-// RenameContainer ...
-func (i *LibpodAPI) RenameContainer(call iopodman.VarlinkCall) error {
-	return call.ReplyMethodNotImplemented("RenameContainer")
-}
-
 // PauseContainer ...
 func (i *LibpodAPI) PauseContainer(call iopodman.VarlinkCall, name string) error {
 	ctr, err := i.Runtime.LookupContainer(name)
@@ -345,12 +341,6 @@ func (i *LibpodAPI) UnpauseContainer(call iopodman.VarlinkCall, name string) err
 		return call.ReplyErrorOccurred(err.Error())
 	}
 	return call.ReplyUnpauseContainer(ctr.ID())
-}
-
-// AttachToContainer ...
-// TODO: DO we also want a different one for websocket?
-func (i *LibpodAPI) AttachToContainer(call iopodman.VarlinkCall) error {
-	return call.ReplyMethodNotImplemented("AttachToContainer")
 }
 
 // WaitContainer ...

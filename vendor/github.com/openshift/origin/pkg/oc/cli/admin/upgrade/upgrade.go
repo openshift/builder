@@ -14,9 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
 
 	configv1 "github.com/openshift/api/config/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
@@ -40,7 +40,7 @@ func New(f kcmdutil.Factory, parentName string, streams genericclioptions.IOStre
 			This command will request that the cluster begin an upgrade. If no arguments are passed
 			the command will retrieve the current version info and display whether an upgrade is
 			in progress or whether any errors might prevent an upgrade, as well as show the suggested
-			updates available to the cluster. Information about compatible updates is periodically 
+			updates available to the cluster. Information about compatible updates is periodically
 			retrieved from the update server and cached on the cluster - these are updates that are
 			known to be supported as upgrades from the current version.
 
@@ -55,8 +55,8 @@ func New(f kcmdutil.Factory, parentName string, streams genericclioptions.IOStre
 			updates from being retrieved, the more powerful and dangerous --to-image=IMAGE option
 			may be used. This forces the cluster to upgrade to the contents of the specified release
 			image, regardless of whether that upgrade is safe to apply to the current version. While
-			rolling back to a previous micro version (4.0.2 -> 4.0.1) may be safe, upgrading more 
-			than one minor version ahead (4.0 -> 4.2) or downgrading one minor version (4.1 -> 4.0) 
+			rolling back to a previous micro version (4.0.2 -> 4.0.1) may be safe, upgrading more
+			than one minor version ahead (4.0 -> 4.2) or downgrading one minor version (4.1 -> 4.0)
 			is likely to cause data corruption or to completely break a cluster.
 
 			Experimental: This command is under active development and may change without notice.
@@ -179,7 +179,7 @@ func (o *Options) Run() error {
 		if len(update.Version) > 0 {
 			fmt.Fprintf(o.Out, "Updating to latest version %s\n", update.Version)
 		} else {
-			fmt.Fprintf(o.Out, "Updating to latest release image %s\n", update.Payload)
+			fmt.Fprintf(o.Out, "Updating to latest release image %s\n", update.Image)
 		}
 
 		return nil
@@ -208,13 +208,13 @@ func (o *Options) Run() error {
 			}
 		}
 		if len(o.ToImage) > 0 {
-			if o.ToImage == cv.Status.Desired.Payload {
+			if o.ToImage == cv.Status.Desired.Image {
 				fmt.Fprintf(o.Out, "info: Cluster is already using releaes image %s\n", o.ToImage)
 				return nil
 			}
 			update = &configv1.Update{
 				Version: "",
-				Payload: o.ToImage,
+				Image:   o.ToImage,
 			}
 		}
 
@@ -234,7 +234,7 @@ func (o *Options) Run() error {
 		if len(update.Version) > 0 {
 			fmt.Fprintf(o.Out, "Updating to %s\n", update.Version)
 		} else {
-			fmt.Fprintf(o.Out, "Updating to release image %s\n", update.Payload)
+			fmt.Fprintf(o.Out, "Updating to release image %s\n", update.Image)
 		}
 
 		return nil
@@ -268,7 +268,7 @@ func (o *Options) Run() error {
 			fmt.Fprintf(w, "VERSION\tIMAGE\n")
 			// TODO: add metadata about version
 			for _, update := range cv.Status.AvailableUpdates {
-				fmt.Fprintf(w, "%s\t%s\n", update.Version, update.Payload)
+				fmt.Fprintf(w, "%s\t%s\n", update.Version, update.Image)
 			}
 			w.Flush()
 			if c := findCondition(cv.Status.Conditions, configv1.RetrievedUpdates); c != nil && c.Status == configv1.ConditionFalse {
@@ -304,8 +304,8 @@ func updateVersionString(update configv1.Update) string {
 	if len(update.Version) > 0 {
 		return update.Version
 	}
-	if len(update.Payload) > 0 {
-		return update.Payload
+	if len(update.Image) > 0 {
+		return update.Image
 	}
 	return "<unknown>"
 }
@@ -327,8 +327,8 @@ func writeTabSection(out io.Writer, fn func(w io.Writer)) {
 
 func updateIsEquivalent(a, b configv1.Update) bool {
 	switch {
-	case len(a.Payload) > 0 && len(b.Payload) > 0:
-		return a.Payload == b.Payload
+	case len(a.Image) > 0 && len(b.Image) > 0:
+		return a.Image == b.Image
 	case len(a.Version) > 0 && len(b.Version) > 0:
 		return a.Version == b.Version
 	default:

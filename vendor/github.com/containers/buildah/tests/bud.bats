@@ -59,6 +59,20 @@ load helpers
   rm -rf ${TESTSDIR}/bud/use-layers/mount
 }
 
+@test "bud with --layers and single and two line Dockerfiles" {
+  buildah bud --signature-policy ${TESTSDIR}/policy.json --layers -t test -f Dockerfile.5 ${TESTSDIR}/bud/use-layers
+  run buildah --debug=false images -a
+  [ $(wc -l <<< "$output") -eq 3 ]
+  [ "${status}" -eq 0 ]
+
+  buildah bud --signature-policy ${TESTSDIR}/policy.json --layers -t test1 -f Dockerfile.6 ${TESTSDIR}/bud/use-layers
+  run buildah --debug=false images -a
+  [ $(wc -l <<< "$output") -eq 4 ]
+  [ "${status}" -eq 0 ]
+
+  buildah rmi -a -f
+}
+
 @test "bud with --layers, multistage, and COPY with --from" {
   mkdir -p ${TESTSDIR}/bud/use-layers/uuid
   uuidgen > ${TESTSDIR}/bud/use-layers/uuid/data
@@ -831,7 +845,7 @@ load helpers
   run buildah bud --cpu-shares bogus --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/from-scratch/Dockerfile ${TESTSDIR}/bud/from-scratch
   echo "$output"
   [ "$status" -ne 0 ]
-  [[ "$output" =~ "invalid value \"bogus\" for flag" ]]
+  [[ "$output" =~ "invalid argument \"bogus\" for " ]]
 }
 
 @test "bud with --cpu-shares flag, valid argument" {
@@ -856,7 +870,7 @@ load helpers
   run buildah bud -c bogus --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/from-scratch/Dockerfile ${TESTSDIR}/bud/from-scratch
   echo "$output"
   [ "$status" -ne 0 ]
-  [[ "$output" =~ "invalid value \"bogus\" for flag" ]]
+  [[ "$output" =~ "invalid argument \"bogus\" for " ]]
 }
 
 @test "bud with --cpu-shares short flag (-c), valid argument" {

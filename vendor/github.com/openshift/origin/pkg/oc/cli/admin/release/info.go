@@ -23,9 +23,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
 
 	imageapi "github.com/openshift/api/image/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
@@ -57,9 +57,10 @@ func NewInfo(f kcmdutil.Factory, parentName string, streams genericclioptions.IO
 		},
 	}
 	flags := cmd.Flags()
+	flags.StringVarP(&o.RegistryConfig, "registry-config", "a", o.RegistryConfig, "Path to your registry credentials (defaults to ~/.docker/config.json)")
 	flags.StringVar(&o.From, "changes-from", o.From, "Show changes from this image to the requested image.")
 	flags.BoolVar(&o.ShowCommit, "commits", o.ShowCommit, "Display information about the source an image was created with.")
-	flags.BoolVar(&o.ShowPullSpec, "pullspecs", o.ShowCommit, "Display the pull spec of each image instead of the digest.")
+	flags.BoolVar(&o.ShowPullSpec, "pullspecs", o.ShowPullSpec, "Display the pull spec of each image instead of the digest.")
 	flags.StringVar(&o.ImageFor, "image-for", o.ImageFor, "Print the pull spec of the specified image or an error if it does not exist.")
 	flags.StringVarP(&o.Output, "output", "o", o.Output, "Display the release info in an alternative format: json")
 	return cmd
@@ -76,6 +77,8 @@ type InfoOptions struct {
 	ShowCommit   bool
 	ShowPullSpec bool
 	Verify       bool
+
+	RegistryConfig string
 }
 
 func (o *InfoOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []string) error {
@@ -95,9 +98,9 @@ func (o *InfoOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []st
 			}
 			return fmt.Errorf("info expects one argument, or a connection to a 4.0 OpenShift server: %v", err)
 		}
-		image := cv.Status.Desired.Payload
+		image := cv.Status.Desired.Image
 		if len(image) == 0 && cv.Spec.DesiredUpdate != nil {
-			image = cv.Spec.DesiredUpdate.Payload
+			image = cv.Spec.DesiredUpdate.Image
 		}
 		if len(image) == 0 {
 			return fmt.Errorf("the server is not reporting a release image at this time, please specify an image to view")
@@ -319,6 +322,7 @@ func (o *InfoOptions) LoadReleaseInfo(image string) (*ReleaseInfo, error) {
 		return nil, err
 	}
 	opts := extract.NewOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
+	opts.RegistryConfig = o.RegistryConfig
 
 	release := &ReleaseInfo{
 		Image: image,

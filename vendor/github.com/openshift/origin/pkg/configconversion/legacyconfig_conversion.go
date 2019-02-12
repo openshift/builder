@@ -22,10 +22,10 @@ func convertNetworkConfigToAdmissionConfig(masterConfig *legacyconfigv1.MasterCo
 	}
 
 	scheme := runtime.NewScheme()
-	utilruntime.Must(externaliprangerv1.InstallLegacy(scheme))
-	utilruntime.Must(restrictedendpointsv1.InstallLegacy(scheme))
+	utilruntime.Must(externaliprangerv1.DeprecatedInstall(scheme))
+	utilruntime.Must(restrictedendpointsv1.DeprecatedInstall(scheme))
 	codecs := serializer.NewCodecFactory(scheme)
-	encoder := codecs.LegacyCodec(externaliprangerv1.SchemeGroupVersion, restrictedendpointsv1.SchemeGroupVersion)
+	encoder := codecs.LegacyCodec(externaliprangerv1.DeprecatedSchemeGroupVersion, restrictedendpointsv1.DeprecatedSchemeGroupVersion)
 
 	// convert the networkconfig to admissionconfig
 	var restricted []string
@@ -40,7 +40,7 @@ func convertNetworkConfigToAdmissionConfig(masterConfig *legacyconfigv1.MasterCo
 	if err != nil {
 		return err
 	}
-	masterConfig.AdmissionConfig.PluginConfig["openshift.io/RestrictedEndpointsAdmission"] = &legacyconfigv1.AdmissionPluginConfig{
+	masterConfig.AdmissionConfig.PluginConfig["network.openshift.io/RestrictedEndpointsAdmission"] = &legacyconfigv1.AdmissionPluginConfig{
 		Configuration: runtime.RawExtension{Raw: restrictedEndpointConfigContent},
 	}
 
@@ -56,7 +56,7 @@ func convertNetworkConfigToAdmissionConfig(masterConfig *legacyconfigv1.MasterCo
 	if err != nil {
 		return err
 	}
-	masterConfig.AdmissionConfig.PluginConfig["ExternalIPRanger"] = &legacyconfigv1.AdmissionPluginConfig{
+	masterConfig.AdmissionConfig.PluginConfig["network.openshift.io/ExternalIPRanger"] = &legacyconfigv1.AdmissionPluginConfig{
 		Configuration: runtime.RawExtension{Raw: externalIPRangerAdmissionConfigContent},
 	}
 

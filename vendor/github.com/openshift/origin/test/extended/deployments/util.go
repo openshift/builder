@@ -21,11 +21,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	watchtools "k8s.io/client-go/tools/watch"
 	"k8s.io/client-go/util/retry"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
 
@@ -407,7 +409,9 @@ func waitForDeployerToComplete(oc *exutil.CLI, name string, timeout time.Duratio
 	}
 	defer watcher.Stop()
 	var rc *corev1.ReplicationController
-	if _, err := watch.Until(timeout, watcher, func(e watch.Event) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if _, err := watchtools.UntilWithoutRetry(ctx, watcher, func(e watch.Event) (bool, error) {
 		if e.Type == watch.Error {
 			return false, fmt.Errorf("error while waiting for replication controller: %v", e.Object)
 		}
@@ -457,7 +461,9 @@ func waitForPodModification(oc *exutil.CLI, namespace string, name string, timeo
 		return nil, err
 	}
 
-	event, err := watch.Until(timeout, watcher, func(event watch.Event) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	event, err := watchtools.UntilWithoutRetry(ctx, watcher, func(event watch.Event) (bool, error) {
 		if event.Type != watch.Modified && (resourceVersion == "" && event.Type != watch.Added) {
 			return true, fmt.Errorf("different kind of event appeared while waiting for Pod modification: event: %#v", event)
 		}
@@ -475,7 +481,9 @@ func waitForRCModification(oc *exutil.CLI, namespace string, name string, timeou
 		return nil, err
 	}
 
-	event, err := watch.Until(timeout, watcher, func(event watch.Event) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	event, err := watchtools.UntilWithoutRetry(ctx, watcher, func(event watch.Event) (bool, error) {
 		if event.Type != watch.Modified && (resourceVersion == "" && event.Type != watch.Added) {
 			return true, fmt.Errorf("different kind of event appeared while waiting for RC modification: event: %#v", event)
 		}
@@ -496,7 +504,9 @@ func waitForDCModification(oc *exutil.CLI, namespace string, name string, timeou
 		return nil, err
 	}
 
-	event, err := watch.Until(timeout, watcher, func(event watch.Event) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	event, err := watchtools.UntilWithoutRetry(ctx, watcher, func(event watch.Event) (bool, error) {
 		if event.Type != watch.Modified && (resourceVersion == "" && event.Type != watch.Added) {
 			return true, fmt.Errorf("different kind of event appeared while waiting for DC modification: event: %#v", event)
 		}
@@ -729,10 +739,14 @@ func (d *deployerPodInvariantChecker) UpdatePod(pod *corev1.Pod) {
 	// Check for sanity.
 	// This is not paranoid; kubelet has already been broken this way:
 	// https://github.com/openshift/origin/issues/17011
-	oldPhase := d.cache[key][index].Status.Phase
+	oldPod := d.cache[key][index]
+	oldPhase := oldPod.Status.Phase
 	oldPhaseIsTerminated := oldPhase == corev1.PodSucceeded || oldPhase == corev1.PodFailed
 	o.Expect(oldPhaseIsTerminated && pod.Status.Phase != oldPhase).To(o.BeFalse(),
-		fmt.Sprintf("%v: detected deployer pod transition from terminated phase: %q -> %q", time.Now(), oldPhase, pod.Status.Phase))
+		spew.Sprintf("%v: detected deployer pod '%s/%s' transition from terminated phase: %q -> %q;\n"+
+			"old: %#+v\nnew: %#+v\ndiff: %s",
+			time.Now(), pod.Namespace, pod.Name, oldPhase, pod.Status.Phase,
+			oldPod, pod, diff.ObjectReflectDiff(oldPod, pod)))
 
 	d.cache[key][index] = pod
 

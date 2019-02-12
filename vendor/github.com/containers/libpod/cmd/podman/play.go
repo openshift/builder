@@ -1,23 +1,22 @@
 package main
 
 import (
-	"github.com/urfave/cli"
+	"github.com/containers/libpod/cmd/podman/cliconfig"
+	"github.com/spf13/cobra"
 )
 
 var (
-	playSubCommands = []cli.Command{
-		playKubeCommand,
-	}
-
+	playCommand     cliconfig.PodmanCommand
 	playDescription = "Play a pod and its containers from a structured file."
-	playCommand     = cli.Command{
-		Name:                   "play",
-		Usage:                  "play a container or pod",
-		Description:            playDescription,
-		ArgsUsage:              "",
-		Subcommands:            playSubCommands,
-		UseShortOptionHandling: true,
-		OnUsageError:           usageErrorHandler,
-		Hidden:                 true,
+	_playCommand    = &cobra.Command{
+		Use:   "play",
+		Short: "Play a pod",
+		Long:  playDescription,
 	}
 )
+
+func init() {
+	playCommand.Command = _playCommand
+	playCommand.SetUsageTemplate(UsageTemplate())
+	playCommand.AddCommand(getPlaySubCommands()...)
+}

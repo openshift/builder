@@ -8,6 +8,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// APIServers returns a APIServerInformer.
+	APIServers() APIServerInformer
 	// Authentications returns a AuthenticationInformer.
 	Authentications() AuthenticationInformer
 	// Builds returns a BuildInformer.
@@ -20,6 +22,8 @@ type Interface interface {
 	Consoles() ConsoleInformer
 	// DNSs returns a DNSInformer.
 	DNSs() DNSInformer
+	// Features returns a FeaturesInformer.
+	Features() FeaturesInformer
 	// Images returns a ImageInformer.
 	Images() ImageInformer
 	// Infrastructures returns a InfrastructureInformer.
@@ -34,6 +38,8 @@ type Interface interface {
 	Projects() ProjectInformer
 	// Proxies returns a ProxyInformer.
 	Proxies() ProxyInformer
+	// Registries returns a RegistryInformer.
+	Registries() RegistryInformer
 	// Schedulings returns a SchedulingInformer.
 	Schedulings() SchedulingInformer
 }
@@ -47,6 +53,11 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// APIServers returns a APIServerInformer.
+func (v *version) APIServers() APIServerInformer {
+	return &aPIServerInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Authentications returns a AuthenticationInformer.
@@ -77,6 +88,11 @@ func (v *version) Consoles() ConsoleInformer {
 // DNSs returns a DNSInformer.
 func (v *version) DNSs() DNSInformer {
 	return &dNSInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// Features returns a FeaturesInformer.
+func (v *version) Features() FeaturesInformer {
+	return &featuresInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Images returns a ImageInformer.
@@ -112,6 +128,11 @@ func (v *version) Projects() ProjectInformer {
 // Proxies returns a ProxyInformer.
 func (v *version) Proxies() ProxyInformer {
 	return &proxyInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// Registries returns a RegistryInformer.
+func (v *version) Registries() RegistryInformer {
+	return &registryInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Schedulings returns a SchedulingInformer.

@@ -2,9 +2,13 @@ skip-godeps: true
 rules:
 - destination: kubernetes
   branches:
-  - name: origin-4.0-kubernetes-1.11.1
+  - name: origin-4.0-kubernetes-1.12.4
     source:
       branch: master
+      dir: vendor/k8s.io/kubernetes
+  - name: origin-3.11-kubernetes-1.11.1
+    source:
+      branch: release-3.11
       dir: vendor/k8s.io/kubernetes
   - name: origin-3.10-kubernetes-1.10.2
     source:

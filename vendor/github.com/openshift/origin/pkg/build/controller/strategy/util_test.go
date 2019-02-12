@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -251,8 +252,9 @@ func TestMountConfigsAndSecrets(t *testing.T) {
 
 func TestSetupBuildCAs(t *testing.T) {
 	tests := []struct {
-		name  string
-		certs map[string]string
+		name           string
+		certs          map[string]string
+		expectedMounts map[string]string
 	}{
 		{
 			name: "no certs",
@@ -260,9 +262,16 @@ func TestSetupBuildCAs(t *testing.T) {
 		{
 			name: "additional certs",
 			certs: map[string]string{
-				"first":                       dummyCA,
-				"second":                      dummyCA,
-				"internal.svc.localhost:5000": dummyCA,
+				"first":                        dummyCA,
+				"second.domain.com":            dummyCA,
+				"internal.svc.localhost..5000": dummyCA,
+				"myregistry.foo...2345":        dummyCA,
+			},
+			expectedMounts: map[string]string{
+				"first":                        "first",
+				"second.domain.com":            "second.domain.com",
+				"internal.svc.localhost..5000": "internal.svc.localhost:5000",
+				"myregistry.foo...2345":        "myregistry.foo.:2345",
 			},
 		},
 	}
@@ -313,7 +322,7 @@ func TestSetupBuildCAs(t *testing.T) {
 					continue
 				}
 
-				expectedPath := fmt.Sprintf("certs.d/%s/ca.crt", expected)
+				expectedPath := fmt.Sprintf("certs.d/%s/ca.crt", tc.expectedMounts[expected])
 				if foundItem.Path != expectedPath {
 					t.Errorf("expected mount path to be %s; got %s", expectedPath, foundItem.Path)
 				}
@@ -402,6 +411,30 @@ func TestSetupBuildSystem(t *testing.T) {
 		}
 		if !foundMount {
 			t.Errorf("registry config was not mounted into container %s", c.Name)
+		}
+		foundRegistriesConf := false
+		foundSignaturePolicy := false
+		for _, env := range c.Env {
+			if env.Name == "BUILD_REGISTRIES_CONF_PATH" {
+				foundRegistriesConf = true
+				expectedMountPath := filepath.Join(ConfigMapBuildSystemConfigsMountPath, util.RegistryConfKey)
+				if env.Value != expectedMountPath {
+					t.Errorf("expected BUILD_REGISTRIES_CONF_PATH %s, got %s", expectedMountPath, env.Value)
+				}
+			}
+			if env.Name == "BUILD_SIGNATURE_POLICY_PATH" {
+				foundSignaturePolicy = true
+				expectedMountMapth := filepath.Join(ConfigMapBuildSystemConfigsMountPath, util.SignaturePolicyKey)
+				if env.Value != expectedMountMapth {
+					t.Errorf("expected BUILD_SIGNATURE_POLICY_PATH %s, got %s", expectedMountMapth, env.Value)
+				}
+			}
+		}
+		if !foundRegistriesConf {
+			t.Errorf("env var %s was not present in container %s", "BUILD_REGISTRIES_CONF_PATH", c.Name)
+		}
+		if !foundSignaturePolicy {
+			t.Errorf("env var %s was not present in container %s", "BUILD_SIGNATURE_POLICY_PATH", c.Name)
 		}
 	}
 }

@@ -21,6 +21,8 @@ import (
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/genericclioptions/printers"
 	kclientset "k8s.io/client-go/kubernetes"
 	rbacv1client "k8s.io/client-go/kubernetes/typed/rbac/v1"
 	"k8s.io/client-go/tools/clientcmd"
@@ -133,11 +135,23 @@ func ExecuteTest(t ginkgo.GinkgoTestingT, suite string) {
 func AnnotateTestSuite() {
 	var allLabels []string
 	matches := make(map[string]*regexp.Regexp)
+	stringMatches := make(map[string][]string)
 	excludes := make(map[string]*regexp.Regexp)
 	for label, items := range testMaps {
 		sort.Strings(items)
 		allLabels = append(allLabels, label)
-		matches[label] = regexp.MustCompile(strings.Join(items, `|`))
+		var remain []string
+		for _, item := range items {
+			re := regexp.MustCompile(item)
+			if p, ok := re.LiteralPrefix(); ok {
+				stringMatches[label] = append(stringMatches[label], p)
+			} else {
+				remain = append(remain, item)
+			}
+		}
+		if len(remain) > 0 {
+			matches[label] = regexp.MustCompile(strings.Join(remain, `|`))
+		}
 	}
 	for label, items := range labelExcludes {
 		sort.Strings(items)
@@ -154,7 +168,20 @@ func AnnotateTestSuite() {
 					continue
 				}
 
-				if matches[label].MatchString(name) {
+				var hasLabel bool
+				for _, segment := range stringMatches[label] {
+					hasLabel = strings.Contains(name, segment)
+					if hasLabel {
+						break
+					}
+				}
+				if !hasLabel {
+					if re := matches[label]; re != nil {
+						hasLabel = matches[label].MatchString(name)
+					}
+				}
+
+				if hasLabel {
 					// TODO: remove when we no longer need it
 					if re, ok := excludes[label]; ok && re.MatchString(name) {
 						continue
@@ -297,22 +324,25 @@ var (
 		// alpha features that are not gated
 		"[Disabled:Alpha]": {
 			`\[Feature:Initializers\]`,                       // admission controller disabled
-			`\[Feature:LocalPersistentVolumes\]`,             // flag gate is off
 			`\[Feature:PodPreemption\]`,                      // flag gate is off
 			`\[Feature:RunAsGroup\]`,                         // flag gate is off
 			`\[NodeAlphaFeature:VolumeSubpathEnvExpansion\]`, // flag gate is off
 			`AdmissionWebhook`,                               // needs to be enabled
+			`\[NodeAlphaFeature:NodeLease\]`,                 // flag gate is off
+			`\[Feature:TTLAfterFinished\]`,                   // flag gate is off
+			`\[Feature:GPUDevicePlugin\]`,                    // GPU node needs to be available
 		},
 		// tests for features that are not implemented in openshift
 		"[Disabled:Unimplemented]": {
-			`\[Feature:Networking-IPv6\]`, // openshift-sdn doesn't support yet
-			`Monitoring`,                  // Not installed, should be
-			`Cluster level logging`,       // Not installed yet
-			`Kibana`,                      // Not installed
-			`Ubernetes`,                   // Can't set zone labels today
-			`kube-ui`,                     // Not installed by default
-			`^Kubernetes Dashboard`,       // Not installed by default (also probably slow image pull)
-			`Ingress`,                     // Not enabled yet
+			`\[Feature:Networking-IPv6\]`,     // openshift-sdn doesn't support yet
+			`Monitoring`,                      // Not installed, should be
+			`Cluster level logging`,           // Not installed yet
+			`Kibana`,                          // Not installed
+			`Ubernetes`,                       // Can't set zone labels today
+			`kube-ui`,                         // Not installed by default
+			`Kubernetes Dashboard`,            // Not installed by default (also probably slow image pull)
+			`\[Feature:ServiceLoadBalancer\]`, // Not enabled yet
+			`PersistentVolumes-local`,         // Disable local storage in 4.0 for now (sig-storage/hekumar@redhat.com)
 
 			`NetworkPolicy between server and client should allow egress access on one named port`, // not yet implemented
 
@@ -375,6 +405,18 @@ var (
 			`should support inline execution and attach`, // https://bugzilla.redhat.com/show_bug.cgi?id=1624041
 
 			`should idle the service and DeploymentConfig properly`, // idling with a single service and DeploymentConfig [Conformance]
+
+			`\[Feature:Volumes\]`, // storage team to investigate it post-rebase
+
+			// TODO: the following list of tests is disabled temporarily due to the fact
+			// that we're running kubelet 1.11 and these require 1.12. We will remove them
+			// post-rebase
+			`\[Feature:NodeAuthenticator\]`,
+			`PreemptionExecutionPath`,
+			`\[Volume type: blockfswithoutformat\]`,
+			`CSI Volumes CSI attach test using HostPath driver`,
+			`CSI Volumes CSI plugin test using CSI driver: hostPath`,
+			`Volume metrics should create volume metrics in Volume Manager`,
 		},
 		// tests too slow to be part of conformance
 		"[Slow]": {
@@ -390,13 +432,15 @@ var (
 			"Pod should be prefer scheduled to node that satisify the NodeAffinity",
 			"Pod should be schedule to node that don't match the PodAntiAffinity terms", // 2m
 
-			"validates that there exists conflict between pods with same hostPort and protocol but one using 0.0.0.0 hostIP", // 5m, really?
+			`validates that there exists conflict between pods with same hostPort and protocol but one using 0\.0\.0\.0 hostIP`, // 5m, really?
 		},
 		// tests that are known flaky
 		"[Flaky]": {
 			`Job should run a job to completion when tasks sometimes fail and are not locally restarted`, // seems flaky, also may require too many resources
 			`openshift mongodb replication creating from a template`,                                     // flaking on deployment
 			`should use be able to process many pods and reuse local volumes`,                            // https://bugzilla.redhat.com/show_bug.cgi?id=1635893
+
+			`Volume limits should verify that all nodes have volume limits`, // flaking due to a kubelet issue
 		},
 		// tests that must be run without competition
 		"[Serial]": {
@@ -410,20 +454,16 @@ var (
 			`should allow starting 95 pods per node`,
 			`DynamicProvisioner should test that deleting a claim before the volume is provisioned deletes the volume`, // test is very disruptive to other tests
 
-			`Should be able to support the 1.7 Sample API Server using the current Aggregator`, // down apiservices break other clients today https://bugzilla.redhat.com/show_bug.cgi?id=1623195
+			`Should be able to support the 1\.7 Sample API Server using the current Aggregator`, // down apiservices break other clients today https://bugzilla.redhat.com/show_bug.cgi?id=1623195
 		},
-		"[Suite:openshift/scalability]": {
-			`Density .* should allow starting 30 pods per node .*Deployment.* with 0 secrets, 2 configmaps and 0 daemons`,
-			`Density .* should allow starting 100 pods per node .*ReplicationController.* with 0 secrets, 0 configmaps and 0 daemons`,
-			`Load capacity .* should be able to handle 30 pods per node .*Job.* with 0 secrets, 0 configmaps and 0 daemons`,
-		},
+		"[Suite:openshift/scalability]": {},
 	}
 
 	// labelExcludes temporarily block tests out of a specific suite
 	labelExcludes = map[string][]string{}
 
 	excludedTests = []string{
-		`\[Disabled:.+\]`,
+		`\[Disabled:`,
 		`\[Disruptive\]`,
 		`\[Skipped\]`,
 		`\[Slow\]`,
@@ -513,6 +553,8 @@ func addRoleToE2EServiceAccounts(rbacClient rbacv1client.RbacV1Interface, namesp
 					RoleName:             roleName,
 					RbacClient:           rbacClient,
 					Users:                []string{sa},
+					PrintFlags:           genericclioptions.NewPrintFlags(""),
+					ToPrinter:            func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 				}
 				if err := addRole.AddRole(); err != nil {
 					e2e.Logf("Warning: Failed to add role to e2e service account: %v", err)

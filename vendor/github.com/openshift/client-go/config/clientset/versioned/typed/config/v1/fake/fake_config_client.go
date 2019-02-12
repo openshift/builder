@@ -12,6 +12,10 @@ type FakeConfigV1 struct {
 	*testing.Fake
 }
 
+func (c *FakeConfigV1) APIServers() v1.APIServerInterface {
+	return &FakeAPIServers{c}
+}
+
 func (c *FakeConfigV1) Authentications() v1.AuthenticationInterface {
 	return &FakeAuthentications{c}
 }
@@ -34,6 +38,10 @@ func (c *FakeConfigV1) Consoles() v1.ConsoleInterface {
 
 func (c *FakeConfigV1) DNSs() v1.DNSInterface {
 	return &FakeDNSs{c}
+}
+
+func (c *FakeConfigV1) Features() v1.FeaturesInterface {
+	return &FakeFeatures{c}
 }
 
 func (c *FakeConfigV1) Images() v1.ImageInterface {
@@ -62,6 +70,10 @@ func (c *FakeConfigV1) Projects() v1.ProjectInterface {
 
 func (c *FakeConfigV1) Proxies() v1.ProxyInterface {
 	return &FakeProxies{c}
+}
+
+func (c *FakeConfigV1) Registries() v1.RegistryInterface {
+	return &FakeRegistries{c}
 }
 
 func (c *FakeConfigV1) Schedulings() v1.SchedulingInterface {

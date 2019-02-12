@@ -1,8 +1,8 @@
-% podman-version(1)
+% podman-info(1)
 
 ## NAME
+podman\-system\-info - Display system information
 podman\-info - Display system information
-
 
 ## SYNOPSIS
 **podman info** [*options*]
@@ -19,7 +19,7 @@ Displays information pertinent to the host, current storage stats, configured co
 
 Show additional information
 
-**--format**
+**--format, -f**
 
 Change output format to "json" or a Go template.
 

@@ -19,10 +19,10 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
 
 	"github.com/openshift/origin/pkg/image/apis/image/docker10"
 	imagereference "github.com/openshift/origin/pkg/image/apis/image/reference"
@@ -55,6 +55,7 @@ func NewInfo(parentName string, streams genericclioptions.IOStreams) *cobra.Comm
 	}
 	flags := cmd.Flags()
 	o.FilterOptions.Bind(flags)
+	flags.StringVarP(&o.RegistryConfig, "registry-config", "a", o.RegistryConfig, "Path to your registry credentials (defaults to ~/.docker/config.json)")
 	flags.StringVarP(&o.Output, "output", "o", o.Output, "Print the image in an alternative format: json")
 	flags.BoolVar(&o.Insecure, "insecure", o.Insecure, "Allow push and pull operations to registries to be made over HTTP")
 	return cmd
@@ -62,6 +63,8 @@ func NewInfo(parentName string, streams genericclioptions.IOStreams) *cobra.Comm
 
 type InfoOptions struct {
 	genericclioptions.IOStreams
+
+	RegistryConfig string
 
 	FilterOptions imagemanifest.FilterOptions
 
@@ -106,6 +109,12 @@ func (o *InfoOptions) Run() error {
 			return err
 		}
 		creds := dockercredentials.NewLocal()
+		if len(o.RegistryConfig) > 0 {
+			creds, err = dockercredentials.NewFromFile(o.RegistryConfig)
+			if err != nil {
+				return fmt.Errorf("unable to load --registry-config: %v", err)
+			}
+		}
 		ctx := context.Background()
 		context := registryclient.NewContext(rt, insecureRT).WithCredentials(creds)
 

@@ -5,38 +5,36 @@ import (
 	"os"
 
 	buildahcli "github.com/containers/buildah/pkg/cli"
-	"github.com/containers/buildah/pkg/parse"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/spf13/cobra"
 )
 
-var (
-	mountDescription = "Mounts a working container's root filesystem for manipulation."
-	mountFlags       = []cli.Flag{
-		cli.BoolFlag{
-			Name:  "notruncate",
-			Usage: "do not truncate output",
+func init() {
+	var (
+		mountDescription = "\n  Mounts a working container's root filesystem for manipulation."
+		noTruncate       bool
+	)
+	mountCommand := &cobra.Command{
+		Use:   "mount",
+		Short: "Mount a working container's root filesystem",
+		Long:  mountDescription,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return mountCmd(cmd, args, noTruncate)
 		},
+		Example: `buildah mount
+  buildah mount containerID
+  buildah mount containerID1 containerID2`,
 	}
-	mountCommand = cli.Command{
-		Name:                   "mount",
-		Usage:                  "Mount a working container's root filesystem",
-		Description:            mountDescription,
-		Action:                 mountCmd,
-		ArgsUsage:              "[CONTAINER-NAME-OR-ID [...]]",
-		Flags:                  sortFlags(mountFlags),
-		SkipArgReorder:         true,
-		UseShortOptionHandling: true,
-	}
-)
 
-func mountCmd(c *cli.Context) error {
-	args := c.Args()
+	flags := mountCommand.Flags()
+	flags.SetInterspersed(false)
+	flags.BoolVar(&noTruncate, "notruncate", false, "do not truncate output")
+	rootCmd.AddCommand(mountCommand)
+}
+
+func mountCmd(c *cobra.Command, args []string, noTruncate bool) error {
 
 	if err := buildahcli.VerifyFlagsArgsOrder(args); err != nil {
-		return err
-	}
-	if err := parse.ValidateFlags(c, mountFlags); err != nil {
 		return err
 	}
 
@@ -44,7 +42,7 @@ func mountCmd(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	truncate := !c.Bool("notruncate")
+	truncate := !noTruncate
 
 	var lastError error
 	if len(args) > 0 {

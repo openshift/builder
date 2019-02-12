@@ -2,13 +2,17 @@ package libpod
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/containers/libpod/libpod/image"
 	"github.com/containers/libpod/pkg/rootless"
+	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/stringid"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -520,4 +524,58 @@ func isNamedVolume(volName string) bool {
 		return true
 	}
 	return false
+}
+
+// Export is the libpod portion of exporting a container to a tar file
+func (r *Runtime) Export(name string, path string) error {
+	ctr, err := r.LookupContainer(name)
+	if err != nil {
+		return err
+	}
+	if os.Geteuid() != 0 {
+		state, err := ctr.State()
+		if err != nil {
+			return errors.Wrapf(err, "cannot read container state %q", ctr.ID())
+		}
+		if state == ContainerStateRunning || state == ContainerStatePaused {
+			data, err := ioutil.ReadFile(ctr.Config().ConmonPidFile)
+			if err != nil {
+				return errors.Wrapf(err, "cannot read conmon PID file %q", ctr.Config().ConmonPidFile)
+			}
+			conmonPid, err := strconv.Atoi(string(data))
+			if err != nil {
+				return errors.Wrapf(err, "cannot parse PID %q", data)
+			}
+			became, ret, err := rootless.JoinDirectUserAndMountNS(uint(conmonPid))
+			if err != nil {
+				return err
+			}
+			if became {
+				os.Exit(ret)
+			}
+		} else {
+			became, ret, err := rootless.BecomeRootInUserNS()
+			if err != nil {
+				return err
+			}
+			if became {
+				os.Exit(ret)
+			}
+		}
+	}
+	return ctr.Export(path)
+
+}
+
+// RemoveContainersFromStorage attempt to remove containers from storage that do not exist in libpod database
+func (r *Runtime) RemoveContainersFromStorage(ctrs []string) {
+	for _, i := range ctrs {
+		// if the container does not exist in database, attempt to remove it from storage
+		if _, err := r.LookupContainer(i); err != nil && errors.Cause(err) == image.ErrNoSuchCtr {
+			r.storageService.UnmountContainerImage(i, true)
+			if err := r.storageService.DeleteContainer(i); err != nil && errors.Cause(err) != storage.ErrContainerUnknown {
+				logrus.Errorf("Failed to remove container %q from storage: %s", i, err)
+			}
+		}
+	}
 }

@@ -1,44 +1,47 @@
 package main
 
 import (
-	"github.com/containers/libpod/cmd/podman/libpodruntime"
+	"context"
+
+	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/libpod"
+	"github.com/containers/libpod/libpod/adapter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/spf13/cobra"
 )
 
 var (
+	pruneContainersCommand     cliconfig.ContainersPrune
 	pruneContainersDescription = `
 	podman container prune
 
 	Removes all exited containers
 `
 
-	pruneContainersCommand = cli.Command{
-		Name:         "prune",
-		Usage:        "Remove all stopped containers",
-		Description:  pruneContainersDescription,
-		Action:       pruneContainersCmd,
-		OnUsageError: usageErrorHandler,
+	_pruneContainersCommand = &cobra.Command{
+		Use:   "prune",
+		Short: "Remove all stopped containers",
+		Long:  pruneContainersDescription,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pruneContainersCommand.InputArgs = args
+			pruneContainersCommand.GlobalFlags = MainGlobalOpts
+			return pruneContainersCmd(&pruneContainersCommand)
+		},
 	}
 )
 
-func pruneContainersCmd(c *cli.Context) error {
-	var (
-		deleteFuncs []shared.ParallelWorkerInput
-	)
+func init() {
+	pruneContainersCommand.Command = _pruneContainersCommand
+	pruneContainersCommand.SetUsageTemplate(UsageTemplate())
+}
 
-	ctx := getContext()
-	runtime, err := libpodruntime.GetRuntime(c)
-	if err != nil {
-		return errors.Wrapf(err, "could not get runtime")
-	}
-	defer runtime.Shutdown(false)
+func pruneContainers(runtime *adapter.LocalRuntime, ctx context.Context, maxWorkers int, force bool) error {
+	var deleteFuncs []shared.ParallelWorkerInput
 
 	filter := func(c *libpod.Container) bool {
-		state, _ := c.State()
+		state, err := c.State()
 		if state == libpod.ContainerStateStopped || (state == libpod.ContainerStateExited && err == nil && c.PodID() == "") {
 			return true
 		}
@@ -54,7 +57,7 @@ func pruneContainersCmd(c *cli.Context) error {
 	for _, container := range delContainers {
 		con := container
 		f := func() error {
-			return runtime.RemoveContainer(ctx, con, c.Bool("force"))
+			return runtime.RemoveContainer(ctx, con, force)
 		}
 
 		deleteFuncs = append(deleteFuncs, shared.ParallelWorkerInput{
@@ -62,13 +65,23 @@ func pruneContainersCmd(c *cli.Context) error {
 			ParallelFunc: f,
 		})
 	}
-	maxWorkers := shared.Parallelize("rm")
-	if c.GlobalIsSet("max-workers") {
-		maxWorkers = c.GlobalInt("max-workers")
-	}
-	logrus.Debugf("Setting maximum workers to %d", maxWorkers)
-
 	// Run the parallel funcs
 	deleteErrors, errCount := shared.ParallelExecuteWorkerPool(maxWorkers, deleteFuncs)
 	return printParallelOutput(deleteErrors, errCount)
+}
+
+func pruneContainersCmd(c *cliconfig.ContainersPrune) error {
+	runtime, err := adapter.GetRuntime(&c.PodmanCommand)
+	if err != nil {
+		return errors.Wrapf(err, "could not get runtime")
+	}
+	defer runtime.Shutdown(false)
+
+	maxWorkers := shared.Parallelize("rm")
+	if c.GlobalIsSet("max-workers") {
+		maxWorkers = c.GlobalFlags.MaxWorks
+	}
+	logrus.Debugf("Setting maximum workers to %d", maxWorkers)
+
+	return pruneContainers(runtime, getContext(), maxWorkers, c.Bool("force"))
 }

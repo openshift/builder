@@ -3,20 +3,22 @@
 package adapter
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/pkg/errors"
 	"io"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/containers/image/types"
+	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/varlink"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/libpod/image"
 	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
 	"github.com/varlink/go/varlink"
 )
 
@@ -35,7 +37,7 @@ type LocalRuntime struct {
 }
 
 // GetRuntime returns a LocalRuntime struct with the actual runtime embedded in it
-func GetRuntime(c *cli.Context) (*LocalRuntime, error) {
+func GetRuntime(c *cliconfig.PodmanCommand) (*LocalRuntime, error) {
 	runtime := RemoteRuntime{}
 	conn, err := runtime.Connect()
 	if err != nil {
@@ -109,8 +111,8 @@ func (r *LocalRuntime) GetImages() ([]*ContainerImage, error) {
 	return newImages, nil
 }
 
-func imageInListToContainerImage(i iopodman.ImageInList, name string, runtime *LocalRuntime) (*ContainerImage, error) {
-	created, err := splitStringDate(i.Created)
+func imageInListToContainerImage(i iopodman.Image, name string, runtime *LocalRuntime) (*ContainerImage, error) {
+	created, err := time.ParseInLocation(time.RFC3339, i.Created, time.UTC)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +158,10 @@ func (r *LocalRuntime) LoadFromArchiveReference(ctx context.Context, srcRef type
 }
 
 // New calls into local storage to look for an image in local storage or to pull it
-func (r *LocalRuntime) New(ctx context.Context, name, signaturePolicyPath, authfile string, writer io.Writer, dockeroptions *image.DockerRegistryOptions, signingoptions image.SigningOptions, forcePull bool) (*ContainerImage, error) {
+func (r *LocalRuntime) New(ctx context.Context, name, signaturePolicyPath, authfile string, writer io.Writer, dockeroptions *image.DockerRegistryOptions, signingoptions image.SigningOptions, forcePull bool, label *string) (*ContainerImage, error) {
+	if label != nil {
+		return nil, errors.New("the remote client function does not support checking a remote image for a label")
+	}
 	// TODO Creds needs to be figured out here too, like above
 	tlsBool := dockeroptions.DockerInsecureSkipTLSVerify
 	// Remember SkipTlsVerify is the opposite of tlsverify
@@ -174,12 +179,6 @@ func (r *LocalRuntime) New(ctx context.Context, name, signaturePolicyPath, authf
 		return nil, err
 	}
 	return newImage, nil
-}
-
-func splitStringDate(d string) (time.Time, error) {
-	fields := strings.Fields(d)
-	t := fmt.Sprintf("%sT%sZ", fields[0], fields[1])
-	return time.ParseInLocation(time.RFC3339Nano, t, time.UTC)
 }
 
 // IsParent goes through the layers in the store and checks if i.TopLayer is
@@ -245,7 +244,7 @@ func (ci *ContainerImage) History(ctx context.Context) ([]*image.History, error)
 		return nil, err
 	}
 	for _, h := range reply {
-		created, err := splitStringDate(h.Created)
+		created, err := time.ParseInLocation(time.RFC3339, h.Created, time.UTC)
 		if err != nil {
 			return nil, err
 		}
@@ -319,4 +318,137 @@ func (r *LocalRuntime) Config(name string) *libpod.ContainerConfig {
 	}
 	return &data
 
+}
+
+// PruneImages is the wrapper call for a remote-client to prune images
+func (r *LocalRuntime) PruneImages(all bool) ([]string, error) {
+	return iopodman.ImagesPrune().Call(r.Conn, all)
+}
+
+// Export is a wrapper to container export to a tarfile
+func (r *LocalRuntime) Export(name string, path string) error {
+	tempPath, err := iopodman.ExportContainer().Call(r.Conn, name, "")
+	if err != nil {
+		return err
+	}
+
+	outputFile, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer outputFile.Close()
+
+	writer := bufio.NewWriter(outputFile)
+	defer writer.Flush()
+
+	reply, err := iopodman.ReceiveFile().Send(r.Conn, varlink.Upgrade, tempPath, true)
+	if err != nil {
+		return err
+	}
+
+	length, _, err := reply()
+	if err != nil {
+		return errors.Wrap(err, "unable to get file length for transfer")
+	}
+
+	reader := r.Conn.Reader
+	if _, err := io.CopyN(writer, reader, length); err != nil {
+		return errors.Wrap(err, "file transer failed")
+	}
+
+	return nil
+}
+
+// Import implements the remote calls required to import a container image to the store
+func (r *LocalRuntime) Import(ctx context.Context, source, reference string, changes []string, history string, quiet bool) (string, error) {
+	// First we send the file to the host
+	fs, err := os.Open(source)
+	if err != nil {
+		return "", err
+	}
+
+	fileInfo, err := fs.Stat()
+	if err != nil {
+		return "", err
+	}
+	reply, err := iopodman.SendFile().Send(r.Conn, varlink.Upgrade, "", int64(fileInfo.Size()))
+	if err != nil {
+		return "", err
+	}
+	_, _, err = reply()
+	if err != nil {
+		return "", err
+	}
+
+	reader := bufio.NewReader(fs)
+	_, err = reader.WriteTo(r.Conn.Writer)
+	if err != nil {
+		return "", err
+	}
+	r.Conn.Writer.Flush()
+
+	// All was sent, wait for the ACK from the server
+	tempFile, err := r.Conn.Reader.ReadString(':')
+	if err != nil {
+		return "", err
+	}
+
+	// r.Conn is kaput at this point due to the upgrade
+	if err := r.RemoteRuntime.RefreshConnection(); err != nil {
+		return "", err
+
+	}
+	return iopodman.ImportImage().Call(r.Conn, strings.TrimRight(tempFile, ":"), reference, history, changes, true)
+}
+
+// GetAllVolumes retrieves all the volumes
+func (r *LocalRuntime) GetAllVolumes() ([]*libpod.Volume, error) {
+	return nil, libpod.ErrNotImplemented
+}
+
+// RemoveVolume removes a volumes
+func (r *LocalRuntime) RemoveVolume(ctx context.Context, v *libpod.Volume, force, prune bool) error {
+	return libpod.ErrNotImplemented
+}
+
+// GetContainers retrieves all containers from the state
+// Filters can be provided which will determine what containers are included in
+// the output. Multiple filters are handled by ANDing their output, so only
+// containers matching all filters are returned
+func (r *LocalRuntime) GetContainers(filters ...libpod.ContainerFilter) ([]*libpod.Container, error) {
+	return nil, libpod.ErrNotImplemented
+}
+
+// RemoveContainer removes the given container
+// If force is specified, the container will be stopped first
+// Otherwise, RemoveContainer will return an error if the container is running
+func (r *LocalRuntime) RemoveContainer(ctx context.Context, c *libpod.Container, force bool) error {
+	return libpod.ErrNotImplemented
+}
+
+// CreateVolume creates a volume over a varlink connection for the remote client
+func (r *LocalRuntime) CreateVolume(ctx context.Context, c *cliconfig.VolumeCreateValues, labels, opts map[string]string) (string, error) {
+	cvOpts := iopodman.VolumeCreateOpts{
+		Options: opts,
+		Labels:  labels,
+	}
+	if len(c.InputArgs) > 0 {
+		cvOpts.VolumeName = c.InputArgs[0]
+	}
+
+	if c.Flag("driver").Changed {
+		cvOpts.Driver = c.Driver
+	}
+
+	return iopodman.VolumeCreate().Call(r.Conn, cvOpts)
+}
+
+// RemoveVolumes removes volumes over a varlink connection for the remote client
+func (r *LocalRuntime) RemoveVolumes(ctx context.Context, c *cliconfig.VolumeRmValues) ([]string, error) {
+	rmOpts := iopodman.VolumeRemoveOpts{
+		All:     c.All,
+		Force:   c.Force,
+		Volumes: c.InputArgs,
+	}
+	return iopodman.VolumeRemove().Call(r.Conn, rmOpts)
 }
