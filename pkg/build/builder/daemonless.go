@@ -24,8 +24,26 @@ import (
 	"golang.org/x/sys/unix"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	"github.com/openshift/library-go/pkg/image/reference"
 )
+
+// The build controller doesn't expect the CAP_ prefix to be used in the
+// entries in the list in the environment, but our runtime configuration
+// expects it to be provided, so massage the values into a suitabe list.
+func dropCapabilities() []string {
+	var dropCapabilities []string
+	if dropCaps, ok := os.LookupEnv(builderutil.DropCapabilities); ok && dropCaps != "" {
+		dropCapabilities = strings.Split(os.Getenv(builderutil.DropCapabilities), ",")
+		for i := range dropCapabilities {
+			dropCapabilities[i] = strings.ToUpper(dropCapabilities[i])
+			if !strings.HasPrefix(dropCapabilities[i], "CAP_") {
+				dropCapabilities[i] = "CAP_" + dropCapabilities[i]
+			}
+		}
+	}
+	return dropCapabilities
+}
 
 func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration, blobCacheDirectory string) error {
 	glog.V(2).Infof("Asked to pull fresh copy of %q.", imageName)
@@ -171,6 +189,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		RemoveIntermediateCtrs:  opts.RmTmpContainer,
 		ForceRmIntermediateCtrs: true,
 		BlobDirectory:           blobCacheDirectory,
+		DropCapabilities:        dropCapabilities(),
 	}
 
 	_, _, err := imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
@@ -403,11 +422,12 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 		entrypoint = builder.Entrypoint()
 	}
 	runOptions := buildah.RunOptions{
-		Isolation:  isolation,
-		Entrypoint: entrypoint,
-		Cmd:        createOpts.Config.Cmd,
-		Stdout:     attachOpts.OutputStream,
-		Stderr:     attachOpts.ErrorStream,
+		Isolation:        isolation,
+		Entrypoint:       entrypoint,
+		Cmd:              createOpts.Config.Cmd,
+		Stdout:           attachOpts.OutputStream,
+		Stderr:           attachOpts.ErrorStream,
+		DropCapabilities: dropCapabilities(),
 	}
 
 	return builder.Run(append(entrypoint, createOpts.Config.Cmd...), runOptions)
