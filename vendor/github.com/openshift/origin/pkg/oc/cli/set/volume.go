@@ -22,13 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/storage/names"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/genericclioptions/printers"
+	"k8s.io/cli-runtime/pkg/genericclioptions/resource"
 	kapi "k8s.io/kubernetes/pkg/apis/core"
 	kcoreclient "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/core/internalversion"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions/printers"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions/resource"
 	"k8s.io/kubernetes/pkg/kubectl/polymorphichelpers"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
 )
@@ -319,11 +319,14 @@ func (a *AddVolumeOptions) Validate() error {
 }
 
 func (o *VolumeOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []string) error {
-	kc, err := f.ClientSet()
+	config, err := f.ToRESTConfig()
 	if err != nil {
 		return err
 	}
-	o.Client = kc.Core()
+	o.Client, err = kcoreclient.NewForConfig(config)
+	if err != nil {
+		return err
+	}
 
 	o.DefaultNamespace, o.ExplicitNamespace, err = f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
@@ -500,7 +503,7 @@ func (o *VolumeOptions) RunVolume() error {
 	for _, info := range updateInfos {
 		var obj runtime.Object
 		if len(info.ResourceVersion) == 0 {
-			obj, err = resource.NewHelper(info.Client, info.Mapping).Create(info.Namespace, false, info.Object)
+			obj, err = resource.NewHelper(info.Client, info.Mapping).Create(info.Namespace, false, info.Object, &metav1.CreateOptions{})
 		} else {
 			obj, err = resource.NewHelper(info.Client, info.Mapping).Replace(info.Namespace, info.Name, true, info.Object)
 		}
@@ -530,7 +533,7 @@ func (o *VolumeOptions) RunVolume() error {
 			continue
 		}
 
-		actual, err := resource.NewHelper(info.Client, info.Mapping).Patch(info.Namespace, info.Name, types.StrategicMergePatchType, patch.Patch)
+		actual, err := resource.NewHelper(info.Client, info.Mapping).Patch(info.Namespace, info.Name, types.StrategicMergePatchType, patch.Patch, &metav1.UpdateOptions{})
 		if err != nil {
 			allErrs = append(allErrs, fmt.Errorf("failed to patch volume update to pod template: %v\n", err))
 			continue
@@ -783,7 +786,7 @@ func (o *VolumeOptions) addVolumeToSpec(spec *corev1.PodSpec, info *resource.Inf
 	// if --overwrite was passed, but volume did not previously
 	// exist, log a warning that no volumes were overwritten
 	if !vNameFound && opts.Overwrite && (o.PrintFlags.OutputFormat == nil || len(*o.PrintFlags.OutputFormat) == 0) {
-		fmt.Fprintf(o.ErrOut, "warning: volume %q did not previously exist and was not overriden. A new volume with this name has been created instead.", o.Name)
+		fmt.Fprintf(o.ErrOut, "warning: volume %q did not previously exist and was not overwritten. A new volume with this name has been created instead.", o.Name)
 	}
 
 	if setSource {

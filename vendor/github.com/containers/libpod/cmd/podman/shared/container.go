@@ -88,6 +88,7 @@ type PsContainerOutput struct {
 	PIDNS     string
 	User      string
 	UTS       string
+	Mounts    string
 }
 
 // Namespace describes output for ps namespace
@@ -228,6 +229,7 @@ func NewBatchContainer(ctr *libpod.Container, opts PsOptions) (PsContainerOutput
 	pso.CreatedAt = ctr.CreatedTime()
 	pso.StartedAt = startedAt
 	pso.Labels = ctr.Labels()
+	pso.Mounts = strings.Join(ctr.UserVolumes(), " ")
 
 	if opts.Namespace {
 		pso.Cgroup = ns.Cgroup
@@ -609,7 +611,7 @@ func GetRunlabel(label string, runlabelImage string, ctx context.Context, runtim
 			registryCreds = creds
 		}
 		dockerRegistryOptions.DockerRegistryCreds = registryCreds
-		newImage, err = runtime.ImageRuntime().New(ctx, runlabelImage, signaturePolicyPath, authfile, output, &dockerRegistryOptions, image.SigningOptions{}, false)
+		newImage, err = runtime.ImageRuntime().New(ctx, runlabelImage, signaturePolicyPath, authfile, output, &dockerRegistryOptions, image.SigningOptions{}, false, &label)
 	} else {
 		newImage, err = runtime.ImageRuntime().NewFromLocal(runlabelImage)
 	}

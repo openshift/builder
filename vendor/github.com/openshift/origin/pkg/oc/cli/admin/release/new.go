@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blang/semver"
@@ -26,9 +27,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
 
 	imageapi "github.com/openshift/api/image/v1"
 	imageclient "github.com/openshift/client-go/image/clientset/versioned"
@@ -125,6 +126,7 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 	flags.StringVar(&o.ToImageBaseTag, "to-image-base-tag", o.ToImageBaseTag, "If specified, the image tag in the input to add the release layer on top of. Defaults to cluster-version-operator.")
 
 	// misc
+	flags.StringVarP(&o.RegistryConfig, "registry-config", "a", o.RegistryConfig, "Path to your registry credentials (defaults to ~/.docker/config.json)")
 	flags.StringVarP(&o.Output, "output", "o", o.Output, "Output the mapping definition in this format.")
 	flags.StringVar(&o.Directory, "dir", o.Directory, "Directory to write release contents to, will default to a temporary directory.")
 	flags.IntVar(&o.MaxPerRegistry, "max-per-registry", o.MaxPerRegistry, "Number of concurrent images that will be extracted at a time.")
@@ -164,6 +166,7 @@ type NewOptions struct {
 
 	Mirror string
 
+	RegistryConfig string
 	MaxPerRegistry int
 
 	AllowMissingImages bool
@@ -342,6 +345,7 @@ func (o *NewOptions) Run() error {
 		var baseDigest string
 		buf := &bytes.Buffer{}
 		extractOpts := NewExtractOptions(genericclioptions.IOStreams{Out: buf, ErrOut: o.ErrOut})
+		extractOpts.RegistryConfig = o.RegistryConfig
 		extractOpts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {
 			if config.Config != nil {
 				baseDigest = config.Config.Labels["io.openshift.release.base-image-digest"]
@@ -550,6 +554,10 @@ func (o *NewOptions) Run() error {
 			// when we override the spec, we have to reset any annotations
 			tag.Annotations = nil
 		}
+		if tag.Annotations == nil {
+			tag.Annotations = make(map[string]string)
+		}
+		tag.Annotations["io.openshift.release.override"] = "true"
 		tag.From = &corev1.ObjectReference{
 			Name: m.Destination,
 			Kind: "DockerImage",
@@ -691,10 +699,14 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 		}
 	}
 
+	var lock sync.Mutex
 	opts := extract.NewOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
+	opts.RegistryConfig = o.RegistryConfig
 	opts.OnlyFiles = true
 	opts.MaxPerRegistry = o.MaxPerRegistry
 	opts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {
+		lock.Lock()
+		defer lock.Unlock()
 		metadata[m.Name] = imageData{
 			Directory: m.To,
 			Ref:       m.ImageRef,
@@ -714,6 +726,17 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 		if err != nil {
 			return err
 		}
+
+		// when the user provides an override, look at all layers for manifests
+		// in case the user did a layered build and overrode only one. This is
+		// an unsupported release configuration
+		var custom bool
+		filter := extract.NewPositionLayerFilter(-1)
+		if tag.Annotations["io.openshift.release.override"] == "true" {
+			custom = true
+			filter = nil
+		}
+
 		opts.Mappings = append(opts.Mappings, extract.Mapping{
 			Name:     tag.Name,
 			ImageRef: ref,
@@ -721,7 +744,7 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 			From: "manifests/",
 			To:   dstDir,
 
-			LayerFilter: extract.NewPositionLayerFilter(-1),
+			LayerFilter: filter,
 
 			ConditionFn: func(m *extract.Mapping, dgst digest.Digest, imageConfig *docker10.DockerImageConfig) (bool, error) {
 				var labels map[string]string
@@ -743,11 +766,16 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 				if err := os.MkdirAll(dstDir, 0770); err != nil {
 					return false, err
 				}
-				fmt.Fprintf(o.Out, "Loading manifests from %s: %s ...\n", tag.Name, m.ImageRef.ID)
+				if custom {
+					fmt.Fprintf(o.Out, "Loading override manifests from %s: %s ...\n", tag.Name, m.ImageRef.Exact())
+				} else {
+					fmt.Fprintf(o.Out, "Loading manifests from %s: %s ...\n", tag.Name, m.ImageRef.ID)
+				}
 				return true, nil
 			},
 		})
 	}
+	glog.V(4).Infof("Manifests will be extracted from:\n%#v", opts.Mappings)
 	return opts.Run()
 }
 
@@ -759,6 +787,7 @@ func (o *NewOptions) mirrorImages(is *imageapi.ImageStream, payload *Payload) er
 	opts.ImageStream = copied
 	opts.To = o.Mirror
 	opts.SkipRelease = true
+	opts.RegistryConfig = o.RegistryConfig
 
 	if err := opts.Run(); err != nil {
 		return err
@@ -876,6 +905,7 @@ func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time)
 		}
 
 		options := imageappend.NewAppendImageOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
+		options.RegistryConfig = o.RegistryConfig
 		options.DryRun = o.DryRun
 		options.From = toImageBase
 		options.ConfigurationCallback = func(dgst digest.Digest, config *docker10.DockerImageConfig) error {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -56,6 +57,9 @@ var (
 	// This is used in the ownerRef of builder pods.
 	BuildControllerRefKind = buildv1.GroupVersion.WithKind("Build")
 )
+
+// hostPortRegex matches the final "..[port]" in ConfigMap keys
+var hostPortRegex = regexp.MustCompile("\\.\\.(\\d+)$")
 
 // FatalError is an error which can't be retried.
 type FatalError struct {
@@ -385,10 +389,10 @@ func updateConfigsForContainer(c corev1.Container, volumeName string, configDir 
 		},
 	)
 	// registries.conf is the primary registry config file mounted in by OpenShift
-	registriesConfPath := filepath.Join(configDir, "registries.conf")
+	registriesConfPath := filepath.Join(configDir, buildutil.RegistryConfKey)
 
 	// policy.json sets image policies for buildah (allowed repositories for image pull/push, etc.)
-	signaturePolicyPath := filepath.Join(configDir, "policy.json")
+	signaturePolicyPath := filepath.Join(configDir, buildutil.SignaturePolicyKey)
 
 	// registries.d is a directory used by buildah to support multiple registries.conf files
 	// currently not created/managed by OpenShift
@@ -504,9 +508,11 @@ func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, additionalCAs map[stri
 		// This will be mounted to certs.d/<domain>/ca.crt so that it can be copied
 		// to /etc/docker/certs.d
 		for key := range additionalCAs {
+			// Replace "..[port]" with ":[port]" due to limiations with ConfigMap key names
+			mountDir := hostPortRegex.ReplaceAllString(key, ":$1")
 			cmSource.Items = append(cmSource.Items, corev1.KeyToPath{
 				Key:  key,
-				Path: fmt.Sprintf("certs.d/%s/ca.crt", key),
+				Path: fmt.Sprintf("certs.d/%s/ca.crt", mountDir),
 			})
 		}
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
@@ -528,5 +534,53 @@ func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, additionalCAs map[stri
 			containers[i] = c
 		}
 		pod.Spec.Containers = containers
+	}
+}
+
+// setupBlobCache configures a shared volume for caching image blobs across the build pod containers.
+func setupBlobCache(pod *corev1.Pod) {
+	const volume = "build-blob-cache"
+	const mountPath = buildutil.BuildBlobsContentCache
+	exists := false
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == volume {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: volume,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+		containers := make([]corev1.Container, len(pod.Spec.Containers))
+		for i, c := range pod.Spec.Containers {
+			c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+				Name:      volume,
+				MountPath: mountPath,
+			})
+			c.Env = append(c.Env, corev1.EnvVar{
+				Name:  "BUILD_BLOBCACHE_DIR",
+				Value: mountPath,
+			})
+			containers[i] = c
+		}
+		pod.Spec.Containers = containers
+
+		initContainers := make([]corev1.Container, len(pod.Spec.InitContainers))
+		for i, ic := range pod.Spec.InitContainers {
+			ic.VolumeMounts = append(ic.VolumeMounts, corev1.VolumeMount{
+				Name:      volume,
+				MountPath: mountPath,
+			})
+			ic.Env = append(ic.Env, corev1.EnvVar{
+				Name:  "BUILD_BLOBCACHE_DIR",
+				Value: mountPath,
+			})
+			initContainers[i] = ic
+		}
+		pod.Spec.InitContainers = initContainers
 	}
 }

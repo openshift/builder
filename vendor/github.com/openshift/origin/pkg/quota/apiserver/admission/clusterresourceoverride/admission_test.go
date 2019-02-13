@@ -29,19 +29,19 @@ import (
 
 const (
 	yamlConfig = `
-apiVersion: v1
+apiVersion: autoscaling.openshift.io/v1
 kind: ClusterResourceOverrideConfig
 limitCPUToMemoryPercent: 100
 cpuRequestToLimitPercent: 10
 memoryRequestToLimitPercent: 25
 `
 	invalidConfig = `
-apiVersion: v1
+apiVersion: autoscaling.openshift.io/v1
 kind: ClusterResourceOverrideConfig
 cpuRequestToLimitPercent: 200
 `
 	invalidConfig2 = `
-apiVersion: v1
+apiVersion: autoscaling.openshift.io/v1
 kind: ClusterResourceOverrideConfig
 `
 )
@@ -333,7 +333,7 @@ func TestLimitRequestAdmission(t *testing.T) {
 				},
 			}
 			c.(*clusterResourceOverridePlugin).SetProjectCache(fakeProjectCache(test.namespace))
-			attrs := admission.NewAttributesRecord(test.pod, nil, schema.GroupVersionKind{}, test.namespace.Name, "name", kapi.Resource("pods").WithVersion("version"), "", admission.Create, fakeUser())
+			attrs := admission.NewAttributesRecord(test.pod, nil, schema.GroupVersionKind{}, test.namespace.Name, "name", kapi.Resource("pods").WithVersion("version"), "", admission.Create, false, fakeUser())
 			clone := test.pod.DeepCopy()
 			if err = c.(admission.MutationInterface).Admit(attrs); err != nil {
 				t.Fatalf("%s: admission controller returned error: %v", test.name, err)
@@ -343,7 +343,7 @@ func TestLimitRequestAdmission(t *testing.T) {
 			}
 
 			if !reflect.DeepEqual(test.pod, clone) {
-				attrs := admission.NewAttributesRecord(clone, nil, schema.GroupVersionKind{}, test.namespace.Name, "name", kapi.Resource("pods").WithVersion("version"), "", admission.Create, fakeUser())
+				attrs := admission.NewAttributesRecord(clone, nil, schema.GroupVersionKind{}, test.namespace.Name, "name", kapi.Resource("pods").WithVersion("version"), "", admission.Create, false, fakeUser())
 				if err = c.(admission.ValidationInterface).Validate(attrs); err == nil {
 					t.Fatalf("%s: admission controller returned no error, but should", test.name)
 				}

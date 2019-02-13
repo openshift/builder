@@ -42,7 +42,7 @@ func newOAuthServerConfig(osinConfig *kubecontrolplanev1.KubeAPIServerConfig) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := servingOptions.ApplyTo(&genericConfig.Config); err != nil {
+	if err := servingOptions.ApplyTo(&genericConfig.Config.SecureServing, &genericConfig.Config.LoopbackClientConfig); err != nil {
 		return nil, err
 	}
 
@@ -58,13 +58,10 @@ func newOAuthServerConfig(osinConfig *kubecontrolplanev1.KubeAPIServerConfig) (*
 	}
 
 	// TODO you probably want to set this
-	//oauthServerConfig.GenericConfig.CorsAllowedOriginList = genericConfig.CorsAllowedOriginList
+	oauthServerConfig.GenericConfig.CorsAllowedOriginList = osinConfig.CORSAllowedOrigins
 	oauthServerConfig.GenericConfig.SecureServing = genericConfig.SecureServing
 	//oauthServerConfig.GenericConfig.AuditBackend = genericConfig.AuditBackend
 	//oauthServerConfig.GenericConfig.AuditPolicyChecker = genericConfig.AuditPolicyChecker
-
-	// Build the list of valid redirect_uri prefixes for a login using the openshift-web-console client to redirect to
-	oauthServerConfig.ExtraOAuthConfig.AssetPublicAddresses = []string{osinConfig.OAuthConfig.AssetPublicURL}
 
 	return oauthServerConfig, nil
 }

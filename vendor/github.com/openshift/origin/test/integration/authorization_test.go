@@ -10,12 +10,11 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	kapierror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/genericclioptions/printers"
 	"k8s.io/client-go/discovery"
 	rbacv1client "k8s.io/client-go/kubernetes/typed/rbac/v1"
 	"k8s.io/client-go/rest"
@@ -39,11 +38,10 @@ import (
 	"github.com/openshift/origin/pkg/api/legacy"
 	authorizationapi "github.com/openshift/origin/pkg/authorization/apis/authorization"
 	authorizationclient "github.com/openshift/origin/pkg/authorization/generated/internalclientset"
-	authorizationclientscheme "github.com/openshift/origin/pkg/authorization/generated/internalclientset/scheme"
 	authorizationtypedclient "github.com/openshift/origin/pkg/authorization/generated/internalclientset/typed/authorization/internalversion"
 	buildapi "github.com/openshift/origin/pkg/build/apis/build"
 	"github.com/openshift/origin/pkg/cmd/server/bootstrappolicy"
-	policy "github.com/openshift/origin/pkg/oc/cli/admin/policy"
+	"github.com/openshift/origin/pkg/oc/cli/admin/policy"
 	projectclient "github.com/openshift/origin/pkg/project/generated/internalclientset"
 	testutil "github.com/openshift/origin/test/util"
 	testserver "github.com/openshift/origin/test/util/server"
@@ -294,6 +292,8 @@ func TestAuthorizationResolution(t *testing.T) {
 		RoleKind:   "ClusterRole",
 		RbacClient: clusterAdminAuthorizationClient,
 		Users:      []string{"valerie"},
+		PrintFlags: genericclioptions.NewPrintFlags(""),
+		ToPrinter:  func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addValerie.AddRole(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -308,6 +308,8 @@ func TestAuthorizationResolution(t *testing.T) {
 		RoleKind:   "ClusterRole",
 		RbacClient: clusterAdminAuthorizationClient,
 		Users:      []string{"edgar"},
+		PrintFlags: genericclioptions.NewPrintFlags(""),
+		ToPrinter:  func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addEdgar.AddRole(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -333,6 +335,8 @@ func TestAuthorizationResolution(t *testing.T) {
 		RoleKind:   "ClusterRole",
 		RbacClient: clusterAdminAuthorizationClient,
 		Users:      []string{"build-lister"},
+		PrintFlags: genericclioptions.NewPrintFlags(""),
+		ToPrinter:  func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addBuildLister.AddRole(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -534,6 +538,8 @@ func TestAuthorizationResourceAccessReview(t *testing.T) {
 		RoleKind:             "ClusterRole",
 		RbacClient:           rbacv1client.NewForConfigOrDie(haroldConfig),
 		Users:                []string{"valerie"},
+		PrintFlags:           genericclioptions.NewPrintFlags(""),
+		ToPrinter:            func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addValerie.AddRole(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -545,6 +551,8 @@ func TestAuthorizationResourceAccessReview(t *testing.T) {
 		RoleKind:             "ClusterRole",
 		RbacClient:           rbacv1client.NewForConfigOrDie(markConfig),
 		Users:                []string{"edgar"},
+		PrintFlags:           genericclioptions.NewPrintFlags(""),
+		ToPrinter:            func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addEdgar.AddRole(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -890,7 +898,7 @@ func TestAuthorizationSubjectAccessReviewAPIGroup(t *testing.T) {
 		kubeAuthInterface: clusterAdminSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "hammer-project",
 		},
 	}.run(t)
@@ -904,7 +912,7 @@ func TestAuthorizationSubjectAccessReviewAPIGroup(t *testing.T) {
 		kubeAuthInterface: clusterAdminKubeClient.Authorization(),
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "hammer-project",
 		},
 	}.run(t)
@@ -918,7 +926,7 @@ func TestAuthorizationSubjectAccessReviewAPIGroup(t *testing.T) {
 		kubeAuthInterface: clusterAdminSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "hammer-project",
 		},
 	}.run(t)
@@ -1040,6 +1048,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		RoleKind:             "ClusterRole",
 		RbacClient:           rbacv1client.NewForConfigOrDie(clusterAdminClientConfig),
 		Users:                []string{"system:anonymous"},
+		PrintFlags:           genericclioptions.NewPrintFlags(""),
+		ToPrinter:            func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addAnonymous.AddRole(); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1051,6 +1061,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		RoleKind:             "ClusterRole",
 		RbacClient:           rbacv1client.NewForConfigOrDie(clusterAdminClientConfig),
 		Users:                []string{"danny"},
+		PrintFlags:           genericclioptions.NewPrintFlags(""),
+		ToPrinter:            func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addDanny.AddRole(); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1080,7 +1092,7 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		kubeAuthInterface: clusterAdminLocalSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "",
 		},
 	}.run(t)
@@ -1089,16 +1101,16 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		clusterInterface:  dannyAuthorizationClient.SubjectAccessReviews(),
 		clusterReview:     askCanDannyGetProject,
 		kubeAuthInterface: dannySARGetter,
-		err:               `subjectaccessreviews.authorization.openshift.io is forbidden: User "danny" cannot create subjectaccessreviews.authorization.openshift.io at the cluster scope`,
-		kubeErr:           `subjectaccessreviews.authorization.k8s.io is forbidden: User "danny" cannot create subjectaccessreviews.authorization.k8s.io at the cluster scope`,
+		err:               `subjectaccessreviews.authorization.openshift.io is forbidden: User "danny" cannot create resource "subjectaccessreviews" in API group "authorization.openshift.io" at the cluster scope`,
+		kubeErr:           `subjectaccessreviews.authorization.k8s.io is forbidden: User "danny" cannot create resource "subjectaccessreviews" in API group "authorization.k8s.io" at the cluster scope`,
 	}.run(t)
 	subjectAccessReviewTest{
 		description:       "as anonymous, can I make cluster subject access reviews",
 		clusterInterface:  anonymousAuthorizationClient.SubjectAccessReviews(),
 		clusterReview:     askCanDannyGetProject,
 		kubeAuthInterface: anonymousSARGetter,
-		err:               `subjectaccessreviews.authorization.openshift.io is forbidden: User "system:anonymous" cannot create subjectaccessreviews.authorization.openshift.io at the cluster scope`,
-		kubeErr:           `subjectaccessreviews.authorization.k8s.io is forbidden: User "system:anonymous" cannot create subjectaccessreviews.authorization.k8s.io at the cluster scope`,
+		err:               `subjectaccessreviews.authorization.openshift.io is forbidden: User "system:anonymous" cannot create resource "subjectaccessreviews" in API group "authorization.openshift.io" at the cluster scope`,
+		kubeErr:           `subjectaccessreviews.authorization.k8s.io is forbidden: User "system:anonymous" cannot create resource "subjectaccessreviews" in API group "authorization.k8s.io" at the cluster scope`,
 	}.run(t)
 
 	addValerie := &policy.RoleModificationOptions{
@@ -1107,6 +1119,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		RoleKind:             "ClusterRole",
 		RbacClient:           rbacv1client.NewForConfigOrDie(haroldConfig),
 		Users:                []string{"valerie"},
+		PrintFlags:           genericclioptions.NewPrintFlags(""),
+		ToPrinter:            func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addValerie.AddRole(); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -1118,6 +1132,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		RoleKind:             "ClusterRole",
 		RbacClient:           rbacv1client.NewForConfigOrDie(markConfig),
 		Users:                []string{"edgar"},
+		PrintFlags:           genericclioptions.NewPrintFlags(""),
+		ToPrinter:            func(string) (printers.ResourcePrinter, error) { return printers.NewDiscardingPrinter(), nil },
 	}
 	if err := addEdgar.AddRole(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1145,7 +1161,7 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		kubeAuthInterface: markSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "mallet-project",
 		},
 	}.run(t)
@@ -1172,8 +1188,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		localReview:       askCanEdgarDeletePods,
 		kubeAuthInterface: haroldSARGetter,
 		kubeNamespace:     "mallet-project",
-		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "harold" cannot create localsubjectaccessreviews.authorization.openshift.io in the namespace "mallet-project"`,
-		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "harold" cannot create localsubjectaccessreviews.authorization.k8s.io in the namespace "mallet-project"`,
+		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "harold" cannot create resource "localsubjectaccessreviews" in API group "authorization.openshift.io" in the namespace "mallet-project"`,
+		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "harold" cannot create resource "localsubjectaccessreviews" in API group "authorization.k8s.io" in the namespace "mallet-project"`,
 	}.run(t)
 	subjectAccessReviewTest{
 		description:       "system:anonymous denied ability to run subject access review in project mallet-project",
@@ -1181,8 +1197,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		localReview:       askCanEdgarDeletePods,
 		kubeAuthInterface: anonymousSARGetter,
 		kubeNamespace:     "mallet-project",
-		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "system:anonymous" cannot create localsubjectaccessreviews.authorization.openshift.io in the namespace "mallet-project"`,
-		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "system:anonymous" cannot create localsubjectaccessreviews.authorization.k8s.io in the namespace "mallet-project"`,
+		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "system:anonymous" cannot create resource "localsubjectaccessreviews" in API group "authorization.openshift.io" in the namespace "mallet-project"`,
+		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "system:anonymous" cannot create resource "localsubjectaccessreviews" in API group "authorization.k8s.io" in the namespace "mallet-project"`,
 	}.run(t)
 	// ensure message does not leak whether the namespace exists or not
 	subjectAccessReviewTest{
@@ -1191,8 +1207,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		localReview:       askCanEdgarDeletePods,
 		kubeAuthInterface: haroldSARGetter,
 		kubeNamespace:     "nonexistent-project",
-		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "harold" cannot create localsubjectaccessreviews.authorization.openshift.io in the namespace "nonexistent-project"`,
-		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "harold" cannot create localsubjectaccessreviews.authorization.k8s.io in the namespace "nonexistent-project"`,
+		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "harold" cannot create resource "localsubjectaccessreviews" in API group "authorization.openshift.io" in the namespace "nonexistent-project"`,
+		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "harold" cannot create resource "localsubjectaccessreviews" in API group "authorization.k8s.io" in the namespace "nonexistent-project"`,
 	}.run(t)
 	subjectAccessReviewTest{
 		description:       "system:anonymous denied ability to run subject access review in project nonexistent-project",
@@ -1200,8 +1216,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		localReview:       askCanEdgarDeletePods,
 		kubeAuthInterface: anonymousSARGetter,
 		kubeNamespace:     "nonexistent-project",
-		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "system:anonymous" cannot create localsubjectaccessreviews.authorization.openshift.io in the namespace "nonexistent-project"`,
-		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "system:anonymous" cannot create localsubjectaccessreviews.authorization.k8s.io in the namespace "nonexistent-project"`,
+		err:               `localsubjectaccessreviews.authorization.openshift.io is forbidden: User "system:anonymous" cannot create resource "localsubjectaccessreviews" in API group "authorization.openshift.io" in the namespace "nonexistent-project"`,
+		kubeErr:           `localsubjectaccessreviews.authorization.k8s.io is forbidden: User "system:anonymous" cannot create resource "localsubjectaccessreviews" in API group "authorization.k8s.io" in the namespace "nonexistent-project"`,
 	}.run(t)
 
 	askCanHaroldUpdateProject := &authorizationapi.LocalSubjectAccessReview{
@@ -1240,8 +1256,8 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		clusterInterface:  haroldAuthorizationClient.SubjectAccessReviews(),
 		clusterReview:     askCanClusterAdminsCreateProject,
 		kubeAuthInterface: haroldSARGetter,
-		err:               `subjectaccessreviews.authorization.openshift.io is forbidden: User "harold" cannot create subjectaccessreviews.authorization.openshift.io at the cluster scope`,
-		kubeErr:           `subjectaccessreviews.authorization.k8s.io is forbidden: User "harold" cannot create subjectaccessreviews.authorization.k8s.io at the cluster scope`,
+		err:               `subjectaccessreviews.authorization.openshift.io is forbidden: User "harold" cannot create resource "subjectaccessreviews" in API group "authorization.openshift.io" at the cluster scope`,
+		kubeErr:           `subjectaccessreviews.authorization.k8s.io is forbidden: User "harold" cannot create resource "subjectaccessreviews" in API group "authorization.k8s.io" at the cluster scope`,
 	}.run(t)
 
 	askCanICreatePods := &authorizationapi.LocalSubjectAccessReview{
@@ -1278,7 +1294,7 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		kubeAuthInterface: haroldSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "mallet-project",
 		},
 	}.run(t)
@@ -1289,7 +1305,7 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		kubeAuthInterface: anonymousSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "mallet-project",
 		},
 	}.run(t)
@@ -1303,7 +1319,7 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		kubeAuthInterface: haroldSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "nonexistent-project",
 		},
 	}.run(t)
@@ -1314,7 +1330,7 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		kubeAuthInterface: anonymousSARGetter,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "nonexistent-project",
 		},
 	}.run(t)
@@ -1329,7 +1345,7 @@ func TestAuthorizationSubjectAccessReview(t *testing.T) {
 		localReview:       askCanICreatePolicyBindings,
 		response: authorizationapi.SubjectAccessReviewResponse{
 			Allowed:   false,
-			Reason:    `no RBAC policy matched`,
+			Reason:    "",
 			Namespace: "hammer-project",
 		},
 	}.run(t)
@@ -1369,8 +1385,8 @@ func TestBrowserSafeAuthorizer(t *testing.T) {
 		if errProxy == nil {
 			return false
 		}
-		return strings.Contains(errProxy.Error(), `cannot proxy pods in the namespace "ns": proxy verb changed to unsafeproxy`) ||
-			strings.Contains(errProxy.Error(), `cannot get pods/proxy in the namespace "ns": proxy subresource changed to unsafeproxy`)
+		return strings.Contains(errProxy.Error(), `cannot proxy resource "pods" in API group "" in the namespace "ns": proxy verb changed to unsafeproxy`) ||
+			strings.Contains(errProxy.Error(), `cannot get resource "pods/proxy" in API group "" in the namespace "ns": proxy subresource changed to unsafeproxy`)
 	}
 
 	for _, tc := range []struct {
@@ -1414,618 +1430,5 @@ func TestBrowserSafeAuthorizer(t *testing.T) {
 			t.Errorf("%s: expected forbidden error on GET %s, got %#v (isForbidden=%v, expectUnsafe=%v, actualUnsafe=%v)",
 				tc.name, tc.path, errProxy, kapierror.IsForbidden(errProxy), tc.expectUnsafe, isUnsafeErr(errProxy))
 		}
-	}
-}
-
-// TestLegacyLocalRoleBindingEndpoint exercises the legacy rolebinding endpoint that is proxied to rbac
-func TestLegacyLocalRoleBindingEndpoint(t *testing.T) {
-	masterConfig, clusterAdminKubeConfig, err := testserver.StartTestMasterAPI()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer testserver.CleanupMasterEtcd(t, masterConfig)
-
-	clusterAdminClientConfig, err := testutil.GetClusterAdminClientConfig(clusterAdminKubeConfig)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	clusterAdmin := authorizationclient.NewForConfigOrDie(clusterAdminClientConfig)
-
-	namespace := "testproject"
-	_, _, err = testserver.CreateNewProject(clusterAdminClientConfig, namespace, "testuser")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	roleBindingsPath := "/oapi/v1/namespaces/" + namespace + "/rolebindings"
-	testBindingName := "testrole"
-
-	// install the legacy types into the client for decoding
-	legacy.InstallInternalLegacyAuthorization(authorizationclientscheme.Scheme)
-
-	// create rolebinding
-	roleBindingToCreate := &authorizationapi.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testBindingName,
-		},
-		Subjects: []kapi.ObjectReference{
-			{
-				Kind: authorizationapi.UserKind,
-				Name: "testuser",
-			},
-		},
-		RoleRef: kapi.ObjectReference{
-			Kind:      "Role",
-			Name:      "edit",
-			Namespace: namespace,
-		},
-	}
-	roleBindingToCreateBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), roleBindingToCreate)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	roleBindingCreated := &authorizationapi.RoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Post().AbsPath(roleBindingsPath).Body(roleBindingToCreateBytes).Do().Into(roleBindingCreated)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if roleBindingCreated.Name != roleBindingToCreate.Name {
-		t.Errorf("expected rolebinding %s, got %s", roleBindingToCreate.Name, roleBindingCreated.Name)
-	}
-
-	// list rolebindings
-	roleBindingList := &authorizationapi.RoleBindingList{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(roleBindingsPath).Do().Into(roleBindingList)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	checkBindings := sets.String{}
-	for _, rb := range roleBindingList.Items {
-		checkBindings.Insert(rb.Name)
-	}
-
-	// check for the created rolebinding in the list
-	if !checkBindings.HasAll(testBindingName) {
-		t.Errorf("rolebinding list does not have the expected bindings")
-	}
-
-	// edit rolebinding
-	roleBindingToEdit := &authorizationapi.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testBindingName,
-		},
-		Subjects: []kapi.ObjectReference{
-			{
-				Kind: authorizationapi.UserKind,
-				Name: "testuser",
-			},
-			{
-				Kind: authorizationapi.UserKind,
-				Name: "testuser2",
-			},
-		},
-		RoleRef: kapi.ObjectReference{
-			Kind:      "Role",
-			Name:      "edit",
-			Namespace: namespace,
-		},
-	}
-	roleBindingToEditBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), roleBindingToEdit)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	roleBindingEdited := &authorizationapi.RoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Patch(types.StrategicMergePatchType).AbsPath(roleBindingsPath).Name(roleBindingToEdit.Name).Body(roleBindingToEditBytes).Do().Into(roleBindingEdited)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if roleBindingEdited.Name != roleBindingToEdit.Name {
-		t.Errorf("expected rolebinding %s, got %s", roleBindingToEdit.Name, roleBindingEdited.Name)
-	}
-
-	checkSubjects := sets.String{}
-	for _, subj := range roleBindingEdited.Subjects {
-		checkSubjects.Insert(subj.Name)
-	}
-	if !checkSubjects.HasAll("testuser", "testuser2") {
-		t.Errorf("rolebinding not edited")
-	}
-
-	// get rolebinding by name
-	getRoleBinding := &authorizationapi.RoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(roleBindingsPath).Name(testBindingName).Do().Into(getRoleBinding)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if getRoleBinding.Name != testBindingName {
-		t.Errorf("expected rolebinding %s, got %s", testBindingName, getRoleBinding.Name)
-	}
-
-	// delete rolebinding
-	err = clusterAdmin.Authorization().RESTClient().Delete().AbsPath(roleBindingsPath).Name(testBindingName).Do().Error()
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	// confirm deletion
-	getRoleBinding = &authorizationapi.RoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(roleBindingsPath).Name(testBindingName).Do().Into(getRoleBinding)
-	if err == nil {
-		t.Errorf("expected error")
-	} else if !kapierror.IsNotFound(err) {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	// create local rolebinding for cluster role
-	localClusterRoleBindingToCreate := &authorizationapi.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-crb",
-			Namespace: namespace,
-		},
-		Subjects: []kapi.ObjectReference{
-			{
-				Kind: authorizationapi.UserKind,
-				Name: "testuser",
-			},
-		},
-		RoleRef: kapi.ObjectReference{
-			Kind: "ClusterRole",
-			Name: "edit",
-		},
-	}
-	localClusterRoleBindingToCreateBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), localClusterRoleBindingToCreate)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	localClusterRoleBindingCreated := &authorizationapi.RoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Post().AbsPath(roleBindingsPath).Body(localClusterRoleBindingToCreateBytes).Do().Into(localClusterRoleBindingCreated)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if localClusterRoleBindingCreated.Name != localClusterRoleBindingToCreate.Name {
-		t.Errorf("expected clusterrolebinding %s, got %s", localClusterRoleBindingToCreate.Name, localClusterRoleBindingCreated.Name)
-	}
-
-}
-
-// TestLegacyClusterRoleBindingEndpoint exercises the legacy clusterrolebinding endpoint that is proxied to rbac
-func TestLegacyClusterRoleBindingEndpoint(t *testing.T) {
-	masterConfig, clusterAdminKubeConfig, err := testserver.StartTestMasterAPI()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer testserver.CleanupMasterEtcd(t, masterConfig)
-
-	clusterAdminClientConfig, err := testutil.GetClusterAdminClientConfig(clusterAdminKubeConfig)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	clusterAdmin := authorizationclient.NewForConfigOrDie(clusterAdminClientConfig)
-
-	// install the legacy types into the client for decoding
-	legacy.InstallInternalLegacyAuthorization(authorizationclientscheme.Scheme)
-
-	clusterRoleBindingsPath := "/oapi/v1/clusterrolebindings"
-	testBindingName := "testbinding"
-
-	// list clusterrole bindings
-	clusterRoleBindingList := &authorizationapi.ClusterRoleBindingList{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(clusterRoleBindingsPath).Do().Into(clusterRoleBindingList)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	checkBindings := sets.String{}
-	for _, rb := range clusterRoleBindingList.Items {
-		checkBindings.Insert(rb.Name)
-	}
-
-	// ensure there are at least some of the expected bindings in the list
-	if !checkBindings.HasAll("basic-users", "cluster-admin", "cluster-admins", "cluster-readers") {
-		t.Errorf("clusterrolebinding list does not have the expected bindings")
-	}
-
-	// create clusterrole binding
-	clusterRoleBindingToCreate := &authorizationapi.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testBindingName,
-		},
-		Subjects: []kapi.ObjectReference{
-			{
-				Kind: authorizationapi.UserKind,
-				Name: "testuser",
-			},
-		},
-		RoleRef: kapi.ObjectReference{
-			Kind: "ClusterRole",
-			Name: "edit",
-		},
-	}
-	clusterRoleBindingToCreateBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), clusterRoleBindingToCreate)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	clusterRoleBindingCreated := &authorizationapi.ClusterRoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Post().AbsPath(clusterRoleBindingsPath).Body(clusterRoleBindingToCreateBytes).Do().Into(clusterRoleBindingCreated)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if clusterRoleBindingCreated.Name != clusterRoleBindingToCreate.Name {
-		t.Errorf("expected clusterrolebinding %s, got %s", clusterRoleBindingToCreate.Name, clusterRoleBindingCreated.Name)
-	}
-
-	// edit clusterrole binding
-	clusterRoleBindingToEdit := &authorizationapi.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testBindingName,
-		},
-		Subjects: []kapi.ObjectReference{
-			{
-				Kind: authorizationapi.UserKind,
-				Name: "testuser",
-			},
-			{
-				Kind: authorizationapi.UserKind,
-				Name: "testuser2",
-			},
-		},
-		RoleRef: kapi.ObjectReference{
-			Kind: "ClusterRole",
-			Name: "edit",
-		},
-	}
-	clusterRoleBindingToEditBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), clusterRoleBindingToEdit)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	clusterRoleBindingEdited := &authorizationapi.ClusterRoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Patch(types.StrategicMergePatchType).AbsPath(clusterRoleBindingsPath).Name(clusterRoleBindingToEdit.Name).Body(clusterRoleBindingToEditBytes).Do().Into(clusterRoleBindingEdited)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if clusterRoleBindingEdited.Name != clusterRoleBindingToEdit.Name {
-		t.Errorf("expected clusterrolebinding %s, got %s", clusterRoleBindingToEdit.Name, clusterRoleBindingEdited.Name)
-	}
-
-	checkSubjects := sets.String{}
-	for _, subj := range clusterRoleBindingEdited.Subjects {
-		checkSubjects.Insert(subj.Name)
-	}
-	if !checkSubjects.HasAll("testuser", "testuser2") {
-		t.Errorf("clusterrolebinding not edited")
-	}
-
-	// get clusterrolebinding by name
-	getRoleBinding := &authorizationapi.ClusterRoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(clusterRoleBindingsPath).Name(testBindingName).Do().Into(getRoleBinding)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if getRoleBinding.Name != testBindingName {
-		t.Errorf("expected clusterrolebinding %s, got %s", testBindingName, getRoleBinding.Name)
-	}
-
-	// delete clusterrolebinding
-	err = clusterAdmin.Authorization().RESTClient().Delete().AbsPath(clusterRoleBindingsPath).Name(testBindingName).Do().Error()
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	// confirm deletion
-	getRoleBinding = &authorizationapi.ClusterRoleBinding{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(clusterRoleBindingsPath).Name(testBindingName).Do().Into(getRoleBinding)
-	if err == nil {
-		t.Errorf("expected error")
-	} else if !kapierror.IsNotFound(err) {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-// TestLegacyClusterRoleEndpoint exercises the legacy clusterrole endpoint that is proxied to rbac
-func TestLegacyClusterRoleEndpoint(t *testing.T) {
-	masterConfig, clusterAdminKubeConfig, err := testserver.StartTestMasterAPI()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer testserver.CleanupMasterEtcd(t, masterConfig)
-
-	clusterAdminClientConfig, err := testutil.GetClusterAdminClientConfig(clusterAdminKubeConfig)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	clusterAdmin := authorizationclient.NewForConfigOrDie(clusterAdminClientConfig)
-
-	// install the legacy types into the client for decoding
-	legacy.InstallInternalLegacyAuthorization(authorizationclientscheme.Scheme)
-
-	clusterRolesPath := "/oapi/v1/clusterroles"
-	testRole := "testrole"
-
-	// list clusterroles
-	clusterRoleList := &authorizationapi.ClusterRoleList{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(clusterRolesPath).Do().Into(clusterRoleList)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	checkRoles := sets.String{}
-	for _, role := range clusterRoleList.Items {
-		checkRoles.Insert(role.Name)
-	}
-	// ensure there are at least some of the expected roles in the clusterrole list
-	if !checkRoles.HasAll("admin", "basic-user", "cluster-admin", "edit", "sudoer") {
-		t.Errorf("clusterrole list does not have the expected roles")
-	}
-
-	// create clusterrole
-	clusterRoleToCreate := &authorizationapi.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: testRole},
-		Rules: []authorizationapi.PolicyRule{
-			authorizationapi.NewRule("get").Groups("").Resources("services").RuleOrDie(),
-		},
-	}
-	clusterRoleToCreateBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), clusterRoleToCreate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdClusterRole := &authorizationapi.ClusterRole{}
-	err = clusterAdmin.Authorization().RESTClient().Post().AbsPath(clusterRolesPath).Body(clusterRoleToCreateBytes).Do().Into(createdClusterRole)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if createdClusterRole.Name != clusterRoleToCreate.Name {
-		t.Errorf("expected to create %v, got %v", clusterRoleToCreate.Name, createdClusterRole.Name)
-	}
-
-	if !createdClusterRole.Rules[0].Verbs.Has("get") {
-		t.Errorf("expected clusterrole to have a get rule")
-	}
-
-	// update clusterrole
-	clusterRoleUpdate := &authorizationapi.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: testRole},
-		Rules: []authorizationapi.PolicyRule{
-			authorizationapi.NewRule("get", "list").Groups("").Resources("services").RuleOrDie(),
-		},
-	}
-
-	clusterRoleUpdateBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), clusterRoleUpdate)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	updatedClusterRole := &authorizationapi.ClusterRole{}
-	err = clusterAdmin.Authorization().RESTClient().Patch(types.StrategicMergePatchType).AbsPath(clusterRolesPath).Name(testRole).Body(clusterRoleUpdateBytes).Do().Into(updatedClusterRole)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if updatedClusterRole.Name != clusterRoleUpdate.Name {
-		t.Errorf("expected to update %s, got %s", clusterRoleUpdate.Name, updatedClusterRole.Name)
-	}
-
-	if !updatedClusterRole.Rules[0].Verbs.HasAll("get", "list") {
-		t.Errorf("expected clusterrole to have a get and list rule")
-	}
-
-	// get clusterrole
-	getRole := &authorizationapi.ClusterRole{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(clusterRolesPath).Name(testRole).Do().Into(getRole)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if getRole.Name != testRole {
-		t.Errorf("expected %s role, got %s instead", testRole, getRole.Name)
-	}
-
-	// delete clusterrole
-	err = clusterAdmin.Authorization().RESTClient().Delete().AbsPath(clusterRolesPath).Name(testRole).Do().Error()
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	// confirm deletion
-	getRole = &authorizationapi.ClusterRole{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(clusterRolesPath).Name(testRole).Do().Into(getRole)
-	if err == nil {
-		t.Errorf("expected error")
-	} else if !kapierror.IsNotFound(err) {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-// TestLegacyLocalRoleEndpoint exercises the legacy role endpoint that is proxied to rbac
-func TestLegacyLocalRoleEndpoint(t *testing.T) {
-	masterConfig, clusterAdminKubeConfig, err := testserver.StartTestMasterAPI()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer testserver.CleanupMasterEtcd(t, masterConfig)
-
-	clusterAdminClientConfig, err := testutil.GetClusterAdminClientConfig(clusterAdminKubeConfig)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	clusterAdmin := authorizationclient.NewForConfigOrDie(clusterAdminClientConfig)
-
-	namespace := "testproject"
-	_, _, err = testserver.CreateNewProject(clusterAdminClientConfig, namespace, "testuser")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// install the legacy types into the client for decoding
-	legacy.InstallInternalLegacyAuthorization(authorizationclientscheme.Scheme)
-
-	rolesPath := "/oapi/v1/namespaces/" + namespace + "/roles"
-	testRole := "testrole"
-
-	// create role
-	roleToCreate := &authorizationapi.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      testRole,
-			Namespace: namespace,
-		},
-		Rules: []authorizationapi.PolicyRule{
-			authorizationapi.NewRule("get").Groups("").Resources("services").RuleOrDie(),
-		},
-	}
-	roleToCreateBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), roleToCreate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdRole := &authorizationapi.Role{}
-	err = clusterAdmin.Authorization().RESTClient().Post().AbsPath(rolesPath).Body(roleToCreateBytes).Do().Into(createdRole)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if createdRole.Name != roleToCreate.Name {
-		t.Errorf("expected to create %v, got %v", roleToCreate.Name, createdRole.Name)
-	}
-
-	if !createdRole.Rules[0].Verbs.Has("get") {
-		t.Errorf("expected clusterRole to have a get rule")
-	}
-
-	// list roles
-	roleList := &authorizationapi.RoleList{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(rolesPath).Do().Into(roleList)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	checkRoles := sets.String{}
-	for _, role := range roleList.Items {
-		checkRoles.Insert(role.Name)
-	}
-	// ensure the role list has the created role
-	if !checkRoles.HasAll(testRole) {
-		t.Errorf("role list does not have the expected roles")
-	}
-
-	// update role
-	roleUpdate := &authorizationapi.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      testRole,
-			Namespace: namespace,
-		},
-		Rules: []authorizationapi.PolicyRule{
-			authorizationapi.NewRule("get", "list").Groups("").Resources("services").RuleOrDie(),
-		},
-	}
-
-	roleUpdateBytes, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Version: "v1"}), roleUpdate)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	updatedRole := &authorizationapi.Role{}
-	err = clusterAdmin.Authorization().RESTClient().Patch(types.StrategicMergePatchType).AbsPath(rolesPath).Name(testRole).Body(roleUpdateBytes).Do().Into(updatedRole)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if updatedRole.Name != roleUpdate.Name {
-		t.Errorf("expected to update %s, got %s", roleUpdate.Name, updatedRole.Name)
-	}
-
-	if !updatedRole.Rules[0].Verbs.HasAll("get", "list") {
-		t.Errorf("expected role to have a get and list rule")
-	}
-
-	// get role
-	getRole := &authorizationapi.Role{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(rolesPath).Name(testRole).Do().Into(getRole)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if getRole.Name != testRole {
-		t.Errorf("expected %s role, got %s instead", testRole, getRole.Name)
-	}
-
-	// delete role
-	err = clusterAdmin.Authorization().RESTClient().Delete().AbsPath(rolesPath).Name(testRole).Do().Error()
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	// confirm deletion
-	getRole = &authorizationapi.Role{}
-	err = clusterAdmin.Authorization().RESTClient().Get().AbsPath(rolesPath).Name(testRole).Do().Into(getRole)
-	if err == nil {
-		t.Errorf("expected error")
-	} else if !kapierror.IsNotFound(err) {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestOldLocalAccessReviewEndpoints(t *testing.T) {
-	masterConfig, clusterAdminKubeConfig, err := testserver.StartTestMasterAPI()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer testserver.CleanupMasterEtcd(t, masterConfig)
-
-	clusterAdminClientConfig, err := testutil.GetClusterAdminClientConfig(clusterAdminKubeConfig)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	clusterAdminAuthorizationClient := authorizationclient.NewForConfigOrDie(clusterAdminClientConfig).Authorization()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	namespace := "hammer-project"
-	if _, _, err := testserver.CreateNewProject(clusterAdminClientConfig, namespace, "harold"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// install the legacy types into the client for decoding
-	legacy.InstallInternalLegacyAuthorization(authorizationclientscheme.Scheme)
-	codecFactory := serializer.NewCodecFactory(authorizationclientscheme.Scheme)
-
-	sar := &authorizationapi.SubjectAccessReview{
-		Action: authorizationapi.Action{
-			Verb:     "get",
-			Resource: "imagestreams/layers",
-		},
-	}
-	sarBytes, err := runtime.Encode(codecFactory.LegacyCodec(schema.GroupVersion{Version: "v1"}), sar)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = clusterAdminAuthorizationClient.RESTClient().Post().AbsPath("/oapi/v1/namespaces/" + namespace + "/subjectaccessreviews").Body(sarBytes).Do().Into(&authorizationapi.SubjectAccessReviewResponse{})
-	if !kapierror.IsNotFound(err) {
-		t.Fatal(err)
-	}
-
-	rar := &authorizationapi.ResourceAccessReview{
-		Action: authorizationapi.Action{
-			Verb:     "get",
-			Resource: "imagestreams/layers",
-		},
-	}
-	rarBytes, err := runtime.Encode(codecFactory.LegacyCodec(schema.GroupVersion{Version: "v1"}), rar)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = clusterAdminAuthorizationClient.RESTClient().Post().AbsPath("/oapi/v1/namespaces/" + namespace + "/resourceaccessreviews").Body(rarBytes).Do().Into(&authorizationapi.ResourceAccessReviewResponse{})
-	if !kapierror.IsNotFound(err) {
-		t.Fatal(err)
 	}
 }

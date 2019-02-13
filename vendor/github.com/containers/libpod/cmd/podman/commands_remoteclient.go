@@ -2,20 +2,59 @@
 
 package main
 
-import "github.com/urfave/cli"
+import (
+	"github.com/spf13/cobra"
+)
 
-func getAppCommands() []cli.Command {
-	return []cli.Command{}
+// commands that only the remoteclient implements
+func getMainCommands() []*cobra.Command {
+	return []*cobra.Command{}
 }
 
-func getImageSubCommands() []cli.Command {
-	return []cli.Command{}
+// commands that only the remoteclient implements
+func getAppCommands() []*cobra.Command {
+	return []*cobra.Command{}
 }
 
-func getContainerSubCommands() []cli.Command {
-	return []cli.Command{}
+// commands that only the remoteclient implements
+func getImageSubCommands() []*cobra.Command {
+	return []*cobra.Command{}
 }
 
-func getMainAppFlags() []cli.Flag {
-	return []cli.Flag{}
+// commands that only the remoteclient implements
+func getContainerSubCommands() []*cobra.Command {
+	return []*cobra.Command{}
+}
+
+// commands that only the remoteclient implements
+func getPodSubCommands() []*cobra.Command {
+	return []*cobra.Command{}
+}
+
+// commands that only the remoteclient implements
+func getVolumeSubCommands() []*cobra.Command {
+	return []*cobra.Command{
+		_volumeCreateCommand,
+		_volumeRmCommand,
+	}
+}
+
+// commands that only the remoteclient implements
+func getGenerateSubCommands() []*cobra.Command {
+	return []*cobra.Command{}
+}
+
+// commands that only the remoteclient implements
+func getPlaySubCommands() []*cobra.Command {
+	return []*cobra.Command{}
+}
+
+// commands that only the remoteclient implements
+func getTrustSubCommands() []*cobra.Command {
+	return []*cobra.Command{}
+}
+
+// commands that only the remoteclient implements
+func getSystemSubCommands() []*cobra.Command {
+	return []*cobra.Command{}
 }

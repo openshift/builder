@@ -40,6 +40,9 @@
 // test/extended/testdata/builds/build-timing/test-docker-build.json
 // test/extended/testdata/builds/build-timing/test-is.json
 // test/extended/testdata/builds/build-timing/test-s2i-build.json
+// test/extended/testdata/builds/cluster-config/registry-blacklist.yaml
+// test/extended/testdata/builds/cluster-config/registry-whitelist.yaml
+// test/extended/testdata/builds/cluster-config.yaml
 // test/extended/testdata/builds/gradle-pipeline.yaml
 // test/extended/testdata/builds/incremental-auth-build.json
 // test/extended/testdata/builds/s2i-environment-build-app/.s2i/environment
@@ -244,7 +247,6 @@
 // examples/sample-app/application-template-stibuild.json
 // examples/sample-app/cleanup.sh
 // examples/sample-app/github-webhook-example.json
-// examples/sample-app/pullimages.sh
 // examples/quickstarts/cakephp-mysql-persistent.json
 // examples/quickstarts/cakephp-mysql.json
 // examples/quickstarts/dancer-mysql-persistent.json
@@ -1787,6 +1789,81 @@ func testExtendedTestdataBuildsBuildTimingTestS2iBuildJson() (*asset, error) {
 	return a, nil
 }
 
+var _testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml = []byte(`kind: Build
+apiVersion: config.openshift.io/v1
+metadata:
+  name: cluster
+spec:
+  buildDefaults:
+    registriesConfig:
+      blockedRegistries:
+      - docker.io
+      - quay.io
+`)
+
+func testExtendedTestdataBuildsClusterConfigRegistryBlacklistYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml, nil
+}
+
+func testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataBuildsClusterConfigRegistryBlacklistYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/builds/cluster-config/registry-blacklist.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml = []byte(`kind: Build
+apiVersion: config.openshift.io/v1
+metadata:
+  name: cluster
+spec:
+  buildDefaults:
+    registriesConfig:
+      allowedRegistries:
+      - quay.io
+`)
+
+func testExtendedTestdataBuildsClusterConfigRegistryWhitelistYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml, nil
+}
+
+func testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataBuildsClusterConfigRegistryWhitelistYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/builds/cluster-config/registry-whitelist.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _testExtendedTestdataBuildsClusterConfigYaml = []byte(`kind: Build
+apiVersion: config.openshift.io/v1
+metadata:
+  name: cluster
+spec: {}
+`)
+
+func testExtendedTestdataBuildsClusterConfigYamlBytes() ([]byte, error) {
+	return _testExtendedTestdataBuildsClusterConfigYaml, nil
+}
+
+func testExtendedTestdataBuildsClusterConfigYaml() (*asset, error) {
+	bytes, err := testExtendedTestdataBuildsClusterConfigYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "test/extended/testdata/builds/cluster-config.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _testExtendedTestdataBuildsGradlePipelineYaml = []byte(`kind: BuildConfig
 apiVersion: v1
 metadata:
@@ -2221,7 +2298,7 @@ metadata:
 spec:
   resources:
     limits:
-      memory: 10Mi
+      memory: 50Mi
   source:
     git:
       uri: "https://github.com/openshift/ruby-hello-world"
@@ -2231,6 +2308,7 @@ spec:
       from:
         kind: DockerImage
         name: centos/ruby-23-centos7:latest
+      forcePull: true
 `)
 
 func testExtendedTestdataBuildsStatusfailOomkilledYamlBytes() ([]byte, error) {
@@ -21533,29 +21611,6 @@ func examplesSampleAppGithubWebhookExampleJson() (*asset, error) {
 	return a, nil
 }
 
-var _examplesSampleAppPullimagesSh = []byte(`#!/bin/sh
-docker pull openshift/origin-docker-registry
-#docker pull openshift/origin-docker-builder
-docker pull openshift/origin-sti-builder
-docker pull openshift/origin-deployer
-docker pull openshift/origin-pod
-`)
-
-func examplesSampleAppPullimagesShBytes() ([]byte, error) {
-	return _examplesSampleAppPullimagesSh, nil
-}
-
-func examplesSampleAppPullimagesSh() (*asset, error) {
-	bytes, err := examplesSampleAppPullimagesShBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "examples/sample-app/pullimages.sh", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
 var _examplesQuickstartsCakephpMysqlPersistentJson = []byte(`{
     "apiVersion": "v1",
     "kind": "Template",
@@ -32773,6 +32828,9 @@ var _bindata = map[string]func() (*asset, error){
 	"test/extended/testdata/builds/build-timing/test-docker-build.json": testExtendedTestdataBuildsBuildTimingTestDockerBuildJson,
 	"test/extended/testdata/builds/build-timing/test-is.json": testExtendedTestdataBuildsBuildTimingTestIsJson,
 	"test/extended/testdata/builds/build-timing/test-s2i-build.json": testExtendedTestdataBuildsBuildTimingTestS2iBuildJson,
+	"test/extended/testdata/builds/cluster-config/registry-blacklist.yaml": testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml,
+	"test/extended/testdata/builds/cluster-config/registry-whitelist.yaml": testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml,
+	"test/extended/testdata/builds/cluster-config.yaml": testExtendedTestdataBuildsClusterConfigYaml,
 	"test/extended/testdata/builds/gradle-pipeline.yaml": testExtendedTestdataBuildsGradlePipelineYaml,
 	"test/extended/testdata/builds/incremental-auth-build.json": testExtendedTestdataBuildsIncrementalAuthBuildJson,
 	"test/extended/testdata/builds/s2i-environment-build-app/.s2i/environment": testExtendedTestdataBuildsS2iEnvironmentBuildAppS2iEnvironment,
@@ -32977,7 +33035,6 @@ var _bindata = map[string]func() (*asset, error){
 	"examples/sample-app/application-template-stibuild.json": examplesSampleAppApplicationTemplateStibuildJson,
 	"examples/sample-app/cleanup.sh": examplesSampleAppCleanupSh,
 	"examples/sample-app/github-webhook-example.json": examplesSampleAppGithubWebhookExampleJson,
-	"examples/sample-app/pullimages.sh": examplesSampleAppPullimagesSh,
 	"examples/quickstarts/cakephp-mysql-persistent.json": examplesQuickstartsCakephpMysqlPersistentJson,
 	"examples/quickstarts/cakephp-mysql.json": examplesQuickstartsCakephpMysqlJson,
 	"examples/quickstarts/dancer-mysql-persistent.json": examplesQuickstartsDancerMysqlPersistentJson,
@@ -33110,7 +33167,6 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			"application-template-stibuild.json": &bintree{examplesSampleAppApplicationTemplateStibuildJson, map[string]*bintree{}},
 			"cleanup.sh": &bintree{examplesSampleAppCleanupSh, map[string]*bintree{}},
 			"github-webhook-example.json": &bintree{examplesSampleAppGithubWebhookExampleJson, map[string]*bintree{}},
-			"pullimages.sh": &bintree{examplesSampleAppPullimagesSh, map[string]*bintree{}},
 		}},
 	}},
 	"install": &bintree{nil, map[string]*bintree{
@@ -33190,6 +33246,11 @@ var _bintree = &bintree{nil, map[string]*bintree{
 						"test-is.json": &bintree{testExtendedTestdataBuildsBuildTimingTestIsJson, map[string]*bintree{}},
 						"test-s2i-build.json": &bintree{testExtendedTestdataBuildsBuildTimingTestS2iBuildJson, map[string]*bintree{}},
 					}},
+					"cluster-config": &bintree{nil, map[string]*bintree{
+						"registry-blacklist.yaml": &bintree{testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml, map[string]*bintree{}},
+						"registry-whitelist.yaml": &bintree{testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml, map[string]*bintree{}},
+					}},
+					"cluster-config.yaml": &bintree{testExtendedTestdataBuildsClusterConfigYaml, map[string]*bintree{}},
 					"gradle-pipeline.yaml": &bintree{testExtendedTestdataBuildsGradlePipelineYaml, map[string]*bintree{}},
 					"incremental-auth-build.json": &bintree{testExtendedTestdataBuildsIncrementalAuthBuildJson, map[string]*bintree{}},
 					"s2i-environment-build-app": &bintree{nil, map[string]*bintree{

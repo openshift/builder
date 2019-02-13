@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/emicklei/go-restful-swagger12"
 	"github.com/golang/glog"
+	"github.com/spf13/pflag"
 
+	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/admission"
 	admissionmetrics "k8s.io/apiserver/pkg/admission/metrics"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -24,9 +25,8 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	"github.com/openshift/library-go/pkg/config/helpers"
-	"github.com/openshift/origin/pkg/admission/namespaceconditions"
-	"github.com/openshift/origin/pkg/api/legacy"
-	originadmission "github.com/openshift/origin/pkg/apiserver/admission"
+	"github.com/openshift/origin/pkg/cmd/configflags"
+	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftadmission"
 	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftapiserver/configprocessing"
 	configlatest "github.com/openshift/origin/pkg/cmd/server/apis/config/latest"
 	"github.com/openshift/origin/pkg/image/apiserver/registryhostname"
@@ -47,10 +47,6 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 
 	openshiftVersion := version.Get()
 
-	backend, policyChecker, err := configprocessing.GetAuditConfig(config.AuditConfig)
-	if err != nil {
-		return nil, err
-	}
 	restOptsGetter, err := NewRESTOptionsGetter(config.APIServerArguments, config.StorageConfig)
 	if err != nil {
 		return nil, err
@@ -96,16 +92,10 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 
 	genericConfig.CorsAllowedOriginList = config.CORSAllowedOrigins
 	genericConfig.Version = &openshiftVersion
-	// we don't use legacy audit anymore
-	genericConfig.LegacyAuditWriter = nil
-	genericConfig.AuditBackend = backend
-	genericConfig.AuditPolicyChecker = policyChecker
 	genericConfig.ExternalAddress = "apiserver.openshift-apiserver.svc"
 	genericConfig.BuildHandlerChainFunc = OpenshiftHandlerChain
-	genericConfig.LegacyAPIGroupPrefixes = configprocessing.LegacyAPIGroupPrefixes
 	genericConfig.RequestInfoResolver = configprocessing.OpenshiftRequestInfoResolver()
 	genericConfig.OpenAPIConfig = configprocessing.DefaultOpenAPIConfig(nil)
-	genericConfig.SwaggerConfig = defaultSwaggerConfig()
 	genericConfig.RESTOptionsGetter = restOptsGetter
 	// previously overwritten.  I don't know why
 	genericConfig.RequestTimeout = time.Duration(60) * time.Second
@@ -121,7 +111,7 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 	if err != nil {
 		return nil, err
 	}
-	if err := servingOptions.ApplyTo(&genericConfig.Config); err != nil {
+	if err := servingOptions.ApplyTo(&genericConfig.Config.SecureServing, &genericConfig.Config.LoopbackClientConfig); err != nil {
 		return nil, err
 	}
 	authenticationOptions := genericapiserveroptions.NewDelegatingAuthenticationOptions()
@@ -144,6 +134,20 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 		return nil, err
 	}
 
+	auditFlags := configflags.AuditFlags(&config.AuditConfig, configflags.ArgsWithPrefix(config.APIServerArguments, "audit-"))
+	auditOpt := genericapiserveroptions.NewAuditOptions()
+	fs := pflag.NewFlagSet("audit", pflag.ContinueOnError)
+	auditOpt.AddFlags(fs)
+	if err := fs.Parse(configflags.ToFlagSlice(auditFlags)); err != nil {
+		return nil, err
+	}
+	if errs := auditOpt.Validate(); len(errs) > 0 {
+		return nil, errors.NewAggregate(errs)
+	}
+	if err := auditOpt.ApplyTo(&genericConfig.Config); err != nil {
+		return nil, err
+	}
+
 	informers, err := NewInformers(kubeInformers, kubeClientConfig, genericConfig.LoopbackClientConfig)
 	if err != nil {
 		return nil, err
@@ -161,19 +165,11 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 	clusterQuotaMappingController := NewClusterQuotaMappingController(informers.kubernetesInformers.Core().V1().Namespaces(), informers.quotaInformers.Quota().InternalVersion().ClusterResourceQuotas())
 	discoveryClient := cacheddiscovery.NewMemCacheClient(kubeClient.Discovery())
 	restMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
-	admissionInitializer, err := originadmission.NewPluginInitializer(config.ImagePolicyConfig.ExternalRegistryHostnames, config.ImagePolicyConfig.InternalRegistryHostname, config.CloudProviderFile, kubeClientConfig, informers, genericConfig.Authorization.Authorizer, projectCache, restMapper, clusterQuotaMappingController)
+	admissionInitializer, err := openshiftadmission.NewPluginInitializer(config.ImagePolicyConfig.ExternalRegistryHostnames, config.ImagePolicyConfig.InternalRegistryHostname, config.CloudProviderFile, kubeClientConfig, informers, genericConfig.Authorization.Authorizer, projectCache, restMapper, clusterQuotaMappingController)
 	if err != nil {
 		return nil, err
 	}
-	namespaceLabelDecorator := namespaceconditions.NamespaceLabelConditions{
-		NamespaceClient: kubeClient.CoreV1(),
-		NamespaceLister: informers.GetKubernetesInformers().Core().V1().Namespaces().Lister(),
-
-		SkipLevelZeroNames: originadmission.SkipRunLevelZeroPlugins,
-		SkipLevelOneNames:  originadmission.SkipRunLevelOnePlugins,
-	}
 	admissionDecorators := admission.Decorators{
-		admission.DecoratorFunc(namespaceLabelDecorator.WithNamespaceLabelConditions),
 		admission.DecoratorFunc(admissionmetrics.WithControllerMetrics),
 	}
 	explicitOn := []string{}
@@ -191,7 +187,7 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 			explicitOff = append(explicitOff, plugin)
 		}
 	}
-	genericConfig.AdmissionControl, err = originadmission.NewAdmissionChains([]string{}, explicitOn, explicitOff, config.AdmissionPluginConfig, admissionInitializer, admissionDecorators)
+	genericConfig.AdmissionControl, err = openshiftadmission.NewAdmissionChains([]string{}, explicitOn, explicitOff, config.AdmissionPluginConfig, admissionInitializer, admissionDecorators)
 	if err != nil {
 		return nil, err
 	}
@@ -258,54 +254,6 @@ func NewOpenshiftAPIConfig(config *openshiftcontrolplanev1.OpenShiftAPIServerCon
 	}
 
 	return ret, ret.ExtraConfig.Validate()
-}
-
-var apiInfo = map[string]swagger.Info{
-	legacy.RESTPrefix + "/" + legacy.GroupVersion.Version: {
-		Title:       "OpenShift v1 REST API",
-		Description: `The OpenShift API exposes operations for managing an enterprise Kubernetes cluster, including security and user management, application deployments, image and source builds, HTTP(s) routing, and project management.`,
-	},
-}
-
-// customizeSwaggerDefinition applies selective patches to the swagger API docs
-// TODO: move most of these upstream or to go-restful
-func customizeSwaggerDefinition(apiList *swagger.ApiDeclarationList) {
-	for path, info := range apiInfo {
-		if dec, ok := apiList.At(path); ok {
-			if len(info.Title) > 0 {
-				dec.Info.Title = info.Title
-			}
-			if len(info.Description) > 0 {
-				dec.Info.Description = info.Description
-			}
-			apiList.Put(path, dec)
-		} else {
-			glog.Warningf("No API exists for predefined swagger description %s", path)
-		}
-	}
-	for _, version := range []string{legacy.RESTPrefix + "/" + legacy.GroupVersion.Version} {
-		apiDeclaration, _ := apiList.At(version)
-		models := &apiDeclaration.Models
-
-		model, _ := models.At("runtime.RawExtension")
-		model.Required = []string{}
-		model.Properties = swagger.ModelPropertyList{}
-		model.Description = "this may be any JSON object with a 'kind' and 'apiVersion' field; and is preserved unmodified by processing"
-		models.Put("runtime.RawExtension", model)
-
-		model, _ = models.At("patch.Object")
-		model.Description = "represents an object patch, which may be any of: JSON patch (RFC 6902), JSON merge patch (RFC 7396), or the Kubernetes strategic merge patch"
-		models.Put("patch.Object", model)
-
-		apiDeclaration.Models = *models
-		apiList.Put(version, apiDeclaration)
-	}
-}
-
-func defaultSwaggerConfig() *swagger.Config {
-	ret := genericapiserver.DefaultSwaggerConfig()
-	ret.PostBuildHandler = customizeSwaggerDefinition
-	return ret
 }
 
 func OpenshiftHandlerChain(apiHandler http.Handler, genericConfig *genericapiserver.Config) http.Handler {

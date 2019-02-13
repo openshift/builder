@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
+	watchtools "k8s.io/client-go/tools/watch"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
 
 	appsv1 "github.com/openshift/api/apps/v1"
@@ -201,11 +202,21 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 			dc, err := createDeploymentConfig(oc, simpleDeploymentFixture)
 			o.Expect(err).NotTo(o.HaveOccurred())
 
+			g.By(fmt.Sprintf("by checking that the deployment config has the correct version"))
+			err = wait.PollImmediate(500*time.Millisecond, time.Minute, func() (bool, error) {
+				dc, _, _, err := deploymentInfo(oc, dc.Name)
+				if err != nil {
+					return false, nil
+				}
+				return dc.Status.LatestVersion == 1, nil
+			})
+			o.Expect(err).NotTo(o.HaveOccurred())
+
 			_, err = oc.Run("set", "env").Args("dc/"+dc.Name, "TRY=ONCE").Output()
 			o.Expect(err).NotTo(o.HaveOccurred())
 
 			g.By(fmt.Sprintf("by checking that the deployment config has the correct version"))
-			err = wait.PollImmediate(500*time.Millisecond, 5*time.Second, func() (bool, error) {
+			err = wait.PollImmediate(500*time.Millisecond, time.Minute, func() (bool, error) {
 				dc, _, _, err := deploymentInfo(oc, dc.Name)
 				if err != nil {
 					return false, nil
@@ -215,7 +226,7 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 			o.Expect(err).NotTo(o.HaveOccurred())
 
 			g.By(fmt.Sprintf("by checking that the second deployment exists"))
-			err = wait.PollImmediate(500*time.Millisecond, 50*time.Second, func() (bool, error) {
+			err = wait.PollImmediate(500*time.Millisecond, time.Minute, func() (bool, error) {
 				_, rcs, _, err := deploymentInfo(oc, dcName)
 				if err != nil {
 					return false, nil
@@ -234,7 +245,7 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 			o.Expect(err).NotTo(o.HaveOccurred())
 
 			g.By(fmt.Sprintf("by checking that the first deployer was deleted and the second deployer exists"))
-			err = wait.PollImmediate(500*time.Millisecond, 10*time.Second, func() (bool, error) {
+			err = wait.PollImmediate(500*time.Millisecond, time.Minute, func() (bool, error) {
 				_, _, pods, err := deploymentInfo(oc, dcName)
 				if err != nil {
 					return false, nil
@@ -455,6 +466,11 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 		})
 
 		g.It("should successfully tag the deployed image", func() {
+			// TODO: either this or create role for imagestreams for deployer is needed
+			out, err := oc.Run("create").Args("imagestream", "sample-stream").Output()
+			e2e.Logf("%s", out)
+			o.Expect(err).NotTo(o.HaveOccurred())
+
 			g.By("creating the deployment config fixture")
 			dc, err := createDeploymentConfig(oc, tagImagesFixture)
 			o.Expect(err).NotTo(o.HaveOccurred())
@@ -661,7 +677,7 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 			out, err := oc.Run("rollout").Args("history", "dc/"+dcName).Output()
 			o.Expect(err).NotTo(o.HaveOccurred())
 			g.By(fmt.Sprintf("checking the history for substrings\n%s", out))
-			o.Expect(out).To(o.ContainSubstring("deploymentconfigs \"deployment-simple\""))
+			o.Expect(out).To(o.ContainSubstring("deploymentconfig.apps.openshift.io/deployment-simple"))
 			o.Expect(out).To(o.ContainSubstring("REVISION	STATUS		CAUSE"))
 			o.Expect(out).To(o.ContainSubstring("1		Complete	config change"))
 			o.Expect(out).To(o.ContainSubstring("2		Complete	config change"))
@@ -1036,7 +1052,9 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 			o.Expect(err).NotTo(o.HaveOccurred())
 
 			g.By("verifying the deployment is created")
-			rcEvent, err := watch.Until(deploymentChangeTimeout, watcher, func(event watch.Event) (bool, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), deploymentChangeTimeout)
+			defer cancel()
+			rcEvent, err := watchtools.UntilWithoutRetry(ctx, watcher, func(event watch.Event) (bool, error) {
 				if event.Type == watch.Added {
 					return true, nil
 				}

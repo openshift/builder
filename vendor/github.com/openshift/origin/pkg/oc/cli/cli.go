@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	kubecmd "k8s.io/kubernetes/pkg/kubectl/cmd"
 	ktemplates "k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
 
 	"github.com/openshift/origin/pkg/cmd/flagtypes"
 	"github.com/openshift/origin/pkg/cmd/infra/deployer"
@@ -27,7 +27,6 @@ import (
 	"github.com/openshift/origin/pkg/oc/cli/buildlogs"
 	"github.com/openshift/origin/pkg/oc/cli/cancelbuild"
 	"github.com/openshift/origin/pkg/oc/cli/debug"
-	configcmd "github.com/openshift/origin/pkg/oc/cli/experimental/config"
 	"github.com/openshift/origin/pkg/oc/cli/experimental/dockergc"
 	"github.com/openshift/origin/pkg/oc/cli/expose"
 	"github.com/openshift/origin/pkg/oc/cli/extract"
@@ -98,7 +97,29 @@ var (
     To see the full list of commands supported, run '%[1]s --help'.`)
 )
 
-func NewCommandCLI(name, fullName string, in io.Reader, out, errout io.Writer) *cobra.Command {
+func NewDefaultOcCommand(name, fullName string, in io.Reader, out, errout io.Writer) *cobra.Command {
+	cmd := NewOcCommand(name, fullName, in, out, errout)
+
+	if len(os.Args) <= 1 {
+		return cmd
+	}
+
+	cmdPathPieces := os.Args[1:]
+	pluginHandler := kubecmd.NewDefaultPluginHandler(kubecmd.ValidPluginFilenamePrefixes)
+
+	// only look for suitable extension executables if
+	// the specified command does not already exist
+	if _, _, err := cmd.Find(cmdPathPieces); err != nil {
+		if err := kubecmd.HandlePluginCommand(pluginHandler, cmdPathPieces); err != nil {
+			fmt.Fprintf(errout, "%v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	return cmd
+}
+
+func NewOcCommand(name, fullName string, in io.Reader, out, errout io.Writer) *cobra.Command {
 	// Main command
 	cmds := &cobra.Command{
 		Use:   name,
@@ -308,7 +329,6 @@ func newExperimentalCommand(name, fullName string, f kcmdutil.Factory, ioStreams
 	experimental.AddCommand(exipfailover.NewCmdIPFailoverConfig(f, fullName, "ipfailover", ioStreams))
 	experimental.AddCommand(dockergc.NewCmdDockerGCConfig(f, fullName, "dockergc", ioStreams))
 	experimental.AddCommand(buildchain.NewCmdBuildChain(name, fullName+" "+buildchain.BuildChainRecommendedCommandName, f, ioStreams))
-	experimental.AddCommand(configcmd.NewCmdConfig(configcmd.ConfigRecommendedName, fullName+" "+configcmd.ConfigRecommendedName, f, ioStreams))
 	experimental.AddCommand(options.NewCmdOptions(ioStreams))
 
 	// these groups also live under `oc adm groups {sync,prune}` and are here only for backwards compatibility
@@ -332,14 +352,14 @@ func CommandFor(basename string) *cobra.Command {
 
 	switch basename {
 	case "kubectl":
-		cmd = kubecmd.NewKubectlCommand(in, out, errout)
+		cmd = kubecmd.NewDefaultKubectlCommand()
 	case "openshift-deploy":
 		cmd = deployer.NewCommandDeployer(basename)
 	case "openshift-recycle":
 		cmd = recycle.NewCommandRecycle(basename, out)
 	default:
 		shimKubectlForOc()
-		cmd = NewCommandCLI("oc", "oc", in, out, errout)
+		cmd = NewDefaultOcCommand("oc", "oc", in, out, errout)
 
 		// treat oc as a kubectl plugin
 		if strings.HasPrefix(basename, "kubectl-") {

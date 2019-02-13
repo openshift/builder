@@ -11,12 +11,14 @@ import (
 
 type ConfigV1Interface interface {
 	RESTClient() rest.Interface
+	APIServersGetter
 	AuthenticationsGetter
 	BuildsGetter
 	ClusterOperatorsGetter
 	ClusterVersionsGetter
 	ConsolesGetter
 	DNSsGetter
+	FeaturesGetter
 	ImagesGetter
 	InfrastructuresGetter
 	IngressesGetter
@@ -24,12 +26,17 @@ type ConfigV1Interface interface {
 	OAuthsGetter
 	ProjectsGetter
 	ProxiesGetter
+	RegistriesGetter
 	SchedulingsGetter
 }
 
 // ConfigV1Client is used to interact with features provided by the config.openshift.io group.
 type ConfigV1Client struct {
 	restClient rest.Interface
+}
+
+func (c *ConfigV1Client) APIServers() APIServerInterface {
+	return newAPIServers(c)
 }
 
 func (c *ConfigV1Client) Authentications() AuthenticationInterface {
@@ -54,6 +61,10 @@ func (c *ConfigV1Client) Consoles() ConsoleInterface {
 
 func (c *ConfigV1Client) DNSs() DNSInterface {
 	return newDNSs(c)
+}
+
+func (c *ConfigV1Client) Features() FeaturesInterface {
+	return newFeatures(c)
 }
 
 func (c *ConfigV1Client) Images() ImageInterface {
@@ -82,6 +93,10 @@ func (c *ConfigV1Client) Projects() ProjectInterface {
 
 func (c *ConfigV1Client) Proxies() ProxyInterface {
 	return newProxies(c)
+}
+
+func (c *ConfigV1Client) Registries() RegistryInterface {
+	return newRegistries(c)
 }
 
 func (c *ConfigV1Client) Schedulings() SchedulingInterface {

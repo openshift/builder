@@ -346,8 +346,6 @@ var _ = g.Describe("[Feature:Builds][Slow] starting a build using CLI", func() {
 					o.Expect(buildLog).To(o.ContainSubstring("bar"))
 				})
 				g.It("Should complete with a warning on non-existent build-arg", func() {
-					// https://github.com/containers/buildah/issues/1080
-					g.Skip("TODO: re-enable once buildah supports this properly")
 					g.By("starting the build with --build-arg flag")
 					br, _ := exutil.StartBuildAndWait(oc, "sample-build-docker-args", "--build-arg=bar=foo")
 					br.AssertSuccess()
@@ -359,7 +357,6 @@ var _ = g.Describe("[Feature:Builds][Slow] starting a build using CLI", func() {
 			})
 
 			g.Describe("Trigger builds with branch refs matching directories on master branch", func() {
-
 				g.It("Should checkout the config branch, not config directory", func() {
 					g.By("calling oc new-app")
 					_, err := oc.Run("new-app").Args("https://github.com/openshift/ruby-hello-world#config").Output()
@@ -469,7 +466,7 @@ var _ = g.Describe("[Feature:Builds][Slow] starting a build using CLI", func() {
 					err = os.Symlink(repo.RepoPath+"/package.json", repo.RepoPath+"/link")
 					o.Expect(err).NotTo(o.HaveOccurred())
 
-					exutil.CheckOpenShiftNamespaceImageStreams(oc)
+					exutil.WaitForOpenShiftNamespaceImageStreams(oc)
 					g.By(fmt.Sprintf("calling oc create -f %q", symlinkFixture))
 					err = oc.Run("create").Args("-f", symlinkFixture).Execute()
 					o.Expect(err).NotTo(o.HaveOccurred())

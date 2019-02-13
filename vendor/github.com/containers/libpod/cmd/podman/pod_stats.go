@@ -2,59 +2,59 @@ package main
 
 import (
 	"fmt"
+	"html/template"
+	"os"
+	"reflect"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"encoding/json"
 	tm "github.com/buger/goterm"
+	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/formats"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"github.com/ulule/deepcopier"
-	"github.com/urfave/cli"
 )
 
 var (
-	podStatsFlags = []cli.Flag{
-		cli.BoolFlag{
-			Name:  "all, a",
-			Usage: "show stats for all pods.  Only running pods are shown by default.",
+	podStatsCommand     cliconfig.PodStatsValues
+	podStatsDescription = "Display a live stream of resource usage statistics for the containers in or more pods"
+	_podStatsCommand    = &cobra.Command{
+		Use:   "stats",
+		Short: "Display percentage of CPU, memory, network I/O, block I/O and PIDs for containers in one or more pods",
+		Long:  podStatsDescription,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			podStatsCommand.InputArgs = args
+			podStatsCommand.GlobalFlags = MainGlobalOpts
+			return podStatsCmd(&podStatsCommand)
 		},
-		cli.BoolFlag{
-			Name:  "no-stream",
-			Usage: "disable streaming stats and only pull the first result, default setting is false",
-		},
-		cli.BoolFlag{
-			Name:  "no-reset",
-			Usage: "disable resetting the screen between intervals",
-		},
-		cli.StringFlag{
-			Name:  "format",
-			Usage: "pretty-print container statistics to JSON or using a Go template",
-		}, LatestPodFlag,
-	}
-	podStatsDescription = "display a live stream of resource usage statistics for the containers in or more pods"
-	podStatsCommand     = cli.Command{
-		Name:                   "stats",
-		Usage:                  "Display percentage of CPU, memory, network I/O, block I/O and PIDs for containers in one or more pods",
-		Description:            podStatsDescription,
-		Flags:                  sortFlags(podStatsFlags),
-		Action:                 podStatsCmd,
-		ArgsUsage:              "[POD_NAME_OR_ID]",
-		UseShortOptionHandling: true,
-		OnUsageError:           usageErrorHandler,
+		Example: "[POD_NAME_OR_ID]",
 	}
 )
 
-func podStatsCmd(c *cli.Context) error {
+func init() {
+	podStatsCommand.Command = _podStatsCommand
+	podStatsCommand.SetUsageTemplate(UsageTemplate())
+	flags := podStatsCommand.Flags()
+	flags.BoolVarP(&podStatsCommand.All, "all", "a", false, "Provide stats for all running pods")
+	flags.StringVar(&podStatsCommand.Format, "format", "", "Pretty-print container statistics to JSON or using a Go template")
+	flags.BoolVarP(&podStatsCommand.Latest, "latest", "l", false, "Provide stats on the latest pod podman is aware of")
+	flags.BoolVar(&podStatsCommand.NoStream, "no-stream", false, "Disable streaming stats and only pull the first result, default setting is false")
+	flags.BoolVar(&podStatsCommand.NoReset, "no-reset", false, "Disable resetting the screen between intervals")
+}
+
+func podStatsCmd(c *cliconfig.PodStatsValues) error {
 	var (
 		podFunc func() ([]*libpod.Pod, error)
 	)
 
-	format := c.String("format")
-	all := c.Bool("all")
-	latest := c.Bool("latest")
+	format := c.Format
+	all := c.All
+	latest := c.Latest
 	ctr := 0
 	if all {
 		ctr += 1
@@ -62,7 +62,7 @@ func podStatsCmd(c *cli.Context) error {
 	if latest {
 		ctr += 1
 	}
-	if len(c.Args()) > 0 {
+	if len(c.InputArgs) > 0 {
 		ctr += 1
 	}
 
@@ -73,19 +73,19 @@ func podStatsCmd(c *cli.Context) error {
 		all = true
 	}
 
-	runtime, err := libpodruntime.GetRuntime(c)
+	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
 	times := -1
-	if c.Bool("no-stream") {
+	if c.NoStream {
 		times = 1
 	}
 
-	if len(c.Args()) > 0 {
-		podFunc = func() ([]*libpod.Pod, error) { return getPodsByList(c.Args(), runtime) }
+	if len(c.InputArgs) > 0 {
+		podFunc = func() ([]*libpod.Pod, error) { return getPodsByList(c.InputArgs, runtime) }
 	} else if latest {
 		podFunc = func() ([]*libpod.Pod, error) {
 			latestPod, err := runtime.GetLatestPod()
@@ -141,6 +141,25 @@ func podStatsCmd(c *cli.Context) error {
 		step = 0
 	}
 
+	headerNames := make(map[string]string)
+	if c.Format != "" {
+		// Make a map of the field names for the headers
+		v := reflect.ValueOf(podStatOut{})
+		t := v.Type()
+		for i := 0; i < t.NumField(); i++ {
+			value := strings.ToUpper(splitCamelCase(t.Field(i).Name))
+			switch value {
+			case "CPU":
+				value = value + " %"
+			case "MEM":
+				value = value + " %"
+			case "MEM USAGE":
+				value = "MEM USAGE / LIMIT"
+			}
+			headerNames[t.Field(i).Name] = value
+		}
+	}
+
 	for i := 0; i < times; i += step {
 		var newStats []*libpod.PodContainerStats
 		for _, p := range pods {
@@ -159,7 +178,7 @@ func podStatsCmd(c *cli.Context) error {
 			newStats = append(newStats, &newPod)
 		}
 		//Output
-		if strings.ToLower(format) != formats.JSONString && !c.Bool("no-reset") {
+		if strings.ToLower(format) != formats.JSONString && !c.NoReset {
 			tm.Clear()
 			tm.MoveCursor(1, 1)
 			tm.Flush()
@@ -168,7 +187,14 @@ func podStatsCmd(c *cli.Context) error {
 			outputJson(newStats)
 
 		} else {
-			outputToStdOut(newStats)
+			results := podContainerStatsToPodStatOut(newStats)
+			if len(format) == 0 {
+				outputToStdOut(results)
+			} else {
+				if err := printPSFormat(c.Format, results, headerNames); err != nil {
+					return err
+				}
+			}
 		}
 		time.Sleep(time.Second)
 		previousPodStats := new([]*libpod.PodContainerStats)
@@ -182,28 +208,88 @@ func podStatsCmd(c *cli.Context) error {
 	return nil
 }
 
-func outputToStdOut(stats []*libpod.PodContainerStats) {
-	outFormat := ("%-14s %-14s %-12s %-6s %-19s %-6s %-19s %-19s %-4s\n")
-	fmt.Printf(outFormat, "POD", "CID", "NAME", "CPU %", "MEM USAGE/ LIMIT", "MEM %", "NET IO", "BLOCK IO", "PIDS")
-	for _, i := range stats {
-		if len(i.ContainerStats) == 0 {
-			fmt.Printf(outFormat, i.Pod.ID()[:12], "--", "--", "--", "--", "--", "--", "--", "--")
-		}
-		for _, c := range i.ContainerStats {
-			cpu := floatToPercentString(c.CPU)
-			memUsage := combineHumanValues(c.MemUsage, c.MemLimit)
-			memPerc := floatToPercentString(c.MemPerc)
-			netIO := combineHumanValues(c.NetInput, c.NetOutput)
-			blockIO := combineHumanValues(c.BlockInput, c.BlockOutput)
-			pids := pidsToString(c.PIDs)
-			containerName := c.Name
-			if len(c.Name) > 10 {
-				containerName = containerName[:10]
+func podContainerStatsToPodStatOut(stats []*libpod.PodContainerStats) []*podStatOut {
+	var out []*podStatOut
+	for _, p := range stats {
+		for _, c := range p.ContainerStats {
+			o := podStatOut{
+				CPU:      floatToPercentString(c.CPU),
+				MemUsage: combineHumanValues(c.MemUsage, c.MemLimit),
+				Mem:      floatToPercentString(c.MemPerc),
+				NetIO:    combineHumanValues(c.NetInput, c.NetOutput),
+				BlockIO:  combineHumanValues(c.BlockInput, c.BlockOutput),
+				PIDS:     pidsToString(c.PIDs),
+				CID:      c.ContainerID[:12],
+				Name:     c.Name,
+				Pod:      p.Pod.ID()[:12],
 			}
-			fmt.Printf(outFormat, i.Pod.ID()[:12], c.ContainerID[:12], containerName, cpu, memUsage, memPerc, netIO, blockIO, pids)
+			out = append(out, &o)
 		}
 	}
-	fmt.Println()
+	return out
+}
+
+type podStatOut struct {
+	CPU      string
+	MemUsage string
+	Mem      string
+	NetIO    string
+	BlockIO  string
+	PIDS     string
+	Pod      string
+	CID      string
+	Name     string
+}
+
+func printPSFormat(format string, stats []*podStatOut, headerNames map[string]string) error {
+	if len(stats) == 0 {
+		return nil
+	}
+
+	// Use a tabwriter to align column format
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	// Spit out the header if "table" is present in the format
+	if strings.HasPrefix(format, "table") {
+		hformat := strings.Replace(strings.TrimSpace(format[5:]), " ", "\t", -1)
+		format = hformat
+		headerTmpl, err := template.New("header").Parse(hformat)
+		if err != nil {
+			return err
+		}
+		if err := headerTmpl.Execute(w, headerNames); err != nil {
+			return err
+		}
+		fmt.Fprintln(w, "")
+	}
+
+	// Spit out the data rows now
+	dataTmpl, err := template.New("data").Parse(format)
+	if err != nil {
+		return err
+	}
+	for _, container := range stats {
+		if err := dataTmpl.Execute(w, container); err != nil {
+			return err
+		}
+		fmt.Fprintln(w, "")
+	}
+	// Flush the writer
+	return w.Flush()
+
+}
+
+func outputToStdOut(stats []*podStatOut) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	outFormat := ("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n")
+	fmt.Fprintf(w, outFormat, "POD", "CID", "NAME", "CPU %", "MEM USAGE/ LIMIT", "MEM %", "NET IO", "BLOCK IO", "PIDS")
+	for _, i := range stats {
+		if len(stats) == 0 {
+			fmt.Fprintf(w, outFormat, i.Pod, "--", "--", "--", "--", "--", "--", "--", "--")
+		} else {
+			fmt.Fprintf(w, outFormat, i.Pod, i.CID, i.Name, i.CPU, i.MemUsage, i.Mem, i.NetIO, i.BlockIO, i.PIDS)
+		}
+	}
+	w.Flush()
 }
 
 func getPreviousPodContainerStats(podID string, prev []*libpod.PodContainerStats) map[string]*libpod.ContainerStats {

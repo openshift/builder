@@ -27,9 +27,9 @@ import (
 	userclient "github.com/openshift/client-go/user/clientset/versioned"
 	userinformer "github.com/openshift/client-go/user/informers/externalversions"
 	"github.com/openshift/origin/pkg/admission/namespaceconditions"
-	originadmission "github.com/openshift/origin/pkg/apiserver/admission"
 	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftapiserver"
 	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftapiserver/configprocessing"
+	"github.com/openshift/origin/pkg/cmd/openshift-kube-apiserver/kubeadmission"
 	oadmission "github.com/openshift/origin/pkg/cmd/server/admission"
 	"github.com/openshift/origin/pkg/image/apiserver/registryhostname"
 	quotainformer "github.com/openshift/origin/pkg/quota/generated/informers/internalversion"
@@ -72,9 +72,13 @@ func NewOpenShiftKubeAPIServerConfigPatch(delegateAPIServer genericapiserver.Del
 
 		// AUTHORIZER
 		genericConfig.RequestInfoResolver = configprocessing.OpenshiftRequestInfoResolver()
-		authorizer := NewAuthorizer(internalInformers, kubeInformers)
+		authorizer := NewAuthorizer(kubeInformers)
 		genericConfig.Authorization.Authorizer = authorizer
 		// END AUTHORIZER
+
+		// Inject OpenShift API long running endpoints (like for binary builds).
+		// TODO: We should disable the timeout code for aggregated endpoints as this can cause problems when upstream add additional endpoints.
+		genericConfig.LongRunningFunc = configprocessing.IsLongRunningRequest
 
 		// ADMISSION
 		projectCache, err := openshiftapiserver.NewProjectCache(kubeAPIServerInformers.KubernetesInformers.Core().V1().Namespaces(), genericConfig.LoopbackClientConfig, kubeAPIServerConfig.ProjectConfig.DefaultNodeSelector)
@@ -118,8 +122,8 @@ func NewOpenShiftKubeAPIServerConfigPatch(delegateAPIServer genericapiserver.Del
 			NamespaceClient: kubeClient.CoreV1(),
 			NamespaceLister: kubeInformers.Core().V1().Namespaces().Lister(),
 
-			SkipLevelZeroNames: originadmission.SkipRunLevelZeroPlugins,
-			SkipLevelOneNames:  originadmission.SkipRunLevelOnePlugins,
+			SkipLevelZeroNames: kubeadmission.SkipRunLevelZeroPlugins,
+			SkipLevelOneNames:  kubeadmission.SkipRunLevelOnePlugins,
 		}
 		options.AdmissionDecorator = admission.Decorators{
 			admission.DecoratorFunc(namespaceLabelDecorator.WithNamespaceLabelConditions),
@@ -128,7 +132,7 @@ func NewOpenShiftKubeAPIServerConfigPatch(delegateAPIServer genericapiserver.Del
 		// END ADMISSION
 
 		// HANDLER CHAIN (with oauth server and web console)
-		genericConfig.BuildHandlerChainFunc, postStartHooks, err = BuildHandlerChain(genericConfig, kubeAPIServerConfig.OAuthConfig, kubeAPIServerConfig.UserAgentMatchingConfig, kubeAPIServerConfig.ConsolePublicURL)
+		genericConfig.BuildHandlerChainFunc, postStartHooks, err = BuildHandlerChain(genericConfig, kubeAPIServerConfig.OAuthConfig, kubeAPIServerConfig.AuthConfig, kubeAPIServerConfig.UserAgentMatchingConfig, kubeAPIServerConfig.ConsolePublicURL)
 		if err != nil {
 			return nil, err
 		}

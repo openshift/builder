@@ -2,44 +2,53 @@ package main
 
 import (
 	"fmt"
-	"github.com/containers/libpod/cmd/podman/libpodruntime"
+
+	"github.com/containers/libpod/cmd/podman/cliconfig"
+	"github.com/containers/libpod/libpod/adapter"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/spf13/cobra"
 )
 
 var (
+	pruneImagesCommand     cliconfig.PruneImagesValues
 	pruneImagesDescription = `
 	podman image prune
 
 	Removes all unnamed images from local storage
 `
-
-	pruneImagesCommand = cli.Command{
-		Name:         "prune",
-		Usage:        "Remove unused images",
-		Description:  pruneImagesDescription,
-		Action:       pruneImagesCmd,
-		OnUsageError: usageErrorHandler,
+	_pruneImagesCommand = &cobra.Command{
+		Use:   "prune",
+		Short: "Remove unused images",
+		Long:  pruneImagesDescription,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pruneImagesCommand.InputArgs = args
+			pruneImagesCommand.GlobalFlags = MainGlobalOpts
+			return pruneImagesCmd(&pruneImagesCommand)
+		},
 	}
 )
 
-func pruneImagesCmd(c *cli.Context) error {
-	runtime, err := libpodruntime.GetRuntime(c)
+func init() {
+	pruneImagesCommand.Command = _pruneImagesCommand
+	pruneImagesCommand.SetUsageTemplate(UsageTemplate())
+	flags := pruneImagesCommand.Flags()
+	flags.BoolVarP(&pruneImagesCommand.All, "all", "a", false, "Remove all unused images, not just dangling ones")
+}
+
+func pruneImagesCmd(c *cliconfig.PruneImagesValues) error {
+	runtime, err := adapter.GetRuntime(&c.PodmanCommand)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	pruneImages, err := runtime.ImageRuntime().GetPruneImages()
-	if err != nil {
-		return err
-	}
-
-	for _, i := range pruneImages {
-		if err := i.Remove(true); err != nil {
-			return errors.Wrapf(err, "failed to remove %s", i.ID())
+	// Call prune; if any cids are returned, print them and then
+	// return err in case an error also came up
+	pruneCids, err := runtime.PruneImages(c.All)
+	if len(pruneCids) > 0 {
+		for _, cid := range pruneCids {
+			fmt.Println(cid)
 		}
-		fmt.Println(i.ID())
 	}
-	return nil
+	return err
 }

@@ -3,8 +3,7 @@
 # Library and tool for running OCI-based containers in Pods
 
 Libpod provides a library for applications looking to use the Container Pod concept,
-popularized by Kubernetes.  libpod also contains the `podman` tool, for managing
-Pods, Containers, and Container Images.
+popularized by Kubernetes.  Libpod also contains the Pod Manager tool `(Podman)`. Podman manages pods, containers, container images, and container volumes.
 
 * [Latest Version: 1.0.0](https://github.com/containers/libpod/releases/latest)
 * [Continuous Integration:](contrib/cirrus/README.md) [![Build Status](https://api.cirrus-ci.com/github/containers/libpod.svg)](https://cirrus-ci.com/github/containers/libpod/master)
@@ -20,6 +19,8 @@ At a high level, the scope of libpod and podman is the following:
 * Support for pods to manage groups of containers together
 * Resource isolation of containers and pods.
 * Integration with CRI-O to share containers and backend code.
+
+This project tests all builds against each supported version of Fedora, the latest released version of Red Hat Enterprise Linux, and the latest Ubuntu Long Term Support release. The community has also reported success with other Linux flavors.
 
 ## Roadmap
 

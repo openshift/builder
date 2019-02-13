@@ -36,7 +36,7 @@ func TestReadConfig(t *testing.T) {
 	}{
 		{
 			// multiple selectors
-			config: `apiVersion: v1
+			config: `apiVersion: project.openshift.io/v1
 kind: ProjectRequestLimitConfig
 limits:
 - selector:
@@ -84,7 +84,7 @@ limits:
 		},
 		{
 			// single selector
-			config: `apiVersion: v1
+			config: `apiVersion: project.openshift.io/v1
 kind: ProjectRequestLimitConfig
 limits:
 - maxProjects: 1
@@ -100,7 +100,7 @@ limits:
 		},
 		{
 			// no selectors
-			config: `apiVersion: v1
+			config: `apiVersion: project.openshift.io/v1
 kind: ProjectRequestLimitConfig
 `,
 			expected: requestlimitapi.ProjectRequestLimitConfig{},
@@ -292,6 +292,7 @@ func TestAdmit(t *testing.T) {
 			project.Resource("projectrequests").WithVersion("version"),
 			"",
 			"CREATE",
+			false,
 			&user.DefaultInfo{Name: tc.user}))
 		if err != nil && !tc.expectForbidden {
 			t.Errorf("Got unexpected error for user %s: %v", tc.user, err)

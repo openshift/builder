@@ -1,5 +1,5 @@
 hash: fc4bdcf9e701e79f94a66ddb152a73b4e4be3403aacd327b5c4e8d7e6ac5cf77
-updated: 2019-01-23T13:07:15.677984004-05:00
+updated: 2019-02-12T13:35:15.765193681-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -27,7 +27,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 4bcddb7cbec960f93f4fea229cc45d9192349b17
+  version: 711f9ea26445e0cf24de17c56bafbd898b683078
   subpackages:
   - bind
   - chroot
@@ -37,7 +37,7 @@ imports:
   - unshare
   - util
 - name: github.com/containers/image
-  version: 67b1f789f2ce8a3654592a582fff26c396326236
+  version: 93bced01015eb94bec4821df1876314be8197680
   subpackages:
   - copy
   - directory
@@ -71,13 +71,13 @@ imports:
   - types
   - version
 - name: github.com/containers/libpod
-  version: 7838a13b61ee893a6dad5cf4cc4e36c5ab74b855
+  version: ee27c39f85507993c0a3dfe3c4dfab4c7b7e5e00
   subpackages:
   - pkg/chrootuser
   - pkg/rootless
   - pkg/secrets
 - name: github.com/containers/storage
-  version: ad2708c67dc5510225fb2e8be054606914600e53
+  version: 06b6c2e4cf254f5922a79da058c94ac2a65bb92f
   subpackages:
   - drivers
   - drivers/aufs
@@ -93,6 +93,7 @@ imports:
   - drivers/zfs
   - pkg/archive
   - pkg/chrootarchive
+  - pkg/config
   - pkg/devicemapper
   - pkg/directory
   - pkg/dmesg
@@ -221,7 +222,7 @@ imports:
   - proto
   - sortkeys
 - name: github.com/golang/glog
-  version: 44145f04b68cf362d9c4df2182967c2275eaefed
+  version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/groupcache
   version: 02826c3e79038b59d737d3b1c0a1d937f71a4433
   subpackages:
@@ -245,7 +246,7 @@ imports:
   - compiler
   - extensions
 - name: github.com/gorilla/mux
-  version: 08e7f807d38d6a870193019bb439056118661505
+  version: a7962380ca08b5a188038c69871b8d3fbdf31e89
 - name: github.com/gregjones/httpcache
   version: 787624de3eb7bd915c329cba748687a3b22666a6
   subpackages:
@@ -259,7 +260,7 @@ imports:
   subpackages:
   - simplelru
 - name: github.com/imdario/mergo
-  version: 6633656539c1639d9d78127b7d47c622b5d7b6dc
+  version: 9316a62528ac99aaecb4e47eadd6dc8aa6533d58
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/json-iterator/go
@@ -272,6 +273,8 @@ imports:
   version: 0da02118eaa37aa89aea6776b464a4ad00990af1
 - name: github.com/klauspost/pgzip
   version: 083b1c3f84dd6486588802e5ce295de3a7f41a8b
+- name: github.com/konsorten/go-windows-terminal-sequences
+  version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
 - name: github.com/mailru/easyjson
   version: 2f5df55504ebc322e4d52d34df6a1f5b503bf26d
   subpackages:
@@ -319,7 +322,7 @@ imports:
   - libcontainer/system
   - libcontainer/user
 - name: github.com/opencontainers/runtime-spec
-  version: 1722abf79c2f8f2675f47367f827c6491472cf27
+  version: 29686dbc5559d93fb1ef402eeda3e35c38d75af4
   subpackages:
   - specs-go
 - name: github.com/opencontainers/runtime-tools
@@ -337,11 +340,11 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: 74cf02537628c9ca144e7f09c8db26ee7e7f56e4
+  version: 8c839bc7ff62e38ad7656bf920e11e2664a44f6b
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
-  version: f9132806c9914790e15f10d8c5d1e7a03408d7b2
+  version: 9ecec62d3c9792a6b712bc1aefdb8ae10826fa14
   subpackages:
   - build/clientset/versioned
   - build/clientset/versioned/fake
@@ -349,14 +352,14 @@ imports:
   - build/clientset/versioned/typed/build/v1
   - build/clientset/versioned/typed/build/v1/fake
 - name: github.com/openshift/imagebuilder
-  version: 8819855cd4726c8c723b2e78530c391a452c0a55
+  version: 36823496a6868f72bc36282cc475eb8a070c0934
   subpackages:
   - dockerclient
   - imageprogress
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: af2e072d9dc8d25226fa0da33514d4c33e662660
+  version: 691e7915b35577d65a534dfbfc0f3f00a231619d
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -364,7 +367,7 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: 9f6b6721e6d580571155976faeee61404308eac2
+  version: f1438c0c75ad26dabaf7b0552b3498d98f0c986f
   subpackages:
   - pkg/api/apihelpers
   - pkg/build/apis/build
@@ -409,7 +412,7 @@ imports:
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+  version: ffb6e22f01932bf7ac35e0bad9be11f01d1c8685
 - name: github.com/pkg/profile
   version: 22592cc4bae3572d59be8852c6980023e4c9dec5
 - name: github.com/pquerna/ffjson
@@ -418,7 +421,7 @@ imports:
   - fflib/v1
   - fflib/v1/internal
 - name: github.com/prometheus/client_golang
-  version: e7e903064f5e9eb5da98208bae10b475d4db0f8c
+  version: 4c99dd66303a54cbf8559dd6110d5c30b1819e4c
   subpackages:
   - prometheus
 - name: github.com/PuerkitoBio/purell
@@ -434,9 +437,9 @@ imports:
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 10ef21a441db47d8b13ebcc5fd2310f636973c77
 - name: github.com/sirupsen/logrus
-  version: 89742aefa4b206dcf400792f3bd35b542998eb3b
+  version: cdb2f3857cfba7388d28dfe38316b0a39e694215
 - name: github.com/spf13/cobra
-  version: c439c4fa093711d42e1b01acb1235b52004753c1
+  version: 7547e83b2d85fd1893c7d76916f67689d761fecb
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: github.com/syndtr/gocapability
@@ -576,11 +579,11 @@ imports:
   - storage/v1alpha1
   - storage/v1beta1
 - name: k8s.io/apiextensions-apiserver
-  version: 06dfdaae5c2bd89e1243151ff65b9bf8ee050f28
+  version: a384d17938fe55d54a52d5668bf0ff40044daef0
   subpackages:
   - pkg/features
 - name: k8s.io/apimachinery
-  version: 0b908666f6c964370af24212f499d77109c65937
+  version: 5f1ab6ad9104144e43c7e477938fd278ade27eb2
   repo: https://github.com/openshift/kubernetes-apimachinery.git
   subpackages:
   - pkg/api/equality
@@ -638,7 +641,7 @@ imports:
   - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/apiserver
-  version: 10f1ab2357d4fc15527540fd7d7953ba8e6c98e3
+  version: 996cefeb14170756dc1626dde64fcfb63c8edb24
   repo: https://github.com/openshift/kubernetes-apiserver.git
   subpackages:
   - pkg/apis/audit
@@ -650,7 +653,7 @@ imports:
   - pkg/util/feature
   - pkg/util/logs
 - name: k8s.io/client-go
-  version: b28cdde46f9c296b8ecde9c0bed0d215b6cda59d
+  version: 7eaf7133bcfa11e19ebbbc76ff53e2cb32524683
   repo: https://github.com/openshift/kubernetes-client-go.git
   subpackages:
   - discovery
@@ -735,7 +738,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 22b8c511baaf712194dee3eb9c6d8e96d282d3a5
+  version: 0771a2a86b22d4301d9d333a5016cfc2955e4d46
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events

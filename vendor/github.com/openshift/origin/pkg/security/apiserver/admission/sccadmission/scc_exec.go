@@ -17,7 +17,7 @@ import (
 )
 
 func RegisterSCCExecRestrictions(plugins *admission.Plugins) {
-	plugins.Register("SCCExecRestrictions",
+	plugins.Register("security.openshift.io/SCCExecRestrictions",
 		func(config io.Reader) (admission.Interface, error) {
 			execAdmitter := NewSCCExecRestrictions()
 			return execAdmitter, nil
@@ -57,7 +57,7 @@ func (d *sccExecRestrictions) Validate(a admission.Attributes) (err error) {
 
 	// TODO, if we want to actually limit who can use which service account, then we'll need to add logic here to make sure that
 	// we're allowed to use the SA the pod is using.  Otherwise, user-A creates pod and user-B (who can't use the SA) can exec into it.
-	createAttributes := admission.NewAttributesRecord(pod, nil, kapi.Kind("Pod").WithVersion(""), a.GetNamespace(), a.GetName(), a.GetResource(), "", admission.Create, a.GetUserInfo())
+	createAttributes := admission.NewAttributesRecord(pod, nil, kapi.Kind("Pod").WithVersion(""), a.GetNamespace(), a.GetName(), a.GetResource(), "", admission.Create, false, a.GetUserInfo())
 	// call SCC.Admit instead of SCC.Validate because we accept that a different SCC is chosen. SCC.Validate would require
 	// that the chosen SCC (stored in the "openshift.io/scc" annotation) does not change.
 	if err := d.constraintAdmission.Admit(createAttributes); err != nil {

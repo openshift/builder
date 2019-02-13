@@ -138,7 +138,7 @@ func TestRunOnceDurationAdmit(t *testing.T) {
 		runOnceDuration := NewRunOnceDuration(tc.config)
 		runOnceDuration.(oadmission.WantsProjectCache).SetProjectCache(testCache(tc.projectAnnotations))
 		pod := tc.pod
-		attrs := admission.NewAttributesRecord(pod, nil, kapi.Kind("Pod").WithVersion("version"), "default", "test", kapi.Resource("pods").WithVersion("version"), "", admission.Create, nil)
+		attrs := admission.NewAttributesRecord(pod, nil, kapi.Kind("Pod").WithVersion("version"), "default", "test", kapi.Resource("pods").WithVersion("version"), "", admission.Create, false, nil)
 		if err := runOnceDuration.(admission.MutationInterface).Admit(attrs); err != nil {
 			t.Errorf("%s: unexpected mutating admission error: %v", tc.name, err)
 			continue
@@ -158,7 +158,7 @@ func TestRunOnceDurationAdmit(t *testing.T) {
 }
 
 func TestReadConfig(t *testing.T) {
-	configStr := `apiVersion: v1
+	configStr := `apiVersion: autoscaling.openshift.io/v1
 kind: RunOnceDurationConfig
 activeDeadlineSecondsOverride: 3600
 `
