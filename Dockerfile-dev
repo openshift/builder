@@ -9,7 +9,6 @@ RUN INSTALL_PKGS=" \
       git tar bsdtar \
       " && \
     yum install -y ${INSTALL_PKGS} && \
-    rpm -V ${INSTALL_PKGS} && \
     yum clean all
 
 COPY imagecontent/policy.json /etc/containers/
