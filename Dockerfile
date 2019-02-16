@@ -10,7 +10,6 @@ RUN INSTALL_PKGS=" \
       git tar bsdtar \
       " && \
     yum install -y $INSTALL_PKGS && \
-    rpm -V $INSTALL_PKGS && \
     yum clean all
 COPY --from=builder /go/src/github.com/openshift/builder/openshift-builder /usr/bin/
 COPY imagecontent/policy.json /etc/containers/
