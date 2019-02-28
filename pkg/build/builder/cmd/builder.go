@@ -7,22 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	restclient "k8s.io/client-go/rest"
+
 	istorage "github.com/containers/image/storage"
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
-	realglog "github.com/golang/glog"
-
-	s2iapi "github.com/openshift/source-to-image/pkg/api"
-	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
-
-	"github.com/openshift/library-go/pkg/git"
-	"github.com/openshift/library-go/pkg/serviceability"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-
-	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
-	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
-	restclient "k8s.io/client-go/rest"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
 	bld "github.com/openshift/builder/pkg/build/builder"
@@ -30,6 +21,13 @@ import (
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
+	"github.com/openshift/builder/pkg/version"
+	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
+	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
+	"github.com/openshift/library-go/pkg/git"
+	"github.com/openshift/library-go/pkg/serviceability"
+	s2iapi "github.com/openshift/source-to-image/pkg/api"
+	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 )
 
 var (
@@ -306,6 +304,7 @@ func (s2iBuilder) Build(dockerClient bld.DockerClient, sock string, buildsClient
 }
 
 func runBuild(out io.Writer, builder builder) error {
+	logVersion()
 	cfg, err := newBuilderConfigFromEnvironment(out, true)
 	if err != nil {
 		return err
@@ -318,7 +317,6 @@ func runBuild(out io.Writer, builder builder) error {
 
 // RunDockerBuild creates a docker builder and runs its build
 func RunDockerBuild(out io.Writer) error {
-	realglog.V(5)
 	switch {
 	case glog.Is(6):
 		serviceability.InitLogrus("DEBUG")
@@ -353,7 +351,7 @@ func RunGitClone(out io.Writer) error {
 	case glog.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
-
+	logVersion()
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
 		return err
@@ -372,7 +370,6 @@ func RunGitClone(out io.Writer) error {
 // and also adds some env and label values to the dockerfile based on
 // the build information.
 func RunManageDockerfile(out io.Writer) error {
-	serviceability.InitLogrus("DEBUG")
 	switch {
 	case glog.Is(6):
 		serviceability.InitLogrus("DEBUG")
@@ -381,7 +378,7 @@ func RunManageDockerfile(out io.Writer) error {
 	case glog.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
-
+	logVersion()
 	cfg, err := newBuilderConfigFromEnvironment(out, false)
 	if err != nil {
 		return err
@@ -403,6 +400,7 @@ func RunExtractImageContent(out io.Writer) error {
 	case glog.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
+	logVersion()
 	cfg, err := newBuilderConfigFromEnvironment(out, true)
 	if err != nil {
 		return err
@@ -411,4 +409,9 @@ func RunExtractImageContent(out io.Writer) error {
 		defer cfg.cleanup()
 	}
 	return cfg.extractImageContent()
+}
+
+// logVersion logs the version of openshift-builder.
+func logVersion() {
+	glog.V(5).Infof("openshift-builder %v", version.Get())
 }

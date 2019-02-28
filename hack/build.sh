@@ -1,5 +1,5 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-source "$(dirname "${BASH_SOURCE}")/constants.sh"
+source "$(dirname "${BASH_SOURCE}")/lib/init.sh"
 
-go build -tags "${OS_GOFLAGS_TAGS-}" -o openshift-builder ./cmd
+os::build::build_binary
