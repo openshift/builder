@@ -451,7 +451,9 @@ func (s *S2IBuilder) pullImage(name string, authConfig dockerclient.AuthConfigur
 		options.Repository = name
 	}
 
-	return s.dockerClient.PullImage(options, authConfig)
+	return retryImageAction("Pull", func() (pullErr error) {
+		return s.dockerClient.PullImage(options, authConfig)
+	})
 }
 
 func (s *S2IBuilder) buildImage(optimization buildapiv1.ImageOptimizationPolicy, opts dockerclient.BuildImageOptions) error {
