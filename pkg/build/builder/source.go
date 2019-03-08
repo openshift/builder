@@ -29,7 +29,6 @@ import (
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	"github.com/openshift/library-go/pkg/git"
-	"github.com/openshift/source-to-image/pkg/tar"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -316,56 +315,6 @@ func extractGitSource(ctx context.Context, gitClient GitClient, gitSource *build
 	}
 
 	return true, nil
-}
-
-func copyImageSource(dockerClient DockerClient, containerID, sourceDir, destDir string, tarHelper tar.Tar) error {
-	// Setup destination directory
-	fi, err := os.Stat(destDir)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		glog.V(4).Infof("Creating image destination directory: %s", destDir)
-		err := os.MkdirAll(destDir, 0755)
-		if err != nil {
-			return err
-		}
-	} else {
-		if !fi.IsDir() {
-			return fmt.Errorf("destination %s must be a directory", destDir)
-		}
-	}
-
-	tempFile, err := ioutil.TempFile("", "imgsrc")
-	if err != nil {
-		return err
-	}
-	glog.V(4).Infof("Downloading source from path %s in container %s to temporary archive %s", sourceDir, containerID, tempFile.Name())
-	err = dockerClient.DownloadFromContainer(containerID, docker.DownloadFromContainerOptions{
-		OutputStream: tempFile,
-		Path:         sourceDir,
-	})
-	if err != nil {
-		tempFile.Close()
-		return err
-	}
-	if err := tempFile.Close(); err != nil {
-		return err
-	}
-
-	// Extract the created tar file to the destination directory
-	file, err := os.Open(tempFile.Name())
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	glog.V(4).Infof("Extracting temporary tar %s to directory %s", tempFile.Name(), destDir)
-	var tarOutput io.Writer
-	if glog.Is(4) {
-		tarOutput = os.Stdout
-	}
-	return tarHelper.ExtractTarStreamWithLogging(destDir, file, tarOutput)
 }
 
 func copyImageSourceFromFilesytem(sourceDir, destDir string) error {

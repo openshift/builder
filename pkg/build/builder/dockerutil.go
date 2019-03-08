@@ -29,7 +29,6 @@ type DockerClient interface {
 	PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error)
 	RemoveImage(name string) error
 	CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error)
-	DownloadFromContainer(id string, opts docker.DownloadFromContainerOptions) error
 	PullImage(opts docker.PullImageOptions, auth docker.AuthConfiguration) error
 	RemoveContainer(opts docker.RemoveContainerOptions) error
 	InspectImage(name string) (*docker.Image, error)

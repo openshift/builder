@@ -5,9 +5,7 @@ package builder
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,7 +17,6 @@ import (
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
-	"github.com/containers/storage/pkg/idtools"
 	docker "github.com/fsouza/go-dockerclient"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -382,46 +379,6 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 	return builder.Run(append(entrypoint, createOpts.Config.Cmd...), runOptions)
 }
 
-func downloadFromDaemonlessContainer(builder *buildah.Builder, id string, path string, outputStream io.Writer) error {
-	mp, err := builder.Mount("")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := builder.Unmount(); err != nil {
-			glog.V(0).Infof("Error shutting down storage: %v", err)
-		}
-	}()
-	var options archive.TarOptions
-	if !builder.IDMappingOptions.HostUIDMapping {
-		for _, m := range builder.IDMappingOptions.UIDMap {
-			idmap := idtools.IDMap{
-				HostID:      int(m.HostID),
-				ContainerID: int(m.ContainerID),
-				Size:        int(m.Size),
-			}
-			options.UIDMaps = append(options.UIDMaps, idmap)
-		}
-	}
-	if !builder.IDMappingOptions.HostGIDMapping {
-		for _, m := range builder.IDMappingOptions.GIDMap {
-			idmap := idtools.IDMap{
-				HostID:      int(m.HostID),
-				ContainerID: int(m.ContainerID),
-				Size:        int(m.Size),
-			}
-			options.GIDMaps = append(options.GIDMaps, idmap)
-		}
-	}
-	rc, err := archive.TarWithOptions(filepath.Join(mp, path), &options)
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-	_, err = io.Copy(outputStream, rc)
-	return err
-}
-
 // DaemonlessClient is a daemonless DockerClient-like implementation.
 type DaemonlessClient struct {
 	SystemContext      types.SystemContext
@@ -495,14 +452,6 @@ func (d *DaemonlessClient) CreateContainer(opts docker.CreateContainerOptions) (
 		d.builders[builder.ContainerID] = builder
 	}
 	return &docker.Container{ID: builder.ContainerID}, nil
-}
-
-func (d *DaemonlessClient) DownloadFromContainer(id string, opts docker.DownloadFromContainerOptions) error {
-	builder, ok := d.builders[id]
-	if !ok {
-		return errors.Errorf("no such container as %q", id)
-	}
-	return downloadFromDaemonlessContainer(builder, id, opts.Path, opts.OutputStream)
 }
 
 func (d *DaemonlessClient) RemoveContainer(opts docker.RemoveContainerOptions) error {
