@@ -1,5 +1,3 @@
-// +build !remoteclient
-
 package integration
 
 import (
@@ -67,16 +65,5 @@ var _ = Describe("podman container runlabel", func() {
 		result = podmanTest.Podman([]string{"rmi", image})
 		result.WaitWithDefaultTimeout()
 		Expect(result.ExitCode()).To(Equal(0))
-	})
-	It("podman container runlabel bogus label should result in non-zero exit code", func() {
-		result := podmanTest.Podman([]string{"container", "runlabel", "RUN", ALPINE})
-		result.WaitWithDefaultTimeout()
-		Expect(result.ExitCode()).ToNot(Equal(0))
-	})
-	It("podman container runlabel bogus label in remote image should result in non-zero exit", func() {
-		result := podmanTest.Podman([]string{"container", "runlabel", "RUN", "docker.io/library/ubuntu:latest"})
-		result.WaitWithDefaultTimeout()
-		Expect(result.ExitCode()).ToNot(Equal(0))
-
 	})
 })

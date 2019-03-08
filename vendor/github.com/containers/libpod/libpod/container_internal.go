@@ -3,6 +3,7 @@ package libpod
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -388,7 +389,7 @@ func (c *Container) teardownStorage() error {
 // Reset resets state fields to default values
 // It is performed before a refresh and clears the state after a reboot
 // It does not save the results - assumes the database will do that for us
-func resetState(state *ContainerState) error {
+func resetState(state *containerState) error {
 	state.PID = 0
 	state.Mountpoint = ""
 	state.Mounted = false
@@ -402,10 +403,7 @@ func resetState(state *ContainerState) error {
 	return nil
 }
 
-// Refresh refreshes the container's state after a restart.
-// Refresh cannot perform any operations that would lock another container.
-// We cannot guarantee any other container has a valid lock at the time it is
-// running.
+// Refresh refreshes the container's state after a restart
 func (c *Container) refresh() error {
 	// Don't need a full sync, but we do need to update from the database to
 	// pick up potentially-missing container state
@@ -450,13 +448,6 @@ func (c *Container) refresh() error {
 	if c.state.UserNSRoot != "" {
 		c.state.DestinationRunDir = filepath.Join(c.state.UserNSRoot, "rundir")
 	}
-
-	// We need to pick up a new lock
-	lock, err := c.runtime.lockManager.RetrieveLock(c.config.LockID)
-	if err != nil {
-		return errors.Wrapf(err, "error acquiring lock for container %s", c.ID())
-	}
-	c.lock = lock
 
 	if err := c.save(); err != nil {
 		return errors.Wrapf(err, "error refreshing state for container %s", c.ID())

@@ -9,58 +9,68 @@ import (
 	dockerarchive "github.com/containers/image/docker/archive"
 	"github.com/containers/image/transports/alltransports"
 	"github.com/containers/image/types"
-	"github.com/containers/libpod/cmd/podman/cliconfig"
-	"github.com/containers/libpod/libpod/adapter"
+	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	image2 "github.com/containers/libpod/libpod/image"
 	"github.com/containers/libpod/pkg/util"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	pullCommand     cliconfig.PullValues
+	pullFlags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "authfile",
+			Usage: "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override. ",
+		},
+		cli.StringFlag{
+			Name:  "cert-dir",
+			Usage: "`pathname` of a directory containing TLS certificates and keys",
+		},
+		cli.StringFlag{
+			Name:  "creds",
+			Usage: "`credentials` (USERNAME:PASSWORD) to use for authenticating to a registry",
+		},
+		cli.BoolFlag{
+			Name:  "quiet, q",
+			Usage: "Suppress output information when pulling images",
+		},
+		cli.StringFlag{
+			Name:  "signature-policy",
+			Usage: "`pathname` of signature policy file (not usually used)",
+		},
+		cli.BoolTFlag{
+			Name:  "tls-verify",
+			Usage: "require HTTPS and verify certificates when contacting registries (default: true)",
+		},
+	}
+
 	pullDescription = `
 Pulls an image from a registry and stores it locally.
 An image can be pulled using its tag or digest. If a tag is not
 specified, the image with the 'latest' tag (if it exists) is pulled
 `
-	_pullCommand = &cobra.Command{
-		Use:   "pull",
-		Short: "Pull an image from a registry",
-		Long:  pullDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			pullCommand.InputArgs = args
-			pullCommand.GlobalFlags = MainGlobalOpts
-			return pullCmd(&pullCommand)
-		},
-		Example: "",
+	pullCommand = cli.Command{
+		Name:         "pull",
+		Usage:        "Pull an image from a registry",
+		Description:  pullDescription,
+		Flags:        sortFlags(pullFlags),
+		Action:       pullCmd,
+		ArgsUsage:    "",
+		OnUsageError: usageErrorHandler,
 	}
 )
 
-func init() {
-	pullCommand.Command = _pullCommand
-	pullCommand.SetUsageTemplate(UsageTemplate())
-	flags := pullCommand.Flags()
-	flags.StringVar(&pullCommand.Authfile, "authfile", "", "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override")
-	flags.StringVar(&pullCommand.CertDir, "cert-dir", "", "`Pathname` of a directory containing TLS certificates and keys")
-	flags.StringVar(&pullCommand.Creds, "creds", "", "`Credentials` (USERNAME:PASSWORD) to use for authenticating to a registry")
-	flags.BoolVarP(&pullCommand.Quiet, "quiet", "q", false, "Suppress output information when pulling images")
-	flags.StringVar(&pullCommand.SignaturePolicy, "signature-policy", "", "`Pathname` of signature policy file (not usually used)")
-	flags.BoolVar(&pullCommand.TlsVerify, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries (default: true)")
-
-}
-
 // pullCmd gets the data from the command line and calls pullImage
 // to copy an image from a registry to a local machine
-func pullCmd(c *cliconfig.PullValues) error {
-	runtime, err := adapter.GetRuntime(&c.PodmanCommand)
+func pullCmd(c *cli.Context) error {
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	args := c.InputArgs
+	args := c.Args()
 	if len(args) == 0 {
 		logrus.Errorf("an image name must be specified")
 		return nil
@@ -69,12 +79,15 @@ func pullCmd(c *cliconfig.PullValues) error {
 		logrus.Errorf("too many arguments. Requires exactly 1")
 		return nil
 	}
+	if err := validateFlags(c, pullFlags); err != nil {
+		return err
+	}
 	image := args[0]
 
 	var registryCreds *types.DockerAuthConfig
 
-	if c.Flag("creds").Changed {
-		creds, err := util.ParseRegistryCreds(c.Creds)
+	if c.IsSet("creds") {
+		creds, err := util.ParseRegistryCreds(c.String("creds"))
 		if err != nil {
 			return err
 		}
@@ -85,16 +98,16 @@ func pullCmd(c *cliconfig.PullValues) error {
 		writer io.Writer
 		imgID  string
 	)
-	if !c.Quiet {
+	if !c.Bool("quiet") {
 		writer = os.Stderr
 	}
 
 	dockerRegistryOptions := image2.DockerRegistryOptions{
 		DockerRegistryCreds: registryCreds,
-		DockerCertPath:      c.CertDir,
+		DockerCertPath:      c.String("cert-dir"),
 	}
-	if c.Flag("tls-verify").Changed {
-		dockerRegistryOptions.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!c.TlsVerify)
+	if c.IsSet("tls-verify") {
+		dockerRegistryOptions.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!c.BoolT("tls-verify"))
 	}
 
 	// Possible for docker-archive to have multiple tags, so use LoadFromArchiveReference instead
@@ -103,14 +116,14 @@ func pullCmd(c *cliconfig.PullValues) error {
 		if err != nil {
 			return errors.Wrapf(err, "error parsing %q", image)
 		}
-		newImage, err := runtime.LoadFromArchiveReference(getContext(), srcRef, c.SignaturePolicy, writer)
+		newImage, err := runtime.ImageRuntime().LoadFromArchiveReference(getContext(), srcRef, c.String("signature-policy"), writer)
 		if err != nil {
 			return errors.Wrapf(err, "error pulling image from %q", image)
 		}
 		imgID = newImage[0].ID()
 	} else {
-		authfile := getAuthFile(c.Authfile)
-		newImage, err := runtime.New(getContext(), image, c.SignaturePolicy, authfile, writer, &dockerRegistryOptions, image2.SigningOptions{}, true, nil)
+		authfile := getAuthFile(c.String("authfile"))
+		newImage, err := runtime.ImageRuntime().New(getContext(), image, c.String("signature-policy"), authfile, writer, &dockerRegistryOptions, image2.SigningOptions{}, true)
 		if err != nil {
 			return errors.Wrapf(err, "error pulling image %q", image)
 		}

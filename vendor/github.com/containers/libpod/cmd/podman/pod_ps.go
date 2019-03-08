@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/formats"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/cmd/podman/shared"
@@ -16,7 +15,7 @@ import (
 	"github.com/containers/libpod/pkg/util"
 	"github.com/docker/go-units"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 const (
@@ -113,69 +112,95 @@ func (a podPsSortedStatus) Less(i, j int) bool {
 }
 
 var (
-	podPsCommand cliconfig.PodPsValues
-
-	podPsDescription = "List all pods on system including their names, ids and current state."
-	_podPsCommand    = &cobra.Command{
-		Use:     "ps",
-		Aliases: []string{"ls", "list"},
-		Short:   "List pods",
-		Long:    podPsDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			podPsCommand.InputArgs = args
-			podPsCommand.GlobalFlags = MainGlobalOpts
-			return podPsCmd(&podPsCommand)
+	podPsFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "ctr-names",
+			Usage: "Display the container names",
 		},
+		cli.BoolFlag{
+			Name:  "ctr-ids",
+			Usage: "Display the container UUIDs. If no-trunc is not set they will be truncated",
+		},
+		cli.BoolFlag{
+			Name:  "ctr-status",
+			Usage: "Display the container status",
+		},
+		cli.StringFlag{
+			Name:  "filter, f",
+			Usage: "Filter output based on conditions given",
+		},
+		cli.StringFlag{
+			Name:  "format",
+			Usage: "Pretty-print pods to JSON or using a Go template",
+		},
+		cli.BoolFlag{
+			Name:  "latest, l",
+			Usage: "Show the latest pod created",
+		},
+		cli.BoolFlag{
+			Name:  "namespace, ns",
+			Usage: "Display namespace information of the pod",
+		},
+		cli.BoolFlag{
+			Name:  "no-trunc",
+			Usage: "Do not truncate pod and container IDs",
+		},
+		cli.BoolFlag{
+			Name:  "quiet, q",
+			Usage: "Print the numeric IDs of the pods only",
+		},
+		cli.StringFlag{
+			Name:  "sort",
+			Usage: "Sort output by created, id, name, or number",
+			Value: "created",
+		},
+	}
+	podPsDescription = "List all pods on system including their names, ids and current state."
+	podPsCommand     = cli.Command{
+		Name:                   "ps",
+		Aliases:                []string{"ls", "list"},
+		Usage:                  "List pods",
+		Description:            podPsDescription,
+		Flags:                  sortFlags(podPsFlags),
+		Action:                 podPsCmd,
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	podPsCommand.Command = _podPsCommand
-	podPsCommand.SetUsageTemplate(UsageTemplate())
-	flags := podPsCommand.Flags()
-	flags.BoolVar(&podPsCommand.CtrNames, "ctr-names", false, "Display the container names")
-	flags.BoolVar(&podPsCommand.CtrIDs, "ctr-ids", false, "Display the container UUIDs. If no-trunc is not set they will be truncated")
-	flags.BoolVar(&podPsCommand.CtrStatus, "ctr-status", false, "Display the container status")
-	flags.StringVarP(&podPsCommand.Filter, "filter", "f", "", "Filter output based on conditions given")
-	flags.StringVar(&podPsCommand.Format, "format", "", "Pretty-print pods to JSON or using a Go template")
-	flags.BoolVarP(&podPsCommand.Latest, "latest", "l", false, "Act on the latest pod podman is aware of")
-	flags.BoolVar(&podPsCommand.Namespace, "namespace", false, "Display namespace information of the pod")
-	flags.BoolVar(&podPsCommand.Namespace, "ns", false, "Display namespace information of the pod")
-	flags.BoolVar(&podPsCommand.NoTrunc, "no-trunc", false, "Do not truncate pod and container IDs")
-	flags.BoolVarP(&podPsCommand.Quiet, "quiet", "q", false, "Print the numeric IDs of the pods only")
-	flags.StringVar(&podPsCommand.Sort, "sort", "created", "Sort output by created, id, name, or number")
+func podPsCmd(c *cli.Context) error {
+	if err := validateFlags(c, podPsFlags); err != nil {
+		return err
+	}
 
-}
-
-func podPsCmd(c *cliconfig.PodPsValues) error {
 	if err := podPsCheckFlagsPassed(c); err != nil {
 		return errors.Wrapf(err, "error with flags passed")
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	if len(c.InputArgs) > 0 {
+	if len(c.Args()) > 0 {
 		return errors.Errorf("too many arguments, ps takes no arguments")
 	}
 
 	opts := podPsOptions{
-		NoTrunc:            c.NoTrunc,
-		Quiet:              c.Quiet,
-		Sort:               c.Sort,
-		IdsOfContainers:    c.CtrIDs,
-		NamesOfContainers:  c.CtrNames,
-		StatusOfContainers: c.CtrStatus,
+		NoTrunc:            c.Bool("no-trunc"),
+		Quiet:              c.Bool("quiet"),
+		Sort:               c.String("sort"),
+		IdsOfContainers:    c.Bool("ctr-ids"),
+		NamesOfContainers:  c.Bool("ctr-names"),
+		StatusOfContainers: c.Bool("ctr-status"),
 	}
 
 	opts.Format = genPodPsFormat(c)
 
 	var filterFuncs []libpod.PodFilter
-	if c.Filter != "" {
-		filters := strings.Split(c.Filter, ",")
+	if c.String("filter") != "" {
+		filters := strings.Split(c.String("filter"), ",")
 		for _, f := range filters {
 			filterSplit := strings.Split(f, "=")
 			if len(filterSplit) < 2 {
@@ -190,7 +215,7 @@ func podPsCmd(c *cliconfig.PodPsValues) error {
 	}
 
 	var pods []*libpod.Pod
-	if c.Latest {
+	if c.IsSet("latest") {
 		pod, err := runtime.GetLatestPod()
 		if err != nil {
 			return err
@@ -219,13 +244,13 @@ func podPsCmd(c *cliconfig.PodPsValues) error {
 }
 
 // podPsCheckFlagsPassed checks if mutually exclusive flags are passed together
-func podPsCheckFlagsPassed(c *cliconfig.PodPsValues) error {
+func podPsCheckFlagsPassed(c *cli.Context) error {
 	// quiet, and format with Go template are mutually exclusive
 	flags := 0
-	if c.Quiet {
+	if c.Bool("quiet") {
 		flags++
 	}
-	if c.Flag("format").Changed && c.Format != formats.JSONString {
+	if c.IsSet("format") && c.String("format") != formats.JSONString {
 		flags++
 	}
 	if flags > 1 {
@@ -317,20 +342,20 @@ func generatePodFilterFuncs(filter, filterValue string, runtime *libpod.Runtime)
 }
 
 // generate the template based on conditions given
-func genPodPsFormat(c *cliconfig.PodPsValues) string {
+func genPodPsFormat(c *cli.Context) string {
 	format := ""
-	if c.Format != "" {
+	if c.String("format") != "" {
 		// "\t" from the command line is not being recognized as a tab
 		// replacing the string "\t" to a tab character if the user passes in "\t"
-		format = strings.Replace(c.Format, `\t`, "\t", -1)
-	} else if c.Quiet {
+		format = strings.Replace(c.String("format"), `\t`, "\t", -1)
+	} else if c.Bool("quiet") {
 		format = formats.IDString
 	} else {
 		format = "table {{.ID}}\t{{.Name}}\t{{.Status}}\t{{.Created}}"
 		if c.Bool("namespace") {
 			format += "\t{{.Cgroup}}\t{{.Namespaces}}"
 		}
-		if c.CtrNames || c.CtrIDs || c.CtrStatus {
+		if c.Bool("ctr-names") || c.Bool("ctr-ids") || c.Bool("ctr-status") {
 			format += "\t{{.ContainerInfo}}"
 		} else {
 			format += "\t{{.NumberOfContainers}}"

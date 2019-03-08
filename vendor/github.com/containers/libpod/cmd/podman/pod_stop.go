@@ -2,51 +2,48 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	podStopCommand     cliconfig.PodStopValues
+	podStopFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "all, a",
+			Usage: "stop all running pods",
+		},
+		LatestPodFlag,
+		cli.UintFlag{
+			Name:  "timeout, time, t",
+			Usage: "Seconds to wait for pod stop before killing the container",
+		},
+	}
 	podStopDescription = `
    podman pod stop
 
    Stops one or more running pods.  The pod name or ID can be used.
 `
 
-	_podStopCommand = &cobra.Command{
-		Use:   "stop",
-		Short: "Stop one or more pods",
-		Long:  podStopDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			podStopCommand.InputArgs = args
-			podStopCommand.GlobalFlags = MainGlobalOpts
-			return podStopCmd(&podStopCommand)
-		},
-		Example: "POD-NAME [POD-NAME ...]",
+	podStopCommand = cli.Command{
+		Name:         "stop",
+		Usage:        "Stop one or more pods",
+		Description:  podStopDescription,
+		Flags:        sortFlags(podStopFlags),
+		Action:       podStopCmd,
+		ArgsUsage:    "POD-NAME [POD-NAME ...]",
+		OnUsageError: usageErrorHandler,
 	}
 )
 
-func init() {
-	podStopCommand.Command = _podStopCommand
-	podStopCommand.SetUsageTemplate(UsageTemplate())
-	flags := podStopCommand.Flags()
-	flags.BoolVarP(&podStopCommand.All, "all", "a", false, "Stop all running pods")
-	flags.BoolVarP(&podStopCommand.Latest, "latest", "l", false, "Stop the latest pod podman is aware of")
-	flags.UintVarP(&podStopCommand.Timeout, "timeout", "t", 0, "Seconds to wait for pod stop before killing the container")
-}
-
-func podStopCmd(c *cliconfig.PodStopValues) error {
+func podStopCmd(c *cli.Context) error {
 	timeout := -1
-	if err := checkMutuallyExclusiveFlags(&c.PodmanCommand); err != nil {
+	if err := checkMutuallyExclusiveFlags(c); err != nil {
 		return err
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
@@ -55,12 +52,12 @@ func podStopCmd(c *cliconfig.PodStopValues) error {
 	// getPodsFromContext returns an error when a requested pod
 	// isn't found. The only fatal error scenerio is when there are no pods
 	// in which case the following loop will be skipped.
-	pods, lastError := getPodsFromContext(&c.PodmanCommand, runtime)
+	pods, lastError := getPodsFromContext(c, runtime)
 
 	ctx := getContext()
 
-	if c.Flag("timeout").Changed {
-		timeout = int(c.Timeout)
+	if c.IsSet("timeout") {
+		timeout = int(c.Uint("timeout"))
 	}
 	for _, pod := range pods {
 		// set cleanup to true to clean mounts and namespaces

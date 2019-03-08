@@ -87,9 +87,9 @@ func TestImage_NewFromLocal(t *testing.T) {
 	// Need images to be present for this test
 	ir, err := NewImageRuntimeFromOptions(so)
 	assert.NoError(t, err)
-	bb, err := ir.New(context.Background(), "docker.io/library/busybox:latest", "", "", writer, nil, SigningOptions{}, false, nil)
+	bb, err := ir.New(context.Background(), "docker.io/library/busybox:latest", "", "", writer, nil, SigningOptions{}, false)
 	assert.NoError(t, err)
-	bbglibc, err := ir.New(context.Background(), "docker.io/library/busybox:glibc", "", "", writer, nil, SigningOptions{}, false, nil)
+	bbglibc, err := ir.New(context.Background(), "docker.io/library/busybox:glibc", "", "", writer, nil, SigningOptions{}, false)
 	assert.NoError(t, err)
 
 	tm, err := makeLocalMatrix(bb, bbglibc)
@@ -136,7 +136,7 @@ func TestImage_New(t *testing.T) {
 	// Iterate over the names and delete the image
 	// after the pull
 	for _, img := range names {
-		newImage, err := ir.New(context.Background(), img, "", "", writer, nil, SigningOptions{}, false, nil)
+		newImage, err := ir.New(context.Background(), img, "", "", writer, nil, SigningOptions{}, false)
 		assert.NoError(t, err)
 		assert.NotEqual(t, newImage.ID(), "")
 		err = newImage.Remove(false)
@@ -164,7 +164,7 @@ func TestImage_MatchRepoTag(t *testing.T) {
 	}
 	ir, err := NewImageRuntimeFromOptions(so)
 	assert.NoError(t, err)
-	newImage, err := ir.New(context.Background(), "busybox", "", "", os.Stdout, nil, SigningOptions{}, false, nil)
+	newImage, err := ir.New(context.Background(), "busybox", "", "", os.Stdout, nil, SigningOptions{}, false)
 	assert.NoError(t, err)
 	err = newImage.TagImage("foo:latest")
 	assert.NoError(t, err)
@@ -257,25 +257,24 @@ func Test_stripSha256(t *testing.T) {
 	assert.Equal(t, stripSha256("sha256:a"), "a")
 }
 
-func TestNormalizedTag(t *testing.T) {
+func TestNormalizeTag(t *testing.T) {
 	const digestSuffix = "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 	for _, c := range []struct{ input, expected string }{
 		{"#", ""}, // Clearly invalid
 		{"example.com/busybox", "example.com/busybox:latest"},                                            // Qualified name-only
 		{"example.com/busybox:notlatest", "example.com/busybox:notlatest"},                               // Qualified name:tag
-		{"example.com/busybox" + digestSuffix, "example.com/busybox" + digestSuffix},                     // Qualified name@digest; FIXME? Should we allow tagging with a digest at all?
+		{"example.com/busybox" + digestSuffix, "example.com/busybox" + digestSuffix + ":none"},           // Qualified name@digest; FIXME: The result is not even syntactically valid!
 		{"example.com/busybox:notlatest" + digestSuffix, "example.com/busybox:notlatest" + digestSuffix}, // Qualified name:tag@digest
 		{"busybox:latest", "localhost/busybox:latest"},                                                   // Unqualified name-only
 		{"ns/busybox:latest", "localhost/ns/busybox:latest"},                                             // Unqualified with a dot-less namespace
-		{"docker.io/busybox:latest", "docker.io/library/busybox:latest"},                                 // docker.io without /library/
 	} {
-		res, err := normalizedTag(c.input)
+		res, err := normalizeTag(c.input)
 		if c.expected == "" {
 			assert.Error(t, err, c.input)
 		} else {
 			assert.NoError(t, err, c.input)
-			assert.Equal(t, c.expected, res.String())
+			assert.Equal(t, c.expected, res)
 		}
 	}
 }

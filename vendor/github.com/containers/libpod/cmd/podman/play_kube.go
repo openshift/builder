@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/containers/image/types"
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/libpod"
@@ -21,41 +20,51 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 	"k8s.io/api/core/v1"
 )
 
 var (
-	playKubeCommand     cliconfig.KubePlayValues
-	playKubeDescription = "Play a Pod and its containers based on a Kubrernetes YAML"
-	_playKubeCommand    = &cobra.Command{
-		Use:   "kube",
-		Short: "Play a pod based on Kubernetes YAML",
-		Long:  playKubeDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			playKubeCommand.InputArgs = args
-			playKubeCommand.GlobalFlags = MainGlobalOpts
-			return playKubeYAMLCmd(&playKubeCommand)
+	playKubeFlags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "authfile",
+			Usage: "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override. ",
 		},
-		Example: "Kubernetes YAML file",
+		cli.StringFlag{
+			Name:  "cert-dir",
+			Usage: "`pathname` of a directory containing TLS certificates and keys",
+		},
+		cli.StringFlag{
+			Name:  "creds",
+			Usage: "`credentials` (USERNAME:PASSWORD) to use for authenticating to a registry",
+		},
+		cli.BoolFlag{
+			Name:  "quiet, q",
+			Usage: "Suppress output information when pulling images",
+		},
+		cli.StringFlag{
+			Name:  "signature-policy",
+			Usage: "`pathname` of signature policy file (not usually used)",
+		},
+		cli.BoolTFlag{
+			Name:  "tls-verify",
+			Usage: "require HTTPS and verify certificates when contacting registries (default: true)",
+		},
+	}
+	playKubeDescription = "Play a Pod and its containers based on a Kubrernetes YAML"
+	playKubeCommand     = cli.Command{
+		Name:                   "kube",
+		Usage:                  "Play a pod based on Kubernetes YAML",
+		Description:            playKubeDescription,
+		Action:                 playKubeYAMLCmd,
+		Flags:                  sortFlags(playKubeFlags),
+		ArgsUsage:              "kubernetes YAML file",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	playKubeCommand.Command = _playKubeCommand
-	playKubeCommand.SetUsageTemplate(UsageTemplate())
-	flags := playKubeCommand.Flags()
-	flags.StringVar(&playKubeCommand.Authfile, "authfile", "", "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override")
-	flags.StringVar(&playKubeCommand.CertDir, "cert-dir", "", "`Pathname` of a directory containing TLS certificates and keys")
-	flags.StringVar(&playKubeCommand.Creds, "creds", "", "`Credentials` (USERNAME:PASSWORD) to use for authenticating to a registry")
-	flags.BoolVarP(&playKubeCommand.Quiet, "quiet", "q", false, "Suppress output information when pulling images")
-	flags.StringVar(&playKubeCommand.SignaturePolicy, "signature-policy", "", "`Pathname` of signature policy file (not usually used)")
-	flags.BoolVar(&playKubeCommand.TlsVerify, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries (default: true)")
-
-	rootCmd.AddCommand(playKubeCommand.Command)
-}
-
-func playKubeYAMLCmd(c *cliconfig.KubePlayValues) error {
+func playKubeYAMLCmd(c *cli.Context) error {
 	var (
 		podOptions    []libpod.PodCreateOption
 		podYAML       v1.Pod
@@ -68,7 +77,7 @@ func playKubeYAMLCmd(c *cliconfig.KubePlayValues) error {
 	if rootless.IsRootless() {
 		return errors.Wrapf(libpod.ErrNotImplemented, "rootless users")
 	}
-	args := c.InputArgs
+	args := c.Args()
 	if len(args) > 1 {
 		return errors.New("you can only play one kubernetes file at a time")
 	}
@@ -76,7 +85,7 @@ func playKubeYAMLCmd(c *cliconfig.KubePlayValues) error {
 		return errors.New("you must supply at least one file")
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
@@ -124,20 +133,20 @@ func playKubeYAMLCmd(c *cliconfig.KubePlayValues) error {
 		"ipc":  fmt.Sprintf("container:%s", podInfraID),
 		"uts":  fmt.Sprintf("container:%s", podInfraID),
 	}
-	if !c.Quiet {
+	if !c.Bool("quiet") {
 		writer = os.Stderr
 	}
 
 	dockerRegistryOptions := image2.DockerRegistryOptions{
 		DockerRegistryCreds: registryCreds,
-		DockerCertPath:      c.CertDir,
+		DockerCertPath:      c.String("cert-dir"),
 	}
-	if c.Flag("tls-verify").Changed {
-		dockerRegistryOptions.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!c.TlsVerify)
+	if c.IsSet("tls-verify") {
+		dockerRegistryOptions.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!c.BoolT("tls-verify"))
 	}
 
 	for _, container := range podYAML.Spec.Containers {
-		newImage, err := runtime.ImageRuntime().New(ctx, container.Image, c.SignaturePolicy, c.Authfile, writer, &dockerRegistryOptions, image2.SigningOptions{}, false, nil)
+		newImage, err := runtime.ImageRuntime().New(ctx, container.Image, c.String("signature-policy"), c.String("authfile"), writer, &dockerRegistryOptions, image2.SigningOptions{}, false)
 		if err != nil {
 			return err
 		}
@@ -145,7 +154,7 @@ func playKubeYAMLCmd(c *cliconfig.KubePlayValues) error {
 		if err != nil {
 			return err
 		}
-		ctr, err := createContainerFromCreateConfig(runtime, createConfig, ctx, pod)
+		ctr, err := createContainerFromCreateConfig(runtime, createConfig, ctx)
 		if err != nil {
 			return err
 		}

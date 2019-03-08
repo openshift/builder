@@ -43,7 +43,7 @@ func TestJSONSchema(t *testing.T) {
 	}{
 		{
 			config: &rspec.Spec{},
-			error:  "1 error occurred:\n\t* Version string empty\nRefer to: https://github.com/opencontainers/runtime-spec/blob/v1.0.1/config.md#specification-version\n\n",
+			error:  "1 error occurred:\n\n* Version string empty\nRefer to: https://github.com/opencontainers/runtime-spec/blob/v1.0.1/config.md#specification-version",
 		},
 		{
 			config: &rspec.Spec{
@@ -128,7 +128,7 @@ func TestJSONSchema(t *testing.T) {
 					},
 				},
 			},
-			error: "2 errors occurred:\n\t* linux.namespaces.0: Must validate at least one schema (anyOf)\n\t* linux.namespaces.0.type: linux.namespaces.0.type must be one of the following: \"mount\", \"pid\", \"network\", \"uts\", \"ipc\", \"user\", \"cgroup\"\n\n",
+			error: "2 errors occurred:\n\n* linux.namespaces.0: Must validate at least one schema (anyOf)\n* linux.namespaces.0.type: linux.namespaces.0.type must be one of the following: \"mount\", \"pid\", \"network\", \"uts\", \"ipc\", \"user\", \"cgroup\"",
 		},
 		{
 			config: &rspec.Spec{
@@ -716,11 +716,11 @@ func TestCheckMandatoryFields(t *testing.T) {
 	}{
 		{
 			config: &rspec.Spec{},
-			error:  "1 error occurred:\n\t* 'Spec.Version' should not be empty\n\n",
+			error:  "1 error occurred:\n\n* 'Spec.Version' should not be empty",
 		},
 		{
 			config: nil,
-			error:  "1 error occurred:\n\t* Spec can't be nil\n\n",
+			error:  "1 error occurred:\n\n* Spec can't be nil",
 		},
 		{
 			config: &rspec.Spec{
@@ -733,7 +733,7 @@ func TestCheckMandatoryFields(t *testing.T) {
 				Version: "1.0.0",
 				Root:    &rspec.Root{},
 			},
-			error: "1 error occurred:\n\t* 'Root.Path' should not be empty\n\n",
+			error: "1 error occurred:\n\n* 'Root.Path' should not be empty",
 		},
 	} {
 		t.Run(tt.error, func(t *testing.T) {

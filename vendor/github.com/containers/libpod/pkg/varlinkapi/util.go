@@ -15,7 +15,7 @@ func getContext() context.Context {
 	return context.TODO()
 }
 
-func makeListContainer(containerID string, batchInfo shared.BatchContainerStruct) iopodman.Container {
+func makeListContainer(containerID string, batchInfo shared.BatchContainerStruct) iopodman.ListContainerData {
 	var (
 		mounts []iopodman.ContainerMount
 		ports  []iopodman.ContainerPortMappings
@@ -56,12 +56,12 @@ func makeListContainer(containerID string, batchInfo shared.BatchContainerStruct
 		Ipc:    ns.IPC,
 	}
 
-	lc := iopodman.Container{
+	lc := iopodman.ListContainerData{
 		Id:               containerID,
 		Image:            batchInfo.ConConfig.RootfsImageName,
 		Imageid:          batchInfo.ConConfig.RootfsImageID,
 		Command:          batchInfo.ConConfig.Spec.Process.Args,
-		Createdat:        batchInfo.ConConfig.CreatedTime.Format(time.RFC3339),
+		Createdat:        batchInfo.ConConfig.CreatedTime.String(),
 		Runningfor:       time.Since(batchInfo.ConConfig.CreatedTime).String(),
 		Status:           batchInfo.ConState.String(),
 		Ports:            ports,
@@ -107,7 +107,7 @@ func makeListPod(pod *libpod.Pod, batchInfo shared.PsOptions) (iopodman.ListPodD
 		listPodsContainers = append(listPodsContainers, makeListPodContainers(ctr.ID(), batchInfo))
 	}
 	listPod := iopodman.ListPodData{
-		Createdat:          pod.CreatedTime().Format(time.RFC3339),
+		Createdat:          pod.CreatedTime().String(),
 		Id:                 pod.ID(),
 		Name:               pod.Name(),
 		Status:             status,

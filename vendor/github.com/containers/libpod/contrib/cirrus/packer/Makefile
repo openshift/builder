@@ -3,7 +3,7 @@
 # builder name(s) from applicable YAML file,
 # e.g for names see libpod_images.yml
 
-PACKER_VER ?= 1.3.2
+PACKER_VER ?= 1.3.1
 PACKER_DIST_FILENAME := packer_${PACKER_VER}_linux_amd64.zip
 
 # Only needed for libpod_base_images target
@@ -11,7 +11,6 @@ TIMESTAMP := $(shell date +%s)
 GOSRC ?= $(shell realpath "./../../../")
 PACKER_BASE ?= contrib/cirrus/packer
 SCRIPT_BASE ?= contrib/cirrus
-POST_MERGE_BUCKET_SUFFIX ?=
 
 # For debugging nested-virt, use
 #TTYDEV := $(shell tty)
@@ -51,6 +50,10 @@ endif
 		-var PACKER_BASE=$(PACKER_BASE) \
 		-var SCRIPT_BASE=$(SCRIPT_BASE) \
 		libpod_images.json
+	@echo ""
+	@echo "Finished.  The images mentioned above, and in packer-manifest.json"
+	@echo "can be used in .cirrus.yml as values for the 'image_name' keys"
+	@echo ""
 
 cidata.ssh:
 	ssh-keygen -f $@ -P "" -q
@@ -97,6 +100,9 @@ endif
 		-var RHEL_IMAGE_FILE=$(RHEL_IMAGE_FILE) \
 		-var RHEL_CSUM_FILE=$(RHEL_CSUM_FILE) \
 	    -var 'RHSM_COMMAND=$(RHSM_COMMAND)' \
-		-var POST_MERGE_BUCKET_SUFFIX=$(POST_MERGE_BUCKET_SUFFIX) \
 		-only $(PACKER_BUILDS) \
 		libpod_base_images.json
+	@echo ""
+	@echo "Finished.  The images mentioned above, and in packer-manifest.json"
+	@echo "can be used in .cirrus.yml as values for the *_BASE_IMAGE keys."
+	@echo ""

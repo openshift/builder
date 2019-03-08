@@ -24,7 +24,9 @@ import:
 - package: github.com/openshift/client-go
   subpackages:
   - build/clientset/versioned/typed/build/v1
+# Pin imagebuilder for buildah compatibility
 - package: github.com/openshift/imagebuilder
+  version: 36823496a6868f72bc36282cc475eb8a070c0934
   subpackages:
   - dockerclient
   - imageprogress
@@ -87,20 +89,23 @@ import:
 # we need some of the newer constants
 - package: golang.org/x/sys
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
-# builds
+# Pins for buildah
 - package: github.com/containers/buildah
-  version: master
+  version: v1.7.1
 - package: github.com/containers/image
-  version: master
+  version: v1.5
+- package: github.com/containers/libpod
+  version: v1.0
 - package: github.com/containers/storage
-  version: master
-# new enough to know how to disable itself when cross-compiling
-- package: github.com/opencontainers/selinux
-  version: master
-- package: github.com/opencontainers/runtime-tools
-  version: master
-- package: github.com/opencontainers/runtime-spec
-  version: master
-# Pins for github.com/containers/image
+  version: v1.10
 - package: github.com/opencontainers/go-digest
   version: c9281466c8b2f606084ac71339773efd177436e7
+- package: github.com/opencontainers/selinux
+  version: v1.1
+- package: github.com/opencontainers/runtime-tools
+  version: v0.8.0
+- package: github.com/opencontainers/runtime-spec
+  version: v1.0.0
+# mpb needs pin to fix resolution errors
+- package: github.com/vbauerster/mpb
+  version: v3.3.4

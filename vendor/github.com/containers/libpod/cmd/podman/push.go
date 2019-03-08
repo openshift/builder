@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/containers/libpod/cmd/podman/cliconfig"
-	"github.com/spf13/cobra"
 	"io"
 	"os"
 	"strings"
@@ -16,52 +14,76 @@ import (
 	"github.com/containers/libpod/pkg/util"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli"
 )
 
 var (
-	pushCommand     cliconfig.PushValues
+	pushFlags = []cli.Flag{
+		cli.StringFlag{
+			Name:   "signature-policy",
+			Usage:  "`pathname` of signature policy file (not usually used)",
+			Hidden: true,
+		},
+		cli.StringFlag{
+			Name:  "creds",
+			Usage: "`credentials` (USERNAME:PASSWORD) to use for authenticating to a registry",
+		},
+		cli.StringFlag{
+			Name:  "cert-dir",
+			Usage: "`pathname` of a directory containing TLS certificates and keys",
+		},
+		cli.BoolFlag{
+			Name:  "compress",
+			Usage: "compress tarball image layers when pushing to a directory using the 'dir' transport. (default is same compression type as source)",
+		},
+		cli.StringFlag{
+			Name:  "format, f",
+			Usage: "manifest type (oci, v2s1, or v2s2) to use when pushing an image using the 'dir:' transport (default is manifest type of source)",
+		},
+		cli.BoolTFlag{
+			Name:  "tls-verify",
+			Usage: "require HTTPS and verify certificates when contacting registries (default: true)",
+		},
+		cli.BoolFlag{
+			Name:  "remove-signatures",
+			Usage: "discard any pre-existing signatures in the image",
+		},
+		cli.StringFlag{
+			Name:  "sign-by",
+			Usage: "add a signature at the destination using the specified key",
+		},
+		cli.BoolFlag{
+			Name:  "quiet, q",
+			Usage: "don't output progress information when pushing images",
+		},
+		cli.StringFlag{
+			Name:  "authfile",
+			Usage: "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override. ",
+		},
+	}
 	pushDescription = fmt.Sprintf(`
    Pushes an image to a specified location.
    The Image "DESTINATION" uses a "transport":"details" format.
    See podman-push(1) section "DESTINATION" for the expected format`)
 
-	_pushCommand = &cobra.Command{
-		Use:   "push",
-		Short: "Push an image to a specified destination",
-		Long:  pushDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			pushCommand.InputArgs = args
-			pushCommand.GlobalFlags = MainGlobalOpts
-			return pushCmd(&pushCommand)
-		},
-		Example: "IMAGE DESTINATION",
+	pushCommand = cli.Command{
+		Name:         "push",
+		Usage:        "Push an image to a specified destination",
+		Description:  pushDescription,
+		Flags:        sortFlags(pushFlags),
+		Action:       pushCmd,
+		ArgsUsage:    "IMAGE DESTINATION",
+		OnUsageError: usageErrorHandler,
 	}
 )
 
-func init() {
-	pushCommand.Command = _pushCommand
-	pushCommand.SetUsageTemplate(UsageTemplate())
-	flags := pushCommand.Flags()
-	flags.MarkHidden("signature-policy")
-	flags.StringVar(&pushCommand.Authfile, "authfile", "", "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override")
-	flags.StringVar(&pushCommand.CertDir, "cert-dir", "", "`Pathname` of a directory containing TLS certificates and keys")
-	flags.BoolVar(&pushCommand.Compress, "compress", false, "Compress tarball image layers when pushing to a directory using the 'dir' transport. (default is same compression type as source)")
-	flags.StringVar(&pushCommand.Creds, "creds", "", "`Credentials` (USERNAME:PASSWORD) to use for authenticating to a registry")
-	flags.StringVarP(&pushCommand.Format, "format", "f", "", "Manifest type (oci, v2s1, or v2s2) to use when pushing an image using the 'dir:' transport (default is manifest type of source)")
-	flags.BoolVarP(&pushCommand.Quiet, "quiet", "q", false, "Don't output progress information when pushing images")
-	flags.BoolVar(&pushCommand.RemoveSignatures, "remove-signatures", false, "Discard any pre-existing signatures in the image")
-	flags.StringVar(&pushCommand.SignaturePolicy, "signature-policy", "", "`Pathname` of signature policy file (not usually used)")
-	flags.StringVar(&pushCommand.SignBy, "sign-by", "", "Add a signature at the destination using the specified key")
-	flags.BoolVar(&pushCommand.TlsVerify, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries (default: true)")
-}
-
-func pushCmd(c *cliconfig.PushValues) error {
+func pushCmd(c *cli.Context) error {
 	var (
 		registryCreds *types.DockerAuthConfig
 		destName      string
 	)
 
-	args := c.InputArgs
+	args := c.Args()
 	if len(args) == 0 || len(args) > 2 {
 		return errors.New("podman push requires at least one image name, and optionally a second to specify a different destination name")
 	}
@@ -72,40 +94,43 @@ func pushCmd(c *cliconfig.PushValues) error {
 	case 2:
 		destName = args[1]
 	}
+	if err := validateFlags(c, pushFlags); err != nil {
+		return err
+	}
 
 	// --compress and --format can only be used for the "dir" transport
 	splitArg := strings.SplitN(destName, ":", 2)
-	if c.Flag("compress").Changed || c.Flag("format").Changed {
+	if c.IsSet("compress") || c.IsSet("format") {
 		if splitArg[0] != directory.Transport.Name() {
 			return errors.Errorf("--compress and --format can be set only when pushing to a directory using the 'dir' transport")
 		}
 	}
 
-	certPath := c.CertDir
-	removeSignatures := c.RemoveSignatures
-	signBy := c.SignBy
+	certPath := c.String("cert-dir")
+	removeSignatures := c.Bool("remove-signatures")
+	signBy := c.String("sign-by")
 
-	if c.Flag("creds").Changed {
-		creds, err := util.ParseRegistryCreds(c.Creds)
+	if c.IsSet("creds") {
+		creds, err := util.ParseRegistryCreds(c.String("creds"))
 		if err != nil {
 			return err
 		}
 		registryCreds = creds
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not create runtime")
 	}
 	defer runtime.Shutdown(false)
 
 	var writer io.Writer
-	if !c.Quiet {
+	if !c.Bool("quiet") {
 		writer = os.Stderr
 	}
 
 	var manifestType string
-	if c.Flag("format").Changed {
+	if c.IsSet("format") {
 		switch c.String("format") {
 		case "oci":
 			manifestType = imgspecv1.MediaTypeImageManifest
@@ -122,8 +147,8 @@ func pushCmd(c *cliconfig.PushValues) error {
 		DockerRegistryCreds: registryCreds,
 		DockerCertPath:      certPath,
 	}
-	if c.Flag("tls-verify").Changed {
-		dockerRegistryOptions.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!c.TlsVerify)
+	if c.IsSet("tls-verify") {
+		dockerRegistryOptions.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!c.BoolT("tls-verify"))
 	}
 
 	so := image.SigningOptions{
@@ -136,7 +161,7 @@ func pushCmd(c *cliconfig.PushValues) error {
 		return err
 	}
 
-	authfile := getAuthFile(c.Authfile)
+	authfile := getAuthFile(c.String("authfile"))
 
-	return newImage.PushImageToHeuristicDestination(getContext(), destName, manifestType, authfile, c.SignaturePolicy, writer, c.Compress, so, &dockerRegistryOptions, nil)
+	return newImage.PushImageToHeuristicDestination(getContext(), destName, manifestType, authfile, c.String("signature-policy"), writer, c.Bool("compress"), so, &dockerRegistryOptions, nil)
 }

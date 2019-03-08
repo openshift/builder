@@ -1,79 +1,71 @@
 package libpodruntime
 
 import (
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/libpod/pkg/util"
+	"github.com/containers/storage"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli"
 )
 
 // GetRuntime generates a new libpod runtime configured by command line options
-func GetRuntime(c *cliconfig.PodmanCommand) (*libpod.Runtime, error) {
+func GetRuntime(c *cli.Context) (*libpod.Runtime, error) {
+	storageOpts := new(storage.StoreOptions)
 	options := []libpod.RuntimeOption{}
 
-	storageOpts, volumePath, err := util.GetDefaultStoreOptions()
+	_, volumePath, err := util.GetDefaultStoreOptions()
 	if err != nil {
 		return nil, err
 	}
 
-	uidmapFlag := c.Flags().Lookup("uidmap")
-	gidmapFlag := c.Flags().Lookup("gidmap")
-	subuidname := c.Flags().Lookup("subuidname")
-	subgidname := c.Flags().Lookup("subgidname")
-	if (uidmapFlag != nil && gidmapFlag != nil && subuidname != nil && subgidname != nil) &&
-		(uidmapFlag.Changed || gidmapFlag.Changed || subuidname.Changed || subgidname.Changed) {
-		uidmapVal, _ := c.Flags().GetStringSlice("uidmap")
-		gidmapVal, _ := c.Flags().GetStringSlice("gidmap")
-		subuidVal, _ := c.Flags().GetString("subuidname")
-		subgidVal, _ := c.Flags().GetString("subgidname")
-		mappings, err := util.ParseIDMapping(uidmapVal, gidmapVal, subuidVal, subgidVal)
+	if c.IsSet("uidmap") || c.IsSet("gidmap") || c.IsSet("subuidmap") || c.IsSet("subgidmap") {
+		mappings, err := util.ParseIDMapping(c.StringSlice("uidmap"), c.StringSlice("gidmap"), c.String("subuidmap"), c.String("subgidmap"))
 		if err != nil {
 			return nil, err
 		}
 		storageOpts.UIDMap = mappings.UIDMap
 		storageOpts.GIDMap = mappings.GIDMap
-
 	}
 
-	if c.Flags().Changed("root") {
-		storageOpts.GraphRoot = c.GlobalFlags.Root
+	if c.GlobalIsSet("root") {
+		storageOpts.GraphRoot = c.GlobalString("root")
 	}
-	if c.Flags().Changed("runroot") {
-		storageOpts.RunRoot = c.GlobalFlags.Runroot
+	if c.GlobalIsSet("runroot") {
+		storageOpts.RunRoot = c.GlobalString("runroot")
 	}
 	if len(storageOpts.RunRoot) > 50 {
 		return nil, errors.New("the specified runroot is longer than 50 characters")
 	}
-	if c.Flags().Changed("storage-driver") {
-		storageOpts.GraphDriverName = c.GlobalFlags.StorageDriver
+	if c.GlobalIsSet("storage-driver") {
+		storageOpts.GraphDriverName = c.GlobalString("storage-driver")
 	}
-	if c.Flags().Changed("storage-opt") {
-		storageOpts.GraphDriverOptions = c.GlobalFlags.StorageOpts
+	if c.GlobalIsSet("storage-opt") {
+		storageOpts.GraphDriverOptions = c.GlobalStringSlice("storage-opt")
 	}
 
-	options = append(options, libpod.WithStorageConfig(storageOpts))
+	options = append(options, libpod.WithStorageConfig(*storageOpts))
 
 	// TODO CLI flags for image config?
 	// TODO CLI flag for signature policy?
 
-	if len(c.GlobalFlags.Namespace) > 0 {
-		options = append(options, libpod.WithNamespace(c.GlobalFlags.Namespace))
+	if c.GlobalIsSet("namespace") {
+		options = append(options, libpod.WithNamespace(c.GlobalString("namespace")))
 	}
 
-	if c.Flags().Changed("runtime") {
-		options = append(options, libpod.WithOCIRuntime(c.GlobalFlags.Runtime))
+	if c.GlobalIsSet("runtime") {
+		options = append(options, libpod.WithOCIRuntime(c.GlobalString("runtime")))
 	}
 
-	if c.Flags().Changed("conmon") {
-		options = append(options, libpod.WithConmonPath(c.GlobalFlags.ConmonPath))
+	if c.GlobalIsSet("conmon") {
+		options = append(options, libpod.WithConmonPath(c.GlobalString("conmon")))
 	}
-	if c.Flags().Changed("tmpdir") {
-		options = append(options, libpod.WithTmpDir(c.GlobalFlags.TmpDir))
+	if c.GlobalIsSet("tmpdir") {
+		options = append(options, libpod.WithTmpDir(c.GlobalString("tmpdir")))
 	}
 
-	if c.Flags().Changed("cgroup-manager") {
-		options = append(options, libpod.WithCgroupManager(c.GlobalFlags.CGroupManager))
+	if c.GlobalIsSet("cgroup-manager") {
+		options = append(options, libpod.WithCgroupManager(c.GlobalString("cgroup-manager")))
 	} else {
 		if rootless.IsRootless() {
 			options = append(options, libpod.WithCgroupManager("cgroupfs"))
@@ -83,37 +75,29 @@ func GetRuntime(c *cliconfig.PodmanCommand) (*libpod.Runtime, error) {
 	// TODO flag to set libpod static dir?
 	// TODO flag to set libpod tmp dir?
 
-	if c.Flags().Changed("cni-config-dir") {
-		options = append(options, libpod.WithCNIConfigDir(c.GlobalFlags.CniConfigDir))
+	if c.GlobalIsSet("cni-config-dir") {
+		options = append(options, libpod.WithCNIConfigDir(c.GlobalString("cni-config-dir")))
 	}
-	if c.Flags().Changed("default-mounts-file") {
-		options = append(options, libpod.WithDefaultMountsFile(c.GlobalFlags.DefaultMountsFile))
+	if c.GlobalIsSet("default-mounts-file") {
+		options = append(options, libpod.WithDefaultMountsFile(c.GlobalString("default-mounts-file")))
 	}
-	if c.Flags().Changed("hooks-dir") {
-		options = append(options, libpod.WithHooksDir(c.GlobalFlags.HooksDir...))
+	if c.GlobalIsSet("hooks-dir") {
+		options = append(options, libpod.WithHooksDir(c.GlobalStringSlice("hooks-dir")...))
 	}
 
 	// TODO flag to set CNI plugins dir?
 
-	// TODO I dont think these belong here?
-	// Will follow up with a different PR to address
-	//
 	// Pod create options
-
-	infraImageFlag := c.Flags().Lookup("infra-image")
-	if infraImageFlag != nil && infraImageFlag.Changed {
-		infraImage, _ := c.Flags().GetString("infra-image")
-		options = append(options, libpod.WithDefaultInfraImage(infraImage))
+	if c.IsSet("infra-image") {
+		options = append(options, libpod.WithDefaultInfraImage(c.String("infra-image")))
 	}
 
-	infraCommandFlag := c.Flags().Lookup("infra-command")
-	if infraCommandFlag != nil && infraImageFlag.Changed {
-		infraCommand, _ := c.Flags().GetString("infra-command")
-		options = append(options, libpod.WithDefaultInfraCommand(infraCommand))
+	if c.IsSet("infra-command") {
+		options = append(options, libpod.WithDefaultInfraCommand(c.String("infra-command")))
 	}
 	options = append(options, libpod.WithVolumePath(volumePath))
-	if c.Flags().Changed("config") {
-		return libpod.NewRuntimeFromConfig(c.GlobalFlags.Config, options...)
+	if c.IsSet("config") {
+		return libpod.NewRuntimeFromConfig(c.String("config"), options...)
 	}
 	return libpod.NewRuntime(options...)
 }

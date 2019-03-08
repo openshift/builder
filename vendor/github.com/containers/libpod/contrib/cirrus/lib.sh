@@ -17,7 +17,7 @@ PACKER_BASE=${PACKER_BASE:-./contrib/cirrus/packer}
 CIRRUS_BUILD_ID=${CIRRUS_BUILD_ID:-DEADBEEF}  # a human
 CIRRUS_BASE_SHA=${CIRRUS_BASE_SHA:-HEAD}
 CIRRUS_CHANGE_IN_REPO=${CIRRUS_CHANGE_IN_REPO:-FETCH_HEAD}
-TIMESTAMPS_FILEPATH="${TIMESTAMPS_FILEPATH:-/var/tmp/timestamps}"
+START_STAMP_FILEPATH="${START_STAMP_FILEPATH:-/var/tmp/start.timestamp}"
 
 if ! [[ "$PATH" =~ "/usr/local/bin" ]]
 then
@@ -136,14 +136,11 @@ ircmsg() {
     set -e
 }
 
-record_timestamp() {
-    set +x  # sometimes it's turned on
-    req_env_var "TIMESTAMPS_FILEPATH $TIMESTAMPS_FILEPATH"
-    echo "."  # cirrus webui strips blank-lines
-    STAMPMSG="The $1 time at the tone will be:"
-    echo -e "$STAMPMSG\t$(date --iso-8601=seconds)" | \
-        tee -a $TIMESTAMPS_FILEPATH
-    echo -e "BLEEEEEEEEEEP!\n."
+start_timestamp() {
+    req_env_var "START_STAMP_FILEPATH $START_STAMP_FILEPATH"
+    [[ -r "$START_STAMP_FILEPATH" ]] || \
+        echo -e ".\nThe time at the tone will be:\n$(date --iso-8601=seconds | \
+            tee $START_STAMP_FILEPATH)\nBLEEEEEEEEEEP!\n.\n"  # Cirrus strips blank lines from output
 }
 
 # Run sudo in directory with GOPATH set
@@ -199,7 +196,7 @@ install_runc_from_git(){
     cd "$DEST"
     ooe.sh git fetch origin --tags
     ooe.sh git checkout -q "$RUNC_COMMIT"
-    ooe.sh make static BUILDTAGS="seccomp apparmor selinux"
+    ooe.sh make static BUILDTAGS="seccomp selinux"
     sudo install -m 755 runc /usr/bin/runc
     cd $wd
 }

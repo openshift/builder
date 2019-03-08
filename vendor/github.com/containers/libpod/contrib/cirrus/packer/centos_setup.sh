@@ -25,7 +25,6 @@ ooe.sh sudo yum -y update
 ooe.sh sudo yum -y install centos-release-scl epel-release
 
 ooe.sh sudo yum -y install \
-    PyYAML \
     atomic-registries \
     btrfs-progs-devel \
     bzip2 \

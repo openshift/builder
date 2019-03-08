@@ -4,82 +4,91 @@ import (
 	"os"
 	"time"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/pkg/logs"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	logsCommand     cliconfig.LogsValues
+	logsFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:   "details",
+			Usage:  "Show extra details provided to the logs",
+			Hidden: true,
+		},
+		cli.BoolFlag{
+			Name:  "follow, f",
+			Usage: "Follow log output.  The default is false",
+		},
+		cli.StringFlag{
+			Name:  "since",
+			Usage: "Show logs since TIMESTAMP",
+		},
+		cli.Uint64Flag{
+			Name:  "tail",
+			Usage: "Output the specified number of LINES at the end of the logs.  Defaults to 0, which prints all lines",
+		},
+		cli.BoolFlag{
+			Name:  "timestamps, t",
+			Usage: "Output the timestamps in the log",
+		},
+		LatestFlag,
+	}
 	logsDescription = "The podman logs command batch-retrieves whatever logs are present for a container at the time of execution.  This does not guarantee execution" +
 		"order when combined with podman run (i.e. your run may not have generated any logs at the time you execute podman logs"
-	_logsCommand = &cobra.Command{
-		Use:   "logs",
-		Short: "Fetch the logs of a container",
-		Long:  logsDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			logsCommand.InputArgs = args
-			logsCommand.GlobalFlags = MainGlobalOpts
-			return logsCmd(&logsCommand)
-		},
-		Example: "CONTAINER",
+	logsCommand = cli.Command{
+		Name:                   "logs",
+		Usage:                  "Fetch the logs of a container",
+		Description:            logsDescription,
+		Flags:                  sortFlags(logsFlags),
+		Action:                 logsCmd,
+		ArgsUsage:              "CONTAINER",
+		SkipArgReorder:         true,
+		OnUsageError:           usageErrorHandler,
+		UseShortOptionHandling: true,
 	}
 )
 
-func init() {
-	logsCommand.Command = _logsCommand
-	logsCommand.SetUsageTemplate(UsageTemplate())
-	flags := logsCommand.Flags()
-	flags.BoolVar(&logsCommand.Details, "details", false, "Show extra details provided to the logs")
-	flags.BoolVarP(&logsCommand.Follow, "follow", "f", false, "Follow log output.  The default is false")
-	flags.BoolVarP(&waitCommand.Latest, "latest", "l", false, "Act on the latest container podman is aware of")
-	flags.StringVar(&logsCommand.Since, "since", "", "Show logs since TIMESTAMP")
-	flags.Uint64Var(&logsCommand.Tail, "tail", 0, "Output the specified number of LINES at the end of the logs.  Defaults to 0, which prints all lines")
-	flags.BoolVarP(&logsCommand.Timestamps, "timestamps", "t", false, "Output the timestamps in the log")
-	flags.MarkHidden("details")
-
-	flags.SetInterspersed(false)
-
-}
-
-func logsCmd(c *cliconfig.LogsValues) error {
+func logsCmd(c *cli.Context) error {
 	var ctr *libpod.Container
 	var err error
+	if err := validateFlags(c, logsFlags); err != nil {
+		return err
+	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	args := c.InputArgs
-	if len(args) != 1 && !c.Latest {
+	args := c.Args()
+	if len(args) != 1 && !c.Bool("latest") {
 		return errors.Errorf("'podman logs' requires exactly one container name/ID")
 	}
 
 	sinceTime := time.Time{}
-	if c.Flag("since").Changed {
+	if c.IsSet("since") {
 		// parse time, error out if something is wrong
-		since, err := parseInputTime(c.Since)
+		since, err := parseInputTime(c.String("since"))
 		if err != nil {
-			return errors.Wrapf(err, "could not parse time: %q", c.Since)
+			return errors.Wrapf(err, "could not parse time: %q", c.String("since"))
 		}
 		sinceTime = since
 	}
 
 	opts := &logs.LogOptions{
-		Details:    c.Details,
-		Follow:     c.Follow,
+		Details:    c.Bool("details"),
+		Follow:     c.Bool("follow"),
 		Since:      sinceTime,
-		Tail:       c.Tail,
-		Timestamps: c.Timestamps,
+		Tail:       c.Uint64("tail"),
+		Timestamps: c.Bool("timestamps"),
 	}
 
-	if c.Latest {
+	if c.Bool("latest") {
 		ctr, err = runtime.GetLatestContainer()
 	} else {
 		ctr, err = runtime.LookupContainer(args[0])

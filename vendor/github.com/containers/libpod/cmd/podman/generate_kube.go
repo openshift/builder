@@ -2,41 +2,38 @@ package main
 
 import (
 	"fmt"
-	"github.com/containers/libpod/cmd/podman/cliconfig"
+
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/pkg/rootless"
 	podmanVersion "github.com/containers/libpod/version"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 	"k8s.io/api/core/v1"
 )
 
 var (
-	containerKubeCommand     cliconfig.GenerateKubeValues
-	containerKubeDescription = "Generate Kubernetes Pod YAML"
-	_containerKubeCommand    = &cobra.Command{
-		Use:   "kube",
-		Short: "Generate Kubernetes pod YAML for a container or pod",
-		Long:  containerKubeDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			containerKubeCommand.InputArgs = args
-			containerKubeCommand.GlobalFlags = MainGlobalOpts
-			return generateKubeYAMLCmd(&containerKubeCommand)
+	containerKubeFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "service, s",
+			Usage: "generate YAML for kubernetes service object",
 		},
-		Example: "CONTAINER|POD-NAME",
+	}
+	containerKubeDescription = "Generate Kubernetes Pod YAML"
+	containerKubeCommand     = cli.Command{
+		Name:                   "kube",
+		Usage:                  "Generate Kubernetes pod YAML for a container or pod",
+		Description:            containerKubeDescription,
+		Flags:                  sortFlags(containerKubeFlags),
+		Action:                 generateKubeYAMLCmd,
+		ArgsUsage:              "CONTAINER|POD-NAME",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	containerKubeCommand.Command = _containerKubeCommand
-	containerKubeCommand.SetUsageTemplate(UsageTemplate())
-	flags := containerKubeCommand.Flags()
-	flags.BoolVarP(&containerKubeCommand.Service, "service", "s", false, "Generate YAML for kubernetes service object")
-}
-
-func generateKubeYAMLCmd(c *cliconfig.GenerateKubeValues) error {
+func generateKubeYAMLCmd(c *cli.Context) error {
 	var (
 		podYAML           *v1.Pod
 		container         *libpod.Container
@@ -51,12 +48,12 @@ func generateKubeYAMLCmd(c *cliconfig.GenerateKubeValues) error {
 	if rootless.IsRootless() {
 		return errors.Wrapf(libpod.ErrNotImplemented, "rootless users")
 	}
-	args := c.InputArgs
+	args := c.Args()
 	if len(args) > 1 || (len(args) < 1 && !c.Bool("latest")) {
 		return errors.Errorf("you must provide one container|pod ID or name or --latest")
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
@@ -80,7 +77,7 @@ func generateKubeYAMLCmd(c *cliconfig.GenerateKubeValues) error {
 		return err
 	}
 
-	if c.Service {
+	if c.Bool("service") {
 		serviceYAML := libpod.GenerateKubeServiceFromV1Pod(podYAML, servicePorts)
 		marshalledService, err = yaml.Marshal(serviceYAML)
 		if err != nil {

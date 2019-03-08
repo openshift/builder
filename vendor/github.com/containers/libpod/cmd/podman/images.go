@@ -8,16 +8,15 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/formats"
-	"github.com/containers/libpod/cmd/podman/imagefilters"
-	"github.com/containers/libpod/libpod/adapter"
+	"github.com/containers/libpod/cmd/podman/libpodruntime"
+	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/libpod/image"
 	"github.com/docker/go-units"
-	"github.com/opencontainers/go-digest"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 type imagesTemplateParams struct {
@@ -84,95 +83,132 @@ func (a imagesSortedSize) Less(i, j int) bool {
 }
 
 var (
-	imagesCommand     cliconfig.ImagesValues
-	imagesDescription = "lists locally stored images."
-
-	_imagesCommand = &cobra.Command{
-		Use:   "images",
-		Short: "List images in local storage",
-		Long:  imagesDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			imagesCommand.InputArgs = args
-			imagesCommand.GlobalFlags = MainGlobalOpts
-			return imagesCmd(&imagesCommand)
+	imagesFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "all, a",
+			Usage: "Show all images (default hides intermediate images)",
 		},
-		Example: "",
+		cli.BoolFlag{
+			Name:  "digests",
+			Usage: "show digests",
+		},
+		cli.StringSliceFlag{
+			Name:  "filter, f",
+			Usage: "filter output based on conditions provided (default [])",
+		},
+		cli.StringFlag{
+			Name:  "format",
+			Usage: "Change the output format to JSON or a Go template",
+		},
+		cli.BoolFlag{
+			Name:  "noheading, n",
+			Usage: "do not print column headings",
+		},
+		cli.BoolFlag{
+			Name:  "no-trunc, notruncate",
+			Usage: "do not truncate output",
+		},
+		cli.BoolFlag{
+			Name:  "quiet, q",
+			Usage: "display only image IDs",
+		},
+		cli.StringFlag{
+			Name:  "sort",
+			Usage: "Sort by created, id, repository, size, or tag",
+			Value: "created",
+		},
+	}
+
+	imagesDescription = "lists locally stored images."
+	imagesCommand     = cli.Command{
+		Name:                   "images",
+		Usage:                  "List images in local storage",
+		Description:            imagesDescription,
+		Flags:                  sortFlags(imagesFlags),
+		Action:                 imagesCmd,
+		ArgsUsage:              "",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
+	}
+	lsImagesCommand = cli.Command{
+		Name:                   "list",
+		Aliases:                []string{"ls"},
+		Usage:                  "list images in local storage",
+		Description:            imagesDescription,
+		Flags:                  imagesFlags,
+		Action:                 imagesCmd,
+		ArgsUsage:              "",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	imagesCommand.Command = _imagesCommand
-	imagesCommand.SetUsageTemplate(UsageTemplate())
-	flags := imagesCommand.Flags()
-	flags.BoolVarP(&imagesCommand.All, "all", "a", false, "Show all images (default hides intermediate images)")
-	flags.BoolVar(&imagesCommand.Digests, "digests", false, "Show digests")
-	flags.StringSliceVarP(&imagesCommand.Filter, "filter", "f", []string{}, "Filter output based on conditions provided (default [])")
-	flags.StringVar(&imagesCommand.Format, "format", "", "Change the output format to JSON or a Go template")
-	flags.BoolVarP(&imagesCommand.Noheading, "noheading", "n", false, "Do not print column headings")
-	// TODO Need to learn how to deal with second name being a string instead of a char.
-	// This needs to be "no-trunc, notruncate"
-	flags.BoolVar(&imagesCommand.NoTrunc, "no-trunc", false, "Do not truncate output")
-	flags.BoolVarP(&imagesCommand.Quiet, "quiet", "q", false, "Display only image IDs")
-	flags.StringVar(&imagesCommand.Sort, "sort", "created", "Sort by created, id, repository, size, or tag")
-
-}
-
-func imagesCmd(c *cliconfig.ImagesValues) error {
+func imagesCmd(c *cli.Context) error {
 	var (
-		filterFuncs []imagefilters.ResultFilter
-		newImage    *adapter.ContainerImage
+		filterFuncs []image.ResultFilter
+		newImage    *image.Image
 	)
+	if err := validateFlags(c, imagesFlags); err != nil {
+		return err
+	}
 
-	runtime, err := adapter.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "Could not get runtime")
 	}
 	defer runtime.Shutdown(false)
-	if len(c.InputArgs) == 1 {
-		newImage, err = runtime.NewImageFromLocal(c.InputArgs[0])
+	if len(c.Args()) == 1 {
+		newImage, err = runtime.ImageRuntime().NewFromLocal(c.Args().Get(0))
 		if err != nil {
 			return err
 		}
 	}
 
-	if len(c.InputArgs) > 1 {
+	if len(c.Args()) > 1 {
 		return errors.New("'podman images' requires at most 1 argument")
 	}
 
 	ctx := getContext()
 
-	if len(c.Filter) > 0 || newImage != nil {
-		filterFuncs, err = CreateFilterFuncs(ctx, runtime, c.Filter, newImage)
+	if len(c.StringSlice("filter")) > 0 || newImage != nil {
+		filterFuncs, err = CreateFilterFuncs(ctx, runtime, c, newImage)
 		if err != nil {
 			return err
 		}
 	}
 
 	opts := imagesOptions{
-		quiet:     c.Quiet,
-		noHeading: c.Noheading,
-		noTrunc:   c.NoTrunc,
-		digests:   c.Digests,
-		format:    c.Format,
-		sort:      c.Sort,
-		all:       c.All,
+		quiet:     c.Bool("quiet"),
+		noHeading: c.Bool("noheading"),
+		noTrunc:   c.Bool("no-trunc"),
+		digests:   c.Bool("digests"),
+		format:    c.String("format"),
+		sort:      c.String("sort"),
+		all:       c.Bool("all"),
 	}
 
 	opts.outputformat = opts.setOutputFormat()
-	images, err := runtime.GetImages()
+	/*
+		podman does not implement --all for images
+
+		intermediate images are only generated during the build process.  they are
+		children to the image once built. until buildah supports caching builds,
+		it will not generate these intermediate images.
+	*/
+	images, err := runtime.ImageRuntime().GetImages()
 	if err != nil {
 		return errors.Wrapf(err, "unable to get images")
 	}
 
-	var filteredImages []*adapter.ContainerImage
-	//filter the images
-	if len(c.Filter) > 0 || newImage != nil {
-		filteredImages = imagefilters.FilterImages(images, filterFuncs)
+	var filteredImages []*image.Image
+	// filter the images
+	if len(c.StringSlice("filter")) > 0 || newImage != nil {
+		filteredImages = image.FilterImages(images, filterFuncs)
 	} else {
 		filteredImages = images
 	}
 
-	return generateImagesOutput(ctx, filteredImages, opts)
+	return generateImagesOutput(ctx, runtime, filteredImages, opts)
 }
 
 func (i imagesOptions) setOutputFormat() string {
@@ -227,7 +263,7 @@ func sortImagesOutput(sortBy string, imagesOutput imagesSorted) imagesSorted {
 }
 
 // getImagesTemplateOutput returns the images information to be printed in human readable format
-func getImagesTemplateOutput(ctx context.Context, images []*adapter.ContainerImage, opts imagesOptions) (imagesOutput imagesSorted) {
+func getImagesTemplateOutput(ctx context.Context, runtime *libpod.Runtime, images []*image.Image, opts imagesOptions) (imagesOutput imagesSorted) {
 	for _, img := range images {
 		// If all is false and the image doesn't have a name, check to see if the top layer of the image is a parent
 		// to another image's top layer. If it is, then it is an intermediate image so don't print out if the --all flag
@@ -283,7 +319,7 @@ func getImagesTemplateOutput(ctx context.Context, images []*adapter.ContainerIma
 }
 
 // getImagesJSONOutput returns the images information in its raw form
-func getImagesJSONOutput(ctx context.Context, images []*adapter.ContainerImage) (imagesOutput []imagesJSONParams) {
+func getImagesJSONOutput(ctx context.Context, runtime *libpod.Runtime, images []*image.Image) (imagesOutput []imagesJSONParams) {
 	for _, img := range images {
 		size, err := img.Size(ctx)
 		if err != nil {
@@ -303,8 +339,7 @@ func getImagesJSONOutput(ctx context.Context, images []*adapter.ContainerImage) 
 
 // generateImagesOutput generates the images based on the format provided
 
-func generateImagesOutput(ctx context.Context, images []*adapter.ContainerImage, opts imagesOptions) error {
-	templateMap := GenImageOutputMap()
+func generateImagesOutput(ctx context.Context, runtime *libpod.Runtime, images []*image.Image, opts imagesOptions) error {
 	if len(images) == 0 {
 		return nil
 	}
@@ -312,21 +347,19 @@ func generateImagesOutput(ctx context.Context, images []*adapter.ContainerImage,
 
 	switch opts.format {
 	case formats.JSONString:
-		imagesOutput := getImagesJSONOutput(ctx, images)
+		imagesOutput := getImagesJSONOutput(ctx, runtime, images)
 		out = formats.JSONStructArray{Output: imagesToGeneric([]imagesTemplateParams{}, imagesOutput)}
 	default:
-		imagesOutput := getImagesTemplateOutput(ctx, images, opts)
-		out = formats.StdoutTemplateArray{Output: imagesToGeneric(imagesOutput, []imagesJSONParams{}), Template: opts.outputformat, Fields: templateMap}
+		imagesOutput := getImagesTemplateOutput(ctx, runtime, images, opts)
+		out = formats.StdoutTemplateArray{Output: imagesToGeneric(imagesOutput, []imagesJSONParams{}), Template: opts.outputformat, Fields: imagesOutput[0].HeaderMap()}
 	}
 	return formats.Writer(out).Out()
 }
 
-// GenImageOutputMap generates the map used for outputting the images header
-// without requiring a populated image. This replaces the previous HeaderMap
-// call.
-func GenImageOutputMap() map[string]string {
-	io := imagesTemplateParams{}
-	v := reflect.Indirect(reflect.ValueOf(io))
+// HeaderMap produces a generic map of "headers" based on a line
+// of output
+func (i *imagesTemplateParams) HeaderMap() map[string]string {
+	v := reflect.Indirect(reflect.ValueOf(i))
 	values := make(map[string]string)
 
 	for i := 0; i < v.NumField(); i++ {
@@ -342,34 +375,34 @@ func GenImageOutputMap() map[string]string {
 
 // CreateFilterFuncs returns an array of filter functions based on the user inputs
 // and is later used to filter images for output
-func CreateFilterFuncs(ctx context.Context, r *adapter.LocalRuntime, filters []string, img *adapter.ContainerImage) ([]imagefilters.ResultFilter, error) {
-	var filterFuncs []imagefilters.ResultFilter
-	for _, filter := range filters {
+func CreateFilterFuncs(ctx context.Context, r *libpod.Runtime, c *cli.Context, img *image.Image) ([]image.ResultFilter, error) {
+	var filterFuncs []image.ResultFilter
+	for _, filter := range c.StringSlice("filter") {
 		splitFilter := strings.Split(filter, "=")
 		switch splitFilter[0] {
 		case "before":
-			before, err := r.NewImageFromLocal(splitFilter[1])
+			before, err := r.ImageRuntime().NewFromLocal(splitFilter[1])
 			if err != nil {
 				return nil, errors.Wrapf(err, "unable to find image %s in local stores", splitFilter[1])
 			}
-			filterFuncs = append(filterFuncs, imagefilters.CreatedBeforeFilter(before.Created()))
+			filterFuncs = append(filterFuncs, image.CreatedBeforeFilter(before.Created()))
 		case "after":
-			after, err := r.NewImageFromLocal(splitFilter[1])
+			after, err := r.ImageRuntime().NewFromLocal(splitFilter[1])
 			if err != nil {
 				return nil, errors.Wrapf(err, "unable to find image %s in local stores", splitFilter[1])
 			}
-			filterFuncs = append(filterFuncs, imagefilters.CreatedAfterFilter(after.Created()))
+			filterFuncs = append(filterFuncs, image.CreatedAfterFilter(after.Created()))
 		case "dangling":
-			filterFuncs = append(filterFuncs, imagefilters.DanglingFilter())
+			filterFuncs = append(filterFuncs, image.DanglingFilter())
 		case "label":
 			labelFilter := strings.Join(splitFilter[1:], "=")
-			filterFuncs = append(filterFuncs, imagefilters.LabelFilter(ctx, labelFilter))
+			filterFuncs = append(filterFuncs, image.LabelFilter(ctx, labelFilter))
 		default:
 			return nil, errors.Errorf("invalid filter %s ", splitFilter[0])
 		}
 	}
 	if img != nil {
-		filterFuncs = append(filterFuncs, imagefilters.OutputImageFilter(img))
+		filterFuncs = append(filterFuncs, image.OutputImageFilter(img))
 	}
 	return filterFuncs, nil
 }

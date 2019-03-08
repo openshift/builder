@@ -14,17 +14,6 @@ Fedora 27 and later provide Podman via the package manager.
 sudo dnf install -y podman
 ```
 
-*Optional*: If you've already installed podman on Fedora and you're feeling
-adventerous, you can test the very latest podman in Fedora's `updates-testing`
-repository before it goes out to all Fedora users.
-```console
-sudo yum distro-sync --enablerepo=updates-testing podman
-```
-
-If you use a newer podman package from Fedora's `updates-testing`, we would
-appreciate your `+1` feedback in [Bodhi, Fedora's update management
-system](https://bodhi.fedoraproject.org/updates/?packages=podman).
-
 ## Install Podman on Fedora from Source
 Many of the basic components to run Podman are readily available from the Fedora RPM repositories.
 In this section, we will help you install all the runtime and build dependencies for Podman,
@@ -123,7 +112,7 @@ sudo make install PREFIX=/usr
 This sample container will run a very basic httpd server that serves only its index
 page.
 ```console
-podman run -dt -e HTTPD_VAR_RUN=/var/run/httpd -e HTTPD_MAIN_CONF_D_PATH=/etc/httpd/conf.d \
+sudo podman run -dt -e HTTPD_VAR_RUN=/var/run/httpd -e HTTPD_MAIN_CONF_D_PATH=/etc/httpd/conf.d \
                   -e HTTPD_MAIN_CONF_PATH=/etc/httpd/conf \
                   -e HTTPD_CONTAINER_SCRIPTS_PATH=/usr/share/container-scripts/httpd/ \
                   registry.fedoraproject.org/f27/httpd /usr/bin/run-httpd
@@ -134,7 +123,7 @@ will print the container ID after it has run.
 ### Listing running containers
 The Podman *ps* command is used to list creating and running containers.
 ```console
-podman ps
+sudo podman ps
 ```
 
 Note: If you add *-a* to the *ps* command, Podman will show all containers.

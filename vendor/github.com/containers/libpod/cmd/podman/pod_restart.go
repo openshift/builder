@@ -3,44 +3,40 @@ package main
 import (
 	"fmt"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	podRestartCommand     cliconfig.PodRestartValues
-	podRestartDescription = `Restarts one or more pods. The pod ID or name can be used.`
-	_podRestartCommand    = &cobra.Command{
-		Use:   "restart",
-		Short: "Restart one or more pods",
-		Long:  podRestartDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			podRestartCommand.InputArgs = args
-			podRestartCommand.GlobalFlags = MainGlobalOpts
-			return podRestartCmd(&podRestartCommand)
+	podRestartFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "all, a",
+			Usage: "restart all pods",
 		},
-		Example: "POD-NAME|POD-ID [POD-NAME|POD-ID ...]",
+		LatestPodFlag,
+	}
+	podRestartDescription = `Restarts one or more pods. The pod ID or name can be used.`
+
+	podRestartCommand = cli.Command{
+		Name:                   "restart",
+		Usage:                  "Restart one or more pods",
+		Description:            podRestartDescription,
+		Flags:                  sortFlags(podRestartFlags),
+		Action:                 podRestartCmd,
+		ArgsUsage:              "POD-NAME|POD-ID [POD-NAME|POD-ID ...]",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	podRestartCommand.Command = _podRestartCommand
-	podRestartCommand.SetUsageTemplate(UsageTemplate())
-	flags := podRestartCommand.Flags()
-	flags.BoolVarP(&podRestartCommand.All, "all", "a", false, "Restart all running pods")
-	flags.BoolVarP(&podRestartCommand.Latest, "latest", "l", false, "Restart the latest pod podman is aware of")
-
-}
-
-func podRestartCmd(c *cliconfig.PodRestartValues) error {
-	if err := checkMutuallyExclusiveFlags(&c.PodmanCommand); err != nil {
+func podRestartCmd(c *cli.Context) error {
+	if err := checkMutuallyExclusiveFlags(c); err != nil {
 		return err
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
@@ -49,7 +45,7 @@ func podRestartCmd(c *cliconfig.PodRestartValues) error {
 	// getPodsFromContext returns an error when a requested pod
 	// isn't found. The only fatal error scenerio is when there are no pods
 	// in which case the following loop will be skipped.
-	pods, lastError := getPodsFromContext(&c.PodmanCommand, runtime)
+	pods, lastError := getPodsFromContext(c, runtime)
 
 	ctx := getContext()
 	for _, pod := range pods {

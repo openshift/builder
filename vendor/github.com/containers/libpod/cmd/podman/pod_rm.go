@@ -3,62 +3,60 @@ package main
 import (
 	"fmt"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	podRmCommand     cliconfig.PodRmValues
+	podRmFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "all, a",
+			Usage: "Remove all pods",
+		},
+		cli.BoolFlag{
+			Name:  "force, f",
+			Usage: "Force removal of a running pod by first stopping all containers, then removing all containers in the pod.  The default is false",
+		},
+		LatestPodFlag,
+	}
 	podRmDescription = fmt.Sprintf(`
 podman rm will remove one or more pods from the host. The pod name or ID can
 be used.  A pod with containers will not be removed without --force.
 If --force is specified, all containers will be stopped, then removed.
 `)
-	_podRmCommand = &cobra.Command{
-		Use:   "rm",
-		Short: "Remove one or more pods",
-		Long:  podRmDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			podRmCommand.InputArgs = args
-			podRmCommand.GlobalFlags = MainGlobalOpts
-			return podRmCmd(&podRmCommand)
-		},
-		Example: "[POD ...]",
+	podRmCommand = cli.Command{
+		Name:                   "rm",
+		Usage:                  "Remove one or more pods",
+		Description:            podRmDescription,
+		Flags:                  sortFlags(podRmFlags),
+		Action:                 podRmCmd,
+		ArgsUsage:              "[POD ...]",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	podRmCommand.Command = _podRmCommand
-	podRmCommand.SetUsageTemplate(UsageTemplate())
-	flags := podRmCommand.Flags()
-	flags.BoolVarP(&podRmCommand.All, "all", "a", false, "Remove all running pods")
-	flags.BoolVarP(&podRmCommand.Force, "force", "f", false, "Force removal of a running pod by first stopping all containers, then removing all containers in the pod.  The default is false")
-	flags.BoolVarP(&podRmCommand.Latest, "latest", "l", false, "Remove the latest pod podman is aware of")
-
-}
-
 // saveCmd saves the image to either docker-archive or oci
-func podRmCmd(c *cliconfig.PodRmValues) error {
-	if err := checkMutuallyExclusiveFlags(&c.PodmanCommand); err != nil {
+func podRmCmd(c *cli.Context) error {
+	if err := checkMutuallyExclusiveFlags(c); err != nil {
 		return err
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
 	ctx := getContext()
-	force := c.Force
+	force := c.Bool("force")
 
 	// getPodsFromContext returns an error when a requested pod
 	// isn't found. The only fatal error scenerio is when there are no pods
 	// in which case the following loop will be skipped.
-	pods, lastError := getPodsFromContext(&c.PodmanCommand, runtime)
+	pods, lastError := getPodsFromContext(c, runtime)
 
 	for _, pod := range pods {
 		err = runtime.RemovePod(ctx, pod, force, force)

@@ -76,11 +76,9 @@ func (ir *Runtime) getPullRefPair(srcRef types.ImageReference, destName string) 
 	decomposedDest, err := decompose(destName)
 	if err == nil && !decomposedDest.hasRegistry {
 		// If the image doesn't have a registry, set it as the default repo
-		ref, err := decomposedDest.referenceWithRegistry(DefaultLocalRegistry)
-		if err != nil {
-			return pullRefPair{}, err
-		}
-		destName = ref.String()
+		decomposedDest.registry = DefaultLocalRegistry
+		decomposedDest.hasRegistry = true
+		destName = decomposedDest.assemble()
 	}
 
 	reference := destName
@@ -193,7 +191,7 @@ func (ir *Runtime) pullGoalFromImageReference(ctx context.Context, srcRef types.
 
 // pullImageFromHeuristicSource pulls an image based on inputName, which is heuristically parsed and may involve configured registries.
 // Use pullImageFromReference if the source is known precisely.
-func (ir *Runtime) pullImageFromHeuristicSource(ctx context.Context, inputName string, writer io.Writer, authfile, signaturePolicyPath string, signingOptions SigningOptions, dockerOptions *DockerRegistryOptions, label *string) ([]string, error) {
+func (ir *Runtime) pullImageFromHeuristicSource(ctx context.Context, inputName string, writer io.Writer, authfile, signaturePolicyPath string, signingOptions SigningOptions, dockerOptions *DockerRegistryOptions) ([]string, error) {
 	var goal *pullGoal
 	sc := GetSystemContext(signaturePolicyPath, authfile, false)
 	srcRef, err := alltransports.ParseImageName(inputName)
@@ -209,7 +207,7 @@ func (ir *Runtime) pullImageFromHeuristicSource(ctx context.Context, inputName s
 			return nil, errors.Wrapf(err, "error determining pull goal for image %q", inputName)
 		}
 	}
-	return ir.doPullImage(ctx, sc, *goal, writer, signingOptions, dockerOptions, label)
+	return ir.doPullImage(ctx, sc, *goal, writer, signingOptions, dockerOptions)
 }
 
 // pullImageFromReference pulls an image from a types.imageReference.
@@ -219,11 +217,11 @@ func (ir *Runtime) pullImageFromReference(ctx context.Context, srcRef types.Imag
 	if err != nil {
 		return nil, errors.Wrapf(err, "error determining pull goal for image %q", transports.ImageName(srcRef))
 	}
-	return ir.doPullImage(ctx, sc, *goal, writer, signingOptions, dockerOptions, nil)
+	return ir.doPullImage(ctx, sc, *goal, writer, signingOptions, dockerOptions)
 }
 
 // doPullImage is an internal helper interpreting pullGoal. Almost everyone should call one of the callers of doPullImage instead.
-func (ir *Runtime) doPullImage(ctx context.Context, sc *types.SystemContext, goal pullGoal, writer io.Writer, signingOptions SigningOptions, dockerOptions *DockerRegistryOptions, label *string) ([]string, error) {
+func (ir *Runtime) doPullImage(ctx context.Context, sc *types.SystemContext, goal pullGoal, writer io.Writer, signingOptions SigningOptions, dockerOptions *DockerRegistryOptions) ([]string, error) {
 	policyContext, err := getPolicyContext(sc)
 	if err != nil {
 		return nil, err
@@ -231,12 +229,8 @@ func (ir *Runtime) doPullImage(ctx context.Context, sc *types.SystemContext, goa
 	defer policyContext.Destroy()
 
 	systemRegistriesConfPath := registries.SystemRegistriesConfPath()
-
-	var (
-		images     []string
-		pullErrors *multierror.Error
-	)
-
+	var images []string
+	var pullErrors *multierror.Error
 	for _, imageInfo := range goal.refPairs {
 		copyOptions := getCopyOptions(sc, writer, dockerOptions, nil, signingOptions, "", nil)
 		copyOptions.SourceCtx.SystemRegistriesConfPath = systemRegistriesConfPath // FIXME: Set this more globally.  Probably no reason not to have it in every types.SystemContext, and to compute the value just once in one place.
@@ -244,13 +238,6 @@ func (ir *Runtime) doPullImage(ctx context.Context, sc *types.SystemContext, goa
 		if writer != nil && (imageInfo.srcRef.Transport().Name() == DockerTransport || imageInfo.srcRef.Transport().Name() == AtomicTransport) {
 			io.WriteString(writer, fmt.Sprintf("Trying to pull %s...", imageInfo.image))
 		}
-		// If the label is not nil, check if the label exists and if not, return err
-		if label != nil {
-			if err := checkRemoteImageForLabel(ctx, *label, imageInfo, sc); err != nil {
-				return nil, err
-			}
-		}
-
 		_, err = cp.Image(ctx, policyContext, imageInfo.dstRef, imageInfo.srcRef, copyOptions)
 		if err != nil {
 			pullErrors = multierror.Append(pullErrors, err)
@@ -283,6 +270,12 @@ func (ir *Runtime) doPullImage(ctx context.Context, sc *types.SystemContext, goa
 	return images, nil
 }
 
+// hasShaInInputName returns a bool as to whether the user provided an image name that includes
+// a reference to a specific sha
+func hasShaInInputName(inputName string) bool {
+	return strings.Contains(inputName, "@sha256:")
+}
+
 // pullGoalFromPossiblyUnqualifiedName looks at inputName and determines the possible
 // image references to try pulling in combination with the registries.conf file as well
 func (ir *Runtime) pullGoalFromPossiblyUnqualifiedName(inputName string) (*pullGoal, error) {
@@ -291,11 +284,31 @@ func (ir *Runtime) pullGoalFromPossiblyUnqualifiedName(inputName string) (*pullG
 		return nil, err
 	}
 	if decomposedImage.hasRegistry {
-		srcRef, err := docker.ParseReference("//" + inputName)
+		var imageName, destName string
+		if hasShaInInputName(inputName) {
+			imageName = fmt.Sprintf("%s%s", decomposedImage.transport, inputName)
+		} else {
+			imageName = decomposedImage.assembleWithTransport()
+		}
+		srcRef, err := alltransports.ParseImageName(imageName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to parse '%s'", inputName)
 		}
-		return ir.getSinglePullRefPairGoal(srcRef, inputName)
+		if hasShaInInputName(inputName) {
+			destName = decomposedImage.assemble()
+		} else {
+			destName = inputName
+		}
+		destRef, err := is.Transport.ParseStoreReference(ir.store, destName)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error parsing dest reference name %#v", destName)
+		}
+		ps := pullRefPair{
+			image:  inputName,
+			srcRef: srcRef,
+			dstRef: destRef,
+		}
+		return singlePullRefPairGoal(ps), nil
 	}
 
 	searchRegistries, err := registries.GetRegistries()
@@ -304,18 +317,22 @@ func (ir *Runtime) pullGoalFromPossiblyUnqualifiedName(inputName string) (*pullG
 	}
 	var refPairs []pullRefPair
 	for _, registry := range searchRegistries {
-		ref, err := decomposedImage.referenceWithRegistry(registry)
-		if err != nil {
-			return nil, err
+		decomposedImage.registry = registry
+		imageName := decomposedImage.assembleWithTransport()
+		if hasShaInInputName(inputName) {
+			imageName = fmt.Sprintf("%s%s/%s", decomposedImage.transport, registry, inputName)
 		}
-		imageName := ref.String()
-		srcRef, err := docker.ParseReference("//" + imageName)
+		srcRef, err := alltransports.ParseImageName(imageName)
 		if err != nil {
-			return nil, errors.Wrapf(err, "unable to parse '%s'", imageName)
+			return nil, errors.Wrapf(err, "unable to parse '%s'", inputName)
 		}
-		ps, err := ir.getPullRefPair(srcRef, imageName)
+		ps := pullRefPair{
+			image:  decomposedImage.assemble(),
+			srcRef: srcRef,
+		}
+		ps.dstRef, err = is.Transport.ParseStoreReference(ir.store, ps.image)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "error parsing dest reference name %#v", ps.image)
 		}
 		refPairs = append(refPairs, ps)
 	}
@@ -325,24 +342,4 @@ func (ir *Runtime) pullGoalFromPossiblyUnqualifiedName(inputName string) (*pullG
 		usedSearchRegistries: true,
 		searchedRegistries:   searchRegistries,
 	}, nil
-}
-
-// checkRemoteImageForLabel checks if the remote image has a specific label. if the label exists, we
-// return nil, else we return an error
-func checkRemoteImageForLabel(ctx context.Context, label string, imageInfo pullRefPair, sc *types.SystemContext) error {
-	labelImage, err := imageInfo.srcRef.NewImage(ctx, sc)
-	if err != nil {
-		return err
-	}
-	remoteInspect, err := labelImage.Inspect(ctx)
-	if err != nil {
-		return err
-	}
-	// Labels are case insensitive; so we iterate instead of simple lookup
-	for k := range remoteInspect.Labels {
-		if strings.ToLower(label) == strings.ToLower(k) {
-			return nil
-		}
-	}
-	return errors.Errorf("%s has no label %s", imageInfo.image, label)
 }

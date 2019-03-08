@@ -4,6 +4,7 @@ package libpod
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -490,7 +491,7 @@ func (c *Container) checkpoint(ctx context.Context, options ContainerCheckpointO
 	// Save network.status. This is needed to restore the container with
 	// the same IP. Currently limited to one IP address in a container
 	// with one interface.
-	formatJSON, err := json.MarshalIndent(c.state.NetworkStatus, "", "     ")
+	formatJSON, err := json.MarshalIndent(c.state.NetworkStatus, "", "	")
 	if err != nil {
 		return err
 	}

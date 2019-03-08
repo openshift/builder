@@ -214,15 +214,8 @@ func CheckProfileAndLoadDefault(name string) (string, error) {
 		return name, nil
 	}
 
-	// AppArmor is not supported in rootless mode as it requires root
-	// privileges.  Return an error in case a specific profile is specified.
-	if rootless.IsRootless() {
-		if name != "" {
-			return "", errors.Wrapf(ErrApparmorRootless, "cannot load AppArmor profile %q", name)
-		} else {
-			logrus.Debug("skipping loading default AppArmor profile (rootless mode)")
-			return "", nil
-		}
+	if name != "" && rootless.IsRootless() {
+		return "", errors.Wrapf(ErrApparmorRootless, "cannot load AppArmor profile %q", name)
 	}
 
 	if name != "" && !runcaa.IsEnabled() {
@@ -237,7 +230,7 @@ func CheckProfileAndLoadDefault(name string) (string, error) {
 			return "", err
 		}
 		if !isLoaded {
-			return "", fmt.Errorf("AppArmor profile %q specified but not loaded", name)
+			return "", fmt.Errorf("AppArmor profile %q specified but not loaded")
 		}
 		return name, nil
 	}

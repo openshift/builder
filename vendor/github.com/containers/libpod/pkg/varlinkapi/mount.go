@@ -6,7 +6,7 @@ import (
 
 // ListContainerMounts ...
 func (i *LibpodAPI) ListContainerMounts(call iopodman.VarlinkCall) error {
-	mounts := make(map[string]string)
+	var mounts []string
 	allContainers, err := i.Runtime.GetAllContainers()
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
@@ -17,7 +17,7 @@ func (i *LibpodAPI) ListContainerMounts(call iopodman.VarlinkCall) error {
 			return call.ReplyErrorOccurred(err.Error())
 		}
 		if mounted {
-			mounts[container.ID()] = mountPoint
+			mounts = append(mounts, mountPoint)
 		}
 	}
 	return call.ReplyListContainerMounts(mounts)

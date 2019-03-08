@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"syscall"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/cmd/podman/varlink"
 	"github.com/containers/libpod/libpod"
-	cc "github.com/containers/libpod/pkg/spec"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/pkg/errors"
 )
@@ -21,7 +19,7 @@ import (
 // ListContainers ...
 func (i *LibpodAPI) ListContainers(call iopodman.VarlinkCall) error {
 	var (
-		listContainers []iopodman.Container
+		listContainers []iopodman.ListContainerData
 	)
 
 	containers, err := i.Runtime.GetAllContainers()
@@ -44,10 +42,10 @@ func (i *LibpodAPI) ListContainers(call iopodman.VarlinkCall) error {
 }
 
 // GetContainer ...
-func (i *LibpodAPI) GetContainer(call iopodman.VarlinkCall, id string) error {
-	ctr, err := i.Runtime.LookupContainer(id)
+func (i *LibpodAPI) GetContainer(call iopodman.VarlinkCall, name string) error {
+	ctr, err := i.Runtime.LookupContainer(name)
 	if err != nil {
-		return call.ReplyContainerNotFound(id)
+		return call.ReplyContainerNotFound(name)
 	}
 	opts := shared.PsOptions{
 		Namespace: true,
@@ -70,12 +68,7 @@ func (i *LibpodAPI) InspectContainer(call iopodman.VarlinkCall, name string) err
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
-	artifact, err := getArtifact(ctr)
-	if err != nil {
-		return call.ReplyErrorOccurred(err.Error())
-	}
-
-	data, err := shared.GetCtrInspectInfo(ctr.Config(), inspectInfo, artifact)
+	data, err := shared.GetCtrInspectInfo(ctr, inspectInfo)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
@@ -195,25 +188,15 @@ func (i *LibpodAPI) ListContainerChanges(call iopodman.VarlinkCall, name string)
 }
 
 // ExportContainer ...
-func (i *LibpodAPI) ExportContainer(call iopodman.VarlinkCall, name, outPath string) error {
+func (i *LibpodAPI) ExportContainer(call iopodman.VarlinkCall, name, path string) error {
 	ctr, err := i.Runtime.LookupContainer(name)
 	if err != nil {
 		return call.ReplyContainerNotFound(name)
 	}
-	outputFile, err := ioutil.TempFile("", "varlink_recv")
-	if err != nil {
+	if err := ctr.Export(path); err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
-
-	defer outputFile.Close()
-	if outPath == "" {
-		outPath = outputFile.Name()
-	}
-	if err := ctr.Export(outPath); err != nil {
-		return call.ReplyErrorOccurred(err.Error())
-	}
-	return call.ReplyExportContainer(outPath)
-
+	return call.ReplyExportContainer(path)
 }
 
 // GetContainerStats ...
@@ -245,6 +228,11 @@ func (i *LibpodAPI) GetContainerStats(call iopodman.VarlinkCall, name string) er
 		Pids:         int64(containerStats.PIDs),
 	}
 	return call.ReplyGetContainerStats(cs)
+}
+
+// ResizeContainerTty ...
+func (i *LibpodAPI) ResizeContainerTty(call iopodman.VarlinkCall) error {
+	return call.ReplyMethodNotImplemented("ResizeContainerTty")
 }
 
 // StartContainer ...
@@ -319,6 +307,16 @@ func (i *LibpodAPI) KillContainer(call iopodman.VarlinkCall, name string, signal
 	return call.ReplyKillContainer(ctr.ID())
 }
 
+// UpdateContainer ...
+func (i *LibpodAPI) UpdateContainer(call iopodman.VarlinkCall) error {
+	return call.ReplyMethodNotImplemented("UpdateContainer")
+}
+
+// RenameContainer ...
+func (i *LibpodAPI) RenameContainer(call iopodman.VarlinkCall) error {
+	return call.ReplyMethodNotImplemented("RenameContainer")
+}
+
 // PauseContainer ...
 func (i *LibpodAPI) PauseContainer(call iopodman.VarlinkCall, name string) error {
 	ctr, err := i.Runtime.LookupContainer(name)
@@ -341,6 +339,12 @@ func (i *LibpodAPI) UnpauseContainer(call iopodman.VarlinkCall, name string) err
 		return call.ReplyErrorOccurred(err.Error())
 	}
 	return call.ReplyUnpauseContainer(ctr.ID())
+}
+
+// AttachToContainer ...
+// TODO: DO we also want a different one for websocket?
+func (i *LibpodAPI) AttachToContainer(call iopodman.VarlinkCall) error {
+	return call.ReplyMethodNotImplemented("AttachToContainer")
 }
 
 // WaitContainer ...
@@ -457,82 +461,4 @@ func (i *LibpodAPI) ContainerRestore(call iopodman.VarlinkCall, name string, kee
 		return call.ReplyErrorOccurred(err.Error())
 	}
 	return call.ReplyContainerRestore(ctr.ID())
-}
-
-func getArtifact(ctr *libpod.Container) (*cc.CreateConfig, error) {
-	var createArtifact cc.CreateConfig
-	artifact, err := ctr.GetArtifact("create-config")
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(artifact, &createArtifact); err != nil {
-		return nil, err
-	}
-	return &createArtifact, nil
-}
-
-// ContainerConfig returns just the container.config struct
-func (i *LibpodAPI) ContainerConfig(call iopodman.VarlinkCall, name string) error {
-	ctr, err := i.Runtime.LookupContainer(name)
-	if err != nil {
-		return call.ReplyErrorOccurred(err.Error())
-	}
-	config := ctr.Config()
-	b, err := json.Marshal(config)
-	if err != nil {
-		return call.ReplyErrorOccurred("unable to serialize container config")
-	}
-	return call.ReplyContainerConfig(string(b))
-}
-
-// ContainerArtifacts returns an untouched container's artifact in string format
-func (i *LibpodAPI) ContainerArtifacts(call iopodman.VarlinkCall, name, artifactName string) error {
-	ctr, err := i.Runtime.LookupContainer(name)
-	if err != nil {
-		return call.ReplyErrorOccurred(err.Error())
-	}
-	artifacts, err := ctr.GetArtifact(artifactName)
-	if err != nil {
-		return call.ReplyErrorOccurred("unable to get container artifacts")
-	}
-	b, err := json.Marshal(artifacts)
-	if err != nil {
-		return call.ReplyErrorOccurred("unable to serialize container artifacts")
-	}
-	return call.ReplyContainerArtifacts(string(b))
-}
-
-// ContainerInspectData returns the inspect data of a container in string format
-func (i *LibpodAPI) ContainerInspectData(call iopodman.VarlinkCall, name string) error {
-	ctr, err := i.Runtime.LookupContainer(name)
-	if err != nil {
-		return call.ReplyErrorOccurred(err.Error())
-	}
-	data, err := ctr.Inspect(true)
-	if err != nil {
-		return call.ReplyErrorOccurred("unable to inspect container")
-	}
-	b, err := json.Marshal(data)
-	if err != nil {
-		return call.ReplyErrorOccurred("unable to serialize container inspect data")
-	}
-	return call.ReplyContainerInspectData(string(b))
-
-}
-
-// ContainerStateData returns a container's state data in string format
-func (i *LibpodAPI) ContainerStateData(call iopodman.VarlinkCall, name string) error {
-	ctr, err := i.Runtime.LookupContainer(name)
-	if err != nil {
-		return call.ReplyErrorOccurred(err.Error())
-	}
-	data, err := ctr.ContainerState()
-	if err != nil {
-		return call.ReplyErrorOccurred("unable to obtain container state")
-	}
-	b, err := json.Marshal(data)
-	if err != nil {
-		return call.ReplyErrorOccurred("unable to serialize container inspect data")
-	}
-	return call.ReplyContainerStateData(string(b))
 }

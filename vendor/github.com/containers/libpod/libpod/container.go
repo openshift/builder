@@ -1,6 +1,7 @@
 package libpod
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/containernetworking/cni/pkg/types"
 	cnitypes "github.com/containernetworking/cni/pkg/types/current"
-	"github.com/containers/libpod/libpod/lock"
 	"github.com/containers/libpod/pkg/namespaces"
 	"github.com/containers/storage"
 	"github.com/cri-o/ocicni/pkg/ocicni"
@@ -116,7 +116,7 @@ func (ns LinuxNS) String() string {
 type Container struct {
 	config *ContainerConfig
 
-	state *ContainerState
+	state *containerState
 
 	// Batched indicates that a container has been locked as part of a
 	// Batch() operation
@@ -124,7 +124,7 @@ type Container struct {
 	batched bool
 
 	valid   bool
-	lock    lock.Locker
+	lock    storage.Locker
 	runtime *Runtime
 
 	rootlessSlirpSyncR *os.File
@@ -136,10 +136,10 @@ type Container struct {
 	requestedIP net.IP
 }
 
-// ContainerState contains the current state of the container
+// containerState contains the current state of the container
 // It is stored on disk in a tmpfs and recreated on reboot
 // easyjson:json
-type ContainerState struct {
+type containerState struct {
 	// The current state of the running container
 	State ContainerStatus `json:"state"`
 	// The path to the JSON OCI runtime spec for this container
@@ -218,8 +218,6 @@ type ContainerConfig struct {
 	Pod string `json:"pod,omitempty"`
 	// Namespace the container is in
 	Namespace string `json:"namespace,omitempty"`
-	// ID of this container's lock
-	LockID uint32 `json:"lockID"`
 
 	// TODO consider breaking these subsections up into smaller structs
 
@@ -349,9 +347,6 @@ type ContainerConfig struct {
 	// TODO log options for log drivers
 
 	PostConfigureNetNS bool `json:"postConfigureNetNS"`
-
-	// OCIRuntime used to create the container
-	OCIRuntime string `json:"runtime,omitempty"`
 
 	// ExitCommand is the container's exit command.
 	// This Command will be executed when the container exits
@@ -1062,19 +1057,4 @@ func networkDisabled(c *Container) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-// ContainerState returns containerstate struct
-func (c *Container) ContainerState() (*ContainerState, error) {
-	if !c.batched {
-		c.lock.Lock()
-		defer c.lock.Unlock()
-
-		if err := c.syncContainer(); err != nil {
-			return nil, err
-		}
-	}
-	returnConfig := new(ContainerState)
-	deepcopier.Copy(c.state).To(returnConfig)
-	return c.state, nil
 }

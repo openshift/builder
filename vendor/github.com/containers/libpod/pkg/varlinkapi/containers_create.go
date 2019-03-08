@@ -25,7 +25,7 @@ func (i *LibpodAPI) CreateContainer(call iopodman.VarlinkCall, config iopodman.C
 	rtc := i.Runtime.GetConfig()
 	ctx := getContext()
 
-	newImage, err := i.Runtime.ImageRuntime().New(ctx, config.Image, rtc.SignaturePolicyPath, "", os.Stderr, nil, image.SigningOptions{}, false, nil)
+	newImage, err := i.Runtime.ImageRuntime().New(ctx, config.Image, rtc.SignaturePolicyPath, "", os.Stderr, nil, image.SigningOptions{}, false)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
@@ -41,9 +41,7 @@ func (i *LibpodAPI) CreateContainer(call iopodman.VarlinkCall, config iopodman.C
 		return call.ReplyErrorOccurred(err.Error())
 	}
 
-	// TODO fix when doing remote client and dealing with the ability to create a container
-	// within a non-existing pod (i.e. --pod new:foobar)
-	options, err := createConfig.GetContainerCreateOptions(i.Runtime, nil)
+	options, err := createConfig.GetContainerCreateOptions(i.Runtime)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
@@ -68,11 +66,17 @@ func (i *LibpodAPI) CreateContainer(call iopodman.VarlinkCall, config iopodman.C
 // varlinkCreateToCreateConfig takes  the varlink input struct and maps it to a pointer
 // of a CreateConfig, which eventually can be used to create the OCI spec.
 func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, runtime *libpod.Runtime, imageName string, data *inspect.ImageData) (*cc.CreateConfig, error) {
+	var (
+		inputCommand, command                                    []string
+		memoryLimit, memoryReservation, memorySwap, memoryKernel int64
+		blkioWeight                                              uint16
+	)
+
 	idmappings, err := util.ParseIDMapping(create.Uidmap, create.Gidmap, create.Subuidname, create.Subgidname)
 	if err != nil {
 		return nil, err
 	}
-	inputCommand := create.Command
+	inputCommand = create.Command
 	entrypoint := create.Entrypoint
 
 	// ENTRYPOINT
@@ -86,13 +90,19 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 	}
 	// Build the command
 	// If we have an entry point, it goes first
-	command := entrypoint
+	if len(entrypoint) > 0 {
+		command = entrypoint
+	}
 	if len(inputCommand) > 0 {
 		// User command overrides data CMD
 		command = append(command, inputCommand...)
 	} else if len(data.Config.Cmd) > 0 && len(command) == 0 {
 		// If not user command, add CMD
 		command = append(command, data.Config.Cmd...)
+	}
+
+	if create.Resources.Blkio_weight != 0 {
+		blkioWeight = uint16(create.Resources.Blkio_weight)
 	}
 
 	stopSignal := syscall.SIGTERM
@@ -171,7 +181,7 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 		Quiet:             create.Quiet,
 		ReadOnlyRootfs:    create.Readonly_rootfs,
 		Resources: cc.CreateResourceConfig{
-			BlkioWeight:       uint16(create.Resources.Blkio_weight),
+			BlkioWeight:       blkioWeight,
 			BlkioWeightDevice: create.Resources.Blkio_weight_device,
 			CPUShares:         uint64(create.Resources.Cpu_shares),
 			CPUPeriod:         uint64(create.Resources.Cpu_period),
@@ -187,11 +197,11 @@ func varlinkCreateToCreateConfig(ctx context.Context, create iopodman.Create, ru
 			DeviceWriteIOps:   create.Resources.Device_write_iops,
 			DisableOomKiller:  create.Resources.Disable_oomkiller,
 			ShmSize:           create.Resources.Shm_size,
-			Memory:            create.Resources.Memory,
-			MemoryReservation: create.Resources.Memory_reservation,
-			MemorySwap:        create.Resources.Memory_swap,
+			Memory:            memoryLimit,
+			MemoryReservation: memoryReservation,
+			MemorySwap:        memorySwap,
 			MemorySwappiness:  int(create.Resources.Memory_swappiness),
-			KernelMemory:      create.Resources.Kernel_memory,
+			KernelMemory:      memoryKernel,
 			OomScoreAdj:       int(create.Resources.Oom_score_adj),
 			PidsLimit:         create.Resources.Pids_limit,
 			Ulimit:            create.Resources.Ulimit,

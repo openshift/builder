@@ -3,49 +3,60 @@ package imagepolicy
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"reflect"
 	"strings"
 	"time"
+
+	"k8s.io/client-go/informers"
+
+	"k8s.io/apiserver/pkg/admission/initializer"
 
 	"github.com/golang/glog"
 	lru "github.com/hashicorp/golang-lru"
 
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/diff"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/admission"
+	corev1listers "k8s.io/client-go/listers/core/v1"
 	kapi "k8s.io/kubernetes/pkg/apis/core"
 
 	internalimagereferencemutators "github.com/openshift/origin/pkg/api/imagereferencemutators/internalversion"
 	oadmission "github.com/openshift/origin/pkg/cmd/server/admission"
-	configlatest "github.com/openshift/origin/pkg/cmd/server/apis/config/latest"
 	imageapi "github.com/openshift/origin/pkg/image/apis/image"
-	"github.com/openshift/origin/pkg/image/apiserver/admission/apis/imagepolicy"
+	imagepolicy "github.com/openshift/origin/pkg/image/apiserver/admission/apis/imagepolicy/v1"
 	"github.com/openshift/origin/pkg/image/apiserver/admission/apis/imagepolicy/validation"
 	"github.com/openshift/origin/pkg/image/apiserver/admission/imagepolicy/rules"
 	imageinternalclient "github.com/openshift/origin/pkg/image/generated/internalclientset/typed/image/internalversion"
-	"github.com/openshift/origin/pkg/project/cache"
 	"k8s.io/client-go/rest"
 )
 
 func Register(plugins *admission.Plugins) {
 	plugins.Register(imagepolicy.PluginName,
 		func(input io.Reader) (admission.Interface, error) {
-			obj, err := configlatest.ReadYAML(input)
-			if err != nil {
-				return nil, err
+			config := &imagepolicy.ImagePolicyConfig{}
+			if input != nil {
+				configContent, err := ioutil.ReadAll(input)
+				if err != nil {
+					return nil, err
+				}
+				scheme := runtime.NewScheme()
+				utilruntime.Must(imagepolicy.Install(scheme))
+				codecs := serializer.NewCodecFactory(scheme)
+				err = runtime.DecodeInto(codecs.UniversalDecoder(imagepolicy.GroupVersion), configContent, config)
+				if err != nil {
+					return nil, err
+				}
 			}
-			if obj == nil {
-				return nil, nil
-			}
-			config, ok := obj.(*imagepolicy.ImagePolicyConfig)
-			if !ok {
-				return nil, fmt.Errorf("unexpected config object: %#v", obj)
-			}
+
+			imagepolicy.SetDefaults_ImagePolicyConfig(config)
 			if errs := validation.Validate(config); len(errs) > 0 {
 				return nil, errs.ToAggregate()
 			}
@@ -63,10 +74,11 @@ type imagePolicyPlugin struct {
 
 	integratedRegistryMatcher integratedRegistryMatcher
 
-	projectCache *cache.ProjectCache
-	resolver     imageResolver
+	nsLister corev1listers.NamespaceLister
+	resolver imageResolver
 }
 
+var _ = initializer.WantsExternalKubeInformerFactory(&imagePolicyPlugin{})
 var _ = oadmission.WantsRESTClientConfig(&imagePolicyPlugin{})
 var _ = oadmission.WantsDefaultRegistryFunc(&imagePolicyPlugin{})
 var _ = admission.ValidationInterface(&imagePolicyPlugin{})
@@ -84,11 +96,11 @@ type imageResolver interface {
 // imageResolutionPolicy determines whether an image should be resolved
 type imageResolutionPolicy interface {
 	// RequestsResolution returns true if you should attempt to resolve image pull specs
-	RequestsResolution(schema.GroupResource) bool
+	RequestsResolution(metav1.GroupResource) bool
 	// FailOnResolutionFailure returns true if you should fail when resolution fails
-	FailOnResolutionFailure(schema.GroupResource) bool
+	FailOnResolutionFailure(metav1.GroupResource) bool
 	// RewriteImagePullSpec returns true if you should rewrite image pull specs when resolution succeeds
-	RewriteImagePullSpec(attr *rules.ImagePolicyAttributes, isUpdate bool, gr schema.GroupResource) bool
+	RewriteImagePullSpec(attr *rules.ImagePolicyAttributes, isUpdate bool, gr metav1.GroupResource) bool
 }
 
 // imagePolicyPlugin returns an admission controller for pods that controls what images are allowed to run on the
@@ -125,8 +137,8 @@ func (a *imagePolicyPlugin) SetRESTClientConfig(restClientConfig rest.Config) {
 	}
 }
 
-func (a *imagePolicyPlugin) SetProjectCache(c *cache.ProjectCache) {
-	a.projectCache = c
+func (a *imagePolicyPlugin) SetExternalKubeInformerFactory(kubeInformers informers.SharedInformerFactory) {
+	a.nsLister = kubeInformers.Core().V1().Namespaces().Lister()
 }
 
 // Validate ensures that all required interfaces have been provided, or returns an error.
@@ -134,8 +146,8 @@ func (a *imagePolicyPlugin) ValidateInitialization() error {
 	if a.client == nil {
 		return fmt.Errorf("%s needs an Openshift client", imagepolicy.PluginName)
 	}
-	if a.projectCache == nil {
-		return fmt.Errorf("%s needs a project cache", imagepolicy.PluginName)
+	if a.nsLister == nil {
+		return fmt.Errorf("%s needs a namespace lister", imagepolicy.PluginName)
 	}
 	imageResolver, err := newImageResolutionCache(a.client, a.integratedRegistryMatcher)
 	if err != nil {
@@ -231,14 +243,16 @@ func (a *imagePolicyPlugin) admit(attr admission.Attributes, mutationAllowed boo
 
 	policy := resolutionConfig{a.config}
 
-	gr := attr.GetResource().GroupResource()
-	if !a.accepter.Covers(gr) && !policy.Covers(gr) {
+	schemagr := attr.GetResource().GroupResource()
+	apigr := metav1.GroupResource{Resource: schemagr.Resource, Group: schemagr.Group}
+
+	if !a.accepter.Covers(apigr) && !policy.Covers(apigr) {
 		return nil
 	}
 	glog.V(5).Infof("running image policy admission for %s:%s/%s", attr.GetKind(), attr.GetNamespace(), attr.GetName())
 	m, err := internalimagereferencemutators.GetImageReferenceMutator(attr.GetObject(), attr.GetOldObject())
 	if err != nil {
-		return apierrs.NewForbidden(gr, attr.GetName(), fmt.Errorf("unable to apply image policy against objects of type %T: %v", attr.GetObject(), err))
+		return apierrs.NewForbidden(schemagr, attr.GetName(), fmt.Errorf("unable to apply image policy against objects of type %T: %v", attr.GetObject(), err))
 	}
 
 	if !mutationAllowed {
@@ -250,7 +264,7 @@ func (a *imagePolicyPlugin) admit(attr admission.Attributes, mutationAllowed boo
 	// load exclusion rules from the namespace cache
 	var excluded sets.String
 	if ns := attr.GetNamespace(); len(ns) > 0 {
-		if ns, err := a.projectCache.GetNamespace(ns); err == nil {
+		if ns, err := a.nsLister.Get(ns); err == nil {
 			if value := ns.Annotations[imagepolicy.IgnorePolicyRulesAnnotation]; len(value) > 0 {
 				excluded = sets.NewString(strings.Split(value, ",")...)
 			}
@@ -482,7 +496,7 @@ type resolutionConfig struct {
 }
 
 // Covers returns true if the resolver specifically should touch this resource.
-func (config resolutionConfig) Covers(gr schema.GroupResource) bool {
+func (config resolutionConfig) Covers(gr metav1.GroupResource) bool {
 	for _, rule := range config.config.ResolutionRules {
 		if resolutionRuleCoversResource(rule.TargetResource, gr) {
 			return true
@@ -492,8 +506,8 @@ func (config resolutionConfig) Covers(gr schema.GroupResource) bool {
 }
 
 // RequestsResolution is true if the policy demands it or if any rule covers it.
-func (config resolutionConfig) RequestsResolution(gr schema.GroupResource) bool {
-	if imagepolicy.RequestsResolution(config.config.ResolveImages) {
+func (config resolutionConfig) RequestsResolution(gr metav1.GroupResource) bool {
+	if RequestsResolution(config.config.ResolveImages) {
 		return true
 	}
 	for _, rule := range config.config.ResolutionRules {
@@ -505,11 +519,11 @@ func (config resolutionConfig) RequestsResolution(gr schema.GroupResource) bool 
 }
 
 // FailOnResolutionFailure does not depend on the nested rules.
-func (config resolutionConfig) FailOnResolutionFailure(gr schema.GroupResource) bool {
-	return imagepolicy.FailOnResolutionFailure(config.config.ResolveImages)
+func (config resolutionConfig) FailOnResolutionFailure(gr metav1.GroupResource) bool {
+	return FailOnResolutionFailure(config.config.ResolveImages)
 }
 
-var skipImageRewriteOnUpdate = map[schema.GroupResource]struct{}{
+var skipImageRewriteOnUpdate = map[metav1.GroupResource]struct{}{
 	// Job template specs are immutable, they cannot be updated.
 	{Group: "batch", Resource: "jobs"}: {},
 	// Build specs are immutable, they cannot be updated.
@@ -523,7 +537,7 @@ var skipImageRewriteOnUpdate = map[schema.GroupResource]struct{}{
 // If a local name check is requested and a rule matches true is returned. The policy default resolution is only respected
 // if a resource isn't covered by a rule - if pods have a rule with DoNotAttempt and the global policy is RequiredRewrite,
 // no pods will be rewritten.
-func (config resolutionConfig) RewriteImagePullSpec(attr *rules.ImagePolicyAttributes, isUpdate bool, gr schema.GroupResource) bool {
+func (config resolutionConfig) RewriteImagePullSpec(attr *rules.ImagePolicyAttributes, isUpdate bool, gr metav1.GroupResource) bool {
 	if isUpdate {
 		if _, ok := skipImageRewriteOnUpdate[gr]; ok {
 			return false
@@ -537,7 +551,7 @@ func (config resolutionConfig) RewriteImagePullSpec(attr *rules.ImagePolicyAttri
 		if rule.LocalNames && attr.LocalRewrite {
 			return true
 		}
-		if imagepolicy.RewriteImagePullSpec(rule.Policy) {
+		if RewriteImagePullSpec(rule.Policy) {
 			return true
 		}
 		hasMatchingRule = true
@@ -545,10 +559,10 @@ func (config resolutionConfig) RewriteImagePullSpec(attr *rules.ImagePolicyAttri
 	if hasMatchingRule {
 		return false
 	}
-	return imagepolicy.RewriteImagePullSpec(config.config.ResolveImages)
+	return RewriteImagePullSpec(config.config.ResolveImages)
 }
 
 // resolutionRuleCoversResource implements wildcard checking on Resource names
-func resolutionRuleCoversResource(rule metav1.GroupResource, gr schema.GroupResource) bool {
+func resolutionRuleCoversResource(rule metav1.GroupResource, gr metav1.GroupResource) bool {
 	return rule.Group == gr.Group && (rule.Resource == gr.Resource || rule.Resource == "*")
 }

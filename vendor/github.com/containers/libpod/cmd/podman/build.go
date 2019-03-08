@@ -10,56 +10,37 @@ import (
 	"github.com/containers/buildah/imagebuildah"
 	buildahcli "github.com/containers/buildah/pkg/cli"
 	"github.com/containers/buildah/pkg/parse"
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	buildCommand     cliconfig.BuildValues
+	layerFlags = []cli.Flag{
+		cli.BoolTFlag{
+			Name:  "force-rm",
+			Usage: "Always remove intermediate containers after a build, even if the build is unsuccessful. (default true)",
+		},
+		cli.BoolTFlag{
+			Name:  "layers",
+			Usage: "cache intermediate layers during build. Use BUILDAH_LAYERS environment variable to override. ",
+		},
+	}
 	buildDescription = "Builds an OCI or Docker image using instructions from one\n" +
 		"or more Dockerfiles and a specified build context directory."
-	layerValues      buildahcli.LayerResults
-	budFlagsValues   buildahcli.BudResults
-	fromAndBudValues buildahcli.FromAndBudResults
-	userNSValues     buildahcli.UserNSResults
-	namespaceValues  buildahcli.NameSpaceResults
-
-	_buildCommand = &cobra.Command{
-		Use:   "build",
-		Short: "Build an image using instructions from Dockerfiles",
-		Long:  buildDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			buildCommand.InputArgs = args
-			buildCommand.GlobalFlags = MainGlobalOpts
-			buildCommand.BudResults = &budFlagsValues
-			buildCommand.UserNSResults = &userNSValues
-			buildCommand.FromAndBudResults = &fromAndBudValues
-			buildCommand.LayerResults = &layerValues
-			buildCommand.NameSpaceResults = &namespaceValues
-			return buildCmd(&buildCommand)
-		},
-		Example: "CONTEXT-DIRECTORY | URL",
+	buildCommand = cli.Command{
+		Name:           "build",
+		Usage:          "Build an image using instructions from Dockerfiles",
+		Description:    buildDescription,
+		Flags:          sortFlags(append(append(buildahcli.BudFlags, layerFlags...), buildahcli.FromAndBudFlags...)),
+		Action:         buildCmd,
+		ArgsUsage:      "CONTEXT-DIRECTORY | URL",
+		SkipArgReorder: true,
+		OnUsageError:   usageErrorHandler,
 	}
 )
-
-func init() {
-	buildCommand.Command = _buildCommand
-	buildCommand.SetUsageTemplate(UsageTemplate())
-	flags := buildCommand.Flags()
-	flags.SetInterspersed(false)
-
-	flags.BoolVar(&layerValues.ForceRm, "force-rm", true, "Always remove intermediate containers after a build, even if the build is unsuccessful. (default true)")
-	flags.BoolVar(&layerValues.Layers, "layers", true, "Cache intermediate layers during build. Use BUILDAH_LAYERS environment variable to override")
-	budFlags := buildahcli.GetBudFlags(&budFlagsValues)
-	fromAndBugFlags := buildahcli.GetFromAndBudFlags(&fromAndBudValues, &userNSValues, &namespaceValues)
-
-	flags.AddFlagSet(&budFlags)
-	flags.AddFlagSet(&fromAndBugFlags)
-}
 
 func getDockerfiles(files []string) []string {
 	var dockerfiles []string
@@ -73,30 +54,30 @@ func getDockerfiles(files []string) []string {
 	return dockerfiles
 }
 
-func buildCmd(c *cliconfig.BuildValues) error {
+func buildCmd(c *cli.Context) error {
 	// The following was taken directly from containers/buildah/cmd/bud.go
 	// TODO Find a away to vendor more of this in rather than copy from bud
 
 	output := ""
 	tags := []string{}
-	if c.Flag("tag").Changed {
-		tags = c.Tag
+	if c.IsSet("tag") || c.IsSet("t") {
+		tags = c.StringSlice("tag")
 		if len(tags) > 0 {
 			output = tags[0]
 			tags = tags[1:]
 		}
 	}
 	pullPolicy := imagebuildah.PullNever
-	if c.Pull {
+	if c.BoolT("pull") {
 		pullPolicy = imagebuildah.PullIfMissing
 	}
-	if c.PullAlways {
+	if c.Bool("pull-always") {
 		pullPolicy = imagebuildah.PullAlways
 	}
 
 	args := make(map[string]string)
-	if c.Flag("build-arg").Changed {
-		for _, arg := range c.BuildArg {
+	if c.IsSet("build-arg") {
+		for _, arg := range c.StringSlice("build-arg") {
 			av := strings.SplitN(arg, "=", 2)
 			if len(av) > 1 {
 				args[av[0]] = av[1]
@@ -106,15 +87,15 @@ func buildCmd(c *cliconfig.BuildValues) error {
 		}
 	}
 
-	dockerfiles := getDockerfiles(c.File)
-	format, err := getFormat(&c.PodmanCommand)
+	dockerfiles := getDockerfiles(c.StringSlice("file"))
+	format, err := getFormat(c)
 	if err != nil {
 		return nil
 	}
 	contextDir := ""
-	cliArgs := c.InputArgs
+	cliArgs := c.Args()
 
-	layers := c.Layers // layers for podman defaults to true
+	layers := c.BoolT("layers") // layers for podman defaults to true
 	// Check to see if the BUILDAH_LAYERS environment variable is set and override command-line
 	if _, ok := os.LookupEnv("BUILDAH_LAYERS"); ok {
 		layers = buildahcli.UseLayers()
@@ -143,7 +124,7 @@ func buildCmd(c *cliconfig.BuildValues) error {
 			}
 			contextDir = absDir
 		}
-		cliArgs = Tail(cliArgs)
+		cliArgs = cliArgs.Tail()
 	} else {
 		// No context directory or URL was specified.  Try to use the
 		// home of the first locally-available Dockerfile.
@@ -172,14 +153,17 @@ func buildCmd(c *cliconfig.BuildValues) error {
 	if len(dockerfiles) == 0 {
 		dockerfiles = append(dockerfiles, filepath.Join(contextDir, "Dockerfile"))
 	}
+	if err := parse.ValidateFlags(c, buildahcli.BudFlags); err != nil {
+		return err
+	}
 
 	runtimeFlags := []string{}
-	for _, arg := range c.RuntimeOpts {
+	for _, arg := range c.StringSlice("runtime-flag") {
 		runtimeFlags = append(runtimeFlags, "--"+arg)
 	}
 	// end from buildah
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
@@ -189,10 +173,10 @@ func buildCmd(c *cliconfig.BuildValues) error {
 	stdout = os.Stdout
 	stderr = os.Stderr
 	reporter = os.Stderr
-	if c.Flag("logfile").Changed {
-		f, err := os.OpenFile(c.Logfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if c.IsSet("logfile") {
+		f, err := os.OpenFile(c.String("logfile"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 		if err != nil {
-			return errors.Errorf("error opening logfile %q: %v", c.Logfile, err)
+			return errors.Errorf("error opening logfile %q: %v", c.String("logfile"), err)
 		}
 		defer f.Close()
 		logrus.SetOutput(f)
@@ -201,36 +185,36 @@ func buildCmd(c *cliconfig.BuildValues) error {
 		reporter = f
 	}
 
-	systemContext, err := parse.SystemContextFromOptions(c.PodmanCommand.Command)
+	systemContext, err := parse.SystemContextFromOptions(c)
 	if err != nil {
 		return errors.Wrapf(err, "error building system context")
 	}
-	systemContext.AuthFilePath = getAuthFile(c.Authfile)
-	commonOpts, err := parse.CommonBuildOptions(c.PodmanCommand.Command)
+	systemContext.AuthFilePath = getAuthFile(c.String("authfile"))
+	commonOpts, err := parse.CommonBuildOptions(c)
 	if err != nil {
 		return err
 	}
 
-	namespaceOptions, networkPolicy, err := parse.NamespaceOptions(c.PodmanCommand.Command)
+	namespaceOptions, networkPolicy, err := parse.NamespaceOptions(c)
 	if err != nil {
 		return errors.Wrapf(err, "error parsing namespace-related options")
 	}
-	usernsOption, idmappingOptions, err := parse.IDMappingOptions(c.PodmanCommand.Command)
+	usernsOption, idmappingOptions, err := parse.IDMappingOptions(c)
 	if err != nil {
 		return errors.Wrapf(err, "error parsing ID mapping options")
 	}
 	namespaceOptions.AddOrReplace(usernsOption...)
 
 	ociruntime := runtime.GetOCIRuntimePath()
-	if c.Flag("runtime").Changed {
-		ociruntime = c.Runtime
+	if c.IsSet("runtime") {
+		ociruntime = c.String("runtime")
 	}
 	options := imagebuildah.BuildOptions{
 		ContextDirectory:        contextDir,
 		PullPolicy:              pullPolicy,
 		Compression:             imagebuildah.Gzip,
-		Quiet:                   c.Quiet,
-		SignaturePolicyPath:     c.SignaturePolicy,
+		Quiet:                   c.Bool("quiet"),
+		SignaturePolicyPath:     c.String("signature-policy"),
 		Args:                    args,
 		Output:                  output,
 		AdditionalTags:          tags,
@@ -243,22 +227,22 @@ func buildCmd(c *cliconfig.BuildValues) error {
 		SystemContext:           systemContext,
 		NamespaceOptions:        namespaceOptions,
 		ConfigureNetwork:        networkPolicy,
-		CNIPluginPath:           c.CNIPlugInPath,
-		CNIConfigDir:            c.CNIConfigDir,
+		CNIPluginPath:           c.String("cni-plugin-path"),
+		CNIConfigDir:            c.String("cni-config-dir"),
 		IDMappingOptions:        idmappingOptions,
 		CommonBuildOpts:         commonOpts,
-		DefaultMountsFilePath:   c.GlobalFlags.DefaultMountsFile,
-		IIDFile:                 c.Iidfile,
-		Squash:                  c.Squash,
-		Labels:                  c.Label,
-		Annotations:             c.Annotation,
+		DefaultMountsFilePath:   c.GlobalString("default-mounts-file"),
+		IIDFile:                 c.String("iidfile"),
+		Squash:                  c.Bool("squash"),
+		Labels:                  c.StringSlice("label"),
+		Annotations:             c.StringSlice("annotation"),
 		Layers:                  layers,
-		NoCache:                 c.NoCache,
-		RemoveIntermediateCtrs:  c.Rm,
-		ForceRmIntermediateCtrs: c.ForceRm,
+		NoCache:                 c.Bool("no-cache"),
+		RemoveIntermediateCtrs:  c.BoolT("rm"),
+		ForceRmIntermediateCtrs: c.BoolT("force-rm"),
 	}
 
-	if c.Quiet {
+	if c.Bool("quiet") {
 		options.ReportWriter = ioutil.Discard
 	}
 
@@ -267,14 +251,4 @@ func buildCmd(c *cliconfig.BuildValues) error {
 	}
 
 	return runtime.Build(getContext(), options, dockerfiles...)
-}
-
-// Tail returns a string slice after the first element unless there are
-// not enough elements, then it returns an empty slice.  This is to replace
-// the urfavecli Tail method for args
-func Tail(a []string) []string {
-	if len(a) >= 2 {
-		return []string(a)[1:]
-	}
-	return []string{}
 }

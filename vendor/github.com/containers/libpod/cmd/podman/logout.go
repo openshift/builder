@@ -4,56 +4,53 @@ import (
 	"fmt"
 
 	"github.com/containers/image/pkg/docker/config"
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/libpod/common"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	logoutCommand     cliconfig.LogoutValues
-	logoutDescription = "Remove the cached username and password for the registry."
-	_logoutCommand    = &cobra.Command{
-		Use:   "logout",
-		Short: "Logout of a container registry",
-		Long:  logoutDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			logoutCommand.InputArgs = args
-			logoutCommand.GlobalFlags = MainGlobalOpts
-			return logoutCmd(&logoutCommand)
+	logoutFlags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "authfile",
+			Usage: "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override. ",
 		},
-		Example: "REGISTRY",
+		cli.BoolFlag{
+			Name:  "all, a",
+			Usage: "Remove the cached credentials for all registries in the auth file",
+		},
+	}
+	logoutDescription = "Remove the cached username and password for the registry."
+	logoutCommand     = cli.Command{
+		Name:         "logout",
+		Usage:        "Logout of a container registry",
+		Description:  logoutDescription,
+		Flags:        sortFlags(logoutFlags),
+		Action:       logoutCmd,
+		ArgsUsage:    "REGISTRY",
+		OnUsageError: usageErrorHandler,
 	}
 )
 
-func init() {
-	logoutCommand.Command = _logoutCommand
-	logoutCommand.SetUsageTemplate(UsageTemplate())
-	flags := logoutCommand.Flags()
-	flags.BoolVarP(&logoutCommand.All, "all", "a", false, "Remove the cached credentials for all registries in the auth file")
-	flags.StringVar(&logoutCommand.Authfile, "authfile", "", "Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json. Use REGISTRY_AUTH_FILE environment variable to override")
-
-}
-
 // logoutCmd uses the authentication package to remove the authenticated of a registry
 // stored in the auth.json file
-func logoutCmd(c *cliconfig.LogoutValues) error {
-	args := c.InputArgs
+func logoutCmd(c *cli.Context) error {
+	args := c.Args()
 	if len(args) > 1 {
 		return errors.Errorf("too many arguments, logout takes at most 1 argument")
 	}
-	if len(args) == 0 && !c.All {
+	if len(args) == 0 && !c.IsSet("all") {
 		return errors.Errorf("registry must be given")
 	}
 	var server string
 	if len(args) == 1 {
 		server = scrubServer(args[0])
 	}
-	authfile := getAuthFile(c.Authfile)
+	authfile := getAuthFile(c.String("authfile"))
 
 	sc := common.GetSystemContext("", authfile, false)
 
-	if c.All {
+	if c.Bool("all") {
 		if err := config.RemoveAllAuthentication(sc); err != nil {
 			return err
 		}

@@ -2,16 +2,14 @@ package libpod
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"sync"
 
 	"github.com/boltdb/bolt"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
-
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // BoltState is a state implementation backed by a Bolt DB
 type BoltState struct {
@@ -205,7 +203,7 @@ func (s *BoltState) Refresh() error {
 				return errors.Wrapf(ErrInternal, "container %s missing state in DB", string(id))
 			}
 
-			state := new(ContainerState)
+			state := new(containerState)
 
 			if err := json.Unmarshal(stateBytes, state); err != nil {
 				return errors.Wrapf(err, "error unmarshalling state for container %s", string(id))
@@ -325,7 +323,7 @@ func (s *BoltState) Container(id string) (*Container, error) {
 
 	ctr := new(Container)
 	ctr.config = new(ContainerConfig)
-	ctr.state = new(ContainerState)
+	ctr.state = new(containerState)
 
 	db, err := s.getDBCon()
 	if err != nil {
@@ -361,7 +359,7 @@ func (s *BoltState) LookupContainer(idOrName string) (*Container, error) {
 
 	ctr := new(Container)
 	ctr.config = new(ContainerConfig)
-	ctr.state = new(ContainerState)
+	ctr.state = new(containerState)
 
 	db, err := s.getDBCon()
 	if err != nil {
@@ -542,7 +540,7 @@ func (s *BoltState) UpdateContainer(ctr *Container) error {
 		return errors.Wrapf(ErrNSMismatch, "container %s is in namespace %q, does not match our namespace %q", ctr.ID(), ctr.config.Namespace, s.namespace)
 	}
 
-	newState := new(ContainerState)
+	newState := new(containerState)
 	netNSPath := ""
 
 	ctrID := []byte(ctr.ID())
@@ -754,7 +752,7 @@ func (s *BoltState) AllContainers() ([]*Container, error) {
 
 			ctr := new(Container)
 			ctr.config = new(ContainerConfig)
-			ctr.state = new(ContainerState)
+			ctr.state = new(containerState)
 
 			if err := s.getContainerFromDB(id, ctr, ctrBucket); err != nil {
 				// If the error is a namespace mismatch, we can
@@ -1140,7 +1138,7 @@ func (s *BoltState) PodContainers(pod *Pod) ([]*Container, error) {
 		err = podCtrs.ForEach(func(id, val []byte) error {
 			newCtr := new(Container)
 			newCtr.config = new(ContainerConfig)
-			newCtr.state = new(ContainerState)
+			newCtr.state = new(containerState)
 			ctrs = append(ctrs, newCtr)
 
 			return s.getContainerFromDB(id, newCtr, ctrBkt)

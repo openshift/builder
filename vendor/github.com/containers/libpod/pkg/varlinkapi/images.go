@@ -37,7 +37,7 @@ func (i *LibpodAPI) ListImages(call iopodman.VarlinkCall) error {
 	if err != nil {
 		return call.ReplyErrorOccurred(fmt.Sprintf("unable to get list of images %q", err))
 	}
-	var imageList []iopodman.Image
+	var imageList []iopodman.ImageInList
 	for _, image := range images {
 		labels, _ := image.Labels(getContext())
 		containers, _ := image.Containers()
@@ -47,33 +47,28 @@ func (i *LibpodAPI) ListImages(call iopodman.VarlinkCall) error {
 		}
 
 		size, _ := image.Size(getContext())
-		isParent, err := image.IsParent()
-		if err != nil {
-			return call.ReplyErrorOccurred(err.Error())
-		}
 
-		i := iopodman.Image{
+		i := iopodman.ImageInList{
 			Id:          image.ID(),
 			ParentId:    image.Parent,
 			RepoTags:    image.Names(),
 			RepoDigests: repoDigests,
-			Created:     image.Created().Format(time.RFC3339),
+			Created:     image.Created().String(),
 			Size:        int64(*size),
 			VirtualSize: image.VirtualSize,
 			Containers:  int64(len(containers)),
 			Labels:      labels,
-			IsParent:    isParent,
 		}
 		imageList = append(imageList, i)
 	}
 	return call.ReplyListImages(imageList)
 }
 
-// GetImage returns a single image in the form of a Image
-func (i *LibpodAPI) GetImage(call iopodman.VarlinkCall, id string) error {
-	newImage, err := i.Runtime.ImageRuntime().NewFromLocal(id)
+// GetImage returns a single image in the form of a ImageInList
+func (i *LibpodAPI) GetImage(call iopodman.VarlinkCall, name string) error {
+	newImage, err := i.Runtime.ImageRuntime().NewFromLocal(name)
 	if err != nil {
-		return call.ReplyImageNotFound(id)
+		return call.ReplyImageNotFound(err.Error())
 	}
 	labels, err := newImage.Labels(getContext())
 	if err != nil {
@@ -92,12 +87,12 @@ func (i *LibpodAPI) GetImage(call iopodman.VarlinkCall, id string) error {
 		return err
 	}
 
-	il := iopodman.Image{
+	il := iopodman.ImageInList{
 		Id:          newImage.ID(),
 		ParentId:    newImage.Parent,
 		RepoTags:    newImage.Names(),
 		RepoDigests: repoDigests,
-		Created:     newImage.Created().Format(time.RFC3339),
+		Created:     newImage.Created().String(),
 		Size:        int64(*size),
 		VirtualSize: newImage.VirtualSize,
 		Containers:  int64(len(containers)),
@@ -276,6 +271,12 @@ func build(runtime *libpod.Runtime, options imagebuildah.BuildOptions, dockerfil
 	return c
 }
 
+// CreateImage ...
+// TODO With Pull being added, should we skip Create?
+func (i *LibpodAPI) CreateImage(call iopodman.VarlinkCall) error {
+	return call.ReplyMethodNotImplemented("CreateImage")
+}
+
 // InspectImage returns an image's inspect information as a string that can be serialized.
 // Requires an image ID or name
 func (i *LibpodAPI) InspectImage(call iopodman.VarlinkCall, name string) error {
@@ -309,7 +310,7 @@ func (i *LibpodAPI) HistoryImage(call iopodman.VarlinkCall, name string) error {
 	for _, hist := range history {
 		imageHistory := iopodman.ImageHistory{
 			Id:        hist.ID,
-			Created:   hist.Created.Format(time.RFC3339),
+			Created:   hist.Created.String(),
 			CreatedBy: hist.CreatedBy,
 			Tags:      newImage.Names(),
 			Size:      hist.Size,
@@ -399,21 +400,17 @@ func (i *LibpodAPI) RemoveImage(call iopodman.VarlinkCall, name string, force bo
 	return call.ReplyRemoveImage(newImage.ID())
 }
 
-// SearchImages searches all registries configured in /etc/containers/registries.conf for an image
+// SearchImage searches all registries configured in /etc/containers/registries.conf for an image
 // Requires an image name and a search limit as int
-func (i *LibpodAPI) SearchImages(call iopodman.VarlinkCall, query string, limit *int64) error {
+func (i *LibpodAPI) SearchImage(call iopodman.VarlinkCall, name string, limit int64) error {
 	sc := image.GetSystemContext("", "", false)
 	registries, err := sysreg.GetRegistries()
 	if err != nil {
 		return call.ReplyErrorOccurred(fmt.Sprintf("unable to get system registries: %q", err))
 	}
-	var imageResults []iopodman.ImageSearchResult
+	var imageResults []iopodman.ImageSearch
 	for _, reg := range registries {
-		var lim = 1000
-		if limit != nil {
-			lim = int(*limit)
-		}
-		results, err := docker.SearchRegistry(getContext(), sc, reg, query, lim)
+		results, err := docker.SearchRegistry(getContext(), sc, reg, name, int(limit))
 		if err != nil {
 			// If we are searching multiple registries, don't make something like an
 			// auth error fatal. Unfortunately we cannot differentiate between auth
@@ -424,7 +421,7 @@ func (i *LibpodAPI) SearchImages(call iopodman.VarlinkCall, query string, limit 
 			return call.ReplyErrorOccurred(err.Error())
 		}
 		for _, result := range results {
-			i := iopodman.ImageSearchResult{
+			i := iopodman.ImageSearch{
 				Description:  result.Description,
 				Is_official:  result.IsOfficial,
 				Is_automated: result.IsAutomated,
@@ -434,7 +431,7 @@ func (i *LibpodAPI) SearchImages(call iopodman.VarlinkCall, query string, limit 
 			imageResults = append(imageResults, i)
 		}
 	}
-	return call.ReplySearchImages(imageResults)
+	return call.ReplySearchImage(imageResults)
 }
 
 // DeleteUnusedImages deletes any images that do not have containers associated with it.
@@ -498,7 +495,7 @@ func (i *LibpodAPI) Commit(call iopodman.VarlinkCall, name, imageName string, ch
 }
 
 // ImportImage imports an image from a tarball to the image store
-func (i *LibpodAPI) ImportImage(call iopodman.VarlinkCall, source, reference, message string, changes []string, delete bool) error {
+func (i *LibpodAPI) ImportImage(call iopodman.VarlinkCall, source, reference, message string, changes []string) error {
 	configChanges, err := util.GetImageConfig(changes)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
@@ -514,12 +511,6 @@ func (i *LibpodAPI) ImportImage(call iopodman.VarlinkCall, source, reference, me
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}
-	if delete {
-		if err := os.Remove(source); err != nil {
-			return call.ReplyErrorOccurred(err.Error())
-		}
-	}
-
 	return call.ReplyImportImage(newImage.ID())
 }
 
@@ -577,7 +568,7 @@ func (i *LibpodAPI) PullImage(call iopodman.VarlinkCall, name string, certDir, c
 		}
 		imageID = newImage[0].ID()
 	} else {
-		newImage, err := i.Runtime.ImageRuntime().New(getContext(), name, signaturePolicy, "", nil, &dockerRegistryOptions, so, false, nil)
+		newImage, err := i.Runtime.ImageRuntime().New(getContext(), name, signaturePolicy, "", nil, &dockerRegistryOptions, so, false)
 		if err != nil {
 			return call.ReplyErrorOccurred(fmt.Sprintf("unable to pull %s: %s", name, err.Error()))
 		}
@@ -614,15 +605,15 @@ func (i *LibpodAPI) ContainerRunlabel(call iopodman.VarlinkCall, input iopodman.
 
 	runLabel, imageName, err := shared.GetRunlabel(input.Label, input.Image, ctx, i.Runtime, input.Pull, input.Creds, dockerRegistryOptions, input.Authfile, input.SignaturePolicyPath, nil)
 	if err != nil {
-		return call.ReplyErrorOccurred(err.Error())
+		return err
 	}
 	if runLabel == "" {
-		return call.ReplyErrorOccurred(fmt.Sprintf("%s does not contain the label %s", input.Image, input.Label))
+		return nil
 	}
 
 	cmd, env, err := shared.GenerateRunlabelCommand(runLabel, imageName, input.Name, input.Opts, input.ExtraArgs)
 	if err != nil {
-		return call.ReplyErrorOccurred(err.Error())
+		return err
 	}
 	if err := utils.ExecCmdWithStdStreams(stdIn, stdOut, stdErr, env, cmd[0], cmd[1:]...); err != nil {
 		return call.ReplyErrorOccurred(err.Error())

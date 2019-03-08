@@ -11,6 +11,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/openshift/origin/pkg/oc/cli/image/workqueue"
+
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/manifestlist"
 	units "github.com/docker/go-units"
@@ -205,12 +207,22 @@ func describeImage(out io.Writer, image *Image) error {
 	case 1:
 		fmt.Fprintf(w, "Image Size:\t%s\n", units.HumanSize(float64(image.Layers[0].Size)))
 	default:
-		fmt.Fprintf(w, "Image Size:\t%s\n", fmt.Sprintf("%s in %d layers", units.HumanSize(float64(image.Config.Size)), len(image.Layers)))
+		imageSize := fmt.Sprintf("%s in %d layers", units.HumanSize(float64(image.Config.Size)), len(image.Layers))
+		if image.Config.Size == 0 {
+			imageSize = fmt.Sprintf("%d layers (size unavailable)", len(image.Layers))
+		}
+
+		fmt.Fprintf(w, "Image Size:\t%s\n", imageSize)
 		for i, layer := range image.Layers {
+			layerSize := units.HumanSize(float64(layer.Size))
+			if layer.Size == 0 {
+				layerSize = "--"
+			}
+
 			if i == 0 {
-				fmt.Fprintf(w, "%s\t%s\t%s\n", "Layers:", units.HumanSize(float64(layer.Size)), layer.Digest)
+				fmt.Fprintf(w, "%s\t%s\t%s\n", "Layers:", layerSize, layer.Digest)
 			} else {
-				fmt.Fprintf(w, "%s\t%s\t%s\n", "", units.HumanSize(float64(layer.Size)), layer.Digest)
+				fmt.Fprintf(w, "%s\t%s\t%s\n", "", layerSize, layer.Digest)
 			}
 		}
 	}
@@ -297,4 +309,96 @@ func writeTabSection(out io.Writer, fn func(w io.Writer)) {
 	w := tabwriter.NewWriter(out, 0, 4, 1, ' ', 0)
 	fn(w)
 	w.Flush()
+}
+
+type ImageRetriever struct {
+	Image          map[string]imagereference.DockerImageReference
+	Insecure       bool
+	RegistryConfig string
+	MaxPerRegistry int
+	// ImageMetadataCallback is invoked once per image retrieved, and may be called in parallel if
+	// MaxPerRegistry is set higher than 1. If err is passed image is nil. If an error is returned
+	// execution will stop.
+	ImageMetadataCallback func(from string, image *Image, err error) error
+}
+
+func (o *ImageRetriever) Run() error {
+	rt, err := rest.TransportFor(&rest.Config{})
+	if err != nil {
+		return err
+	}
+	insecureRT, err := rest.TransportFor(&rest.Config{TLSClientConfig: rest.TLSClientConfig{Insecure: true}})
+	if err != nil {
+		return err
+	}
+	creds := dockercredentials.NewLocal()
+	if len(o.RegistryConfig) > 0 {
+		creds, err = dockercredentials.NewFromFile(o.RegistryConfig)
+		if err != nil {
+			return fmt.Errorf("unable to load --registry-config: %v", err)
+		}
+	}
+	ctx := context.Background()
+	fromContext := registryclient.NewContext(rt, insecureRT).WithCredentials(creds)
+
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+	q := workqueue.New(o.MaxPerRegistry, stopCh)
+	return q.Try(func(q workqueue.Try) {
+		for key := range o.Image {
+			name := key
+			from := o.Image[key]
+			q.Try(func() error {
+				repo, err := fromContext.Repository(ctx, from.DockerClientDefaults().RegistryURL(), from.RepositoryName(), o.Insecure)
+				if err != nil {
+					return fmt.Errorf("unable to connect to image repository %s: %v", from.Exact(), err)
+				}
+
+				allManifests, _, _, err := imagemanifest.AllManifests(ctx, from, repo)
+				if err != nil {
+					if imagemanifest.IsImageForbidden(err) {
+						var msg string
+						if len(o.Image) == 1 {
+							msg = "image does not exist or you don't have permission to access the repository"
+						} else {
+							msg = fmt.Sprintf("image %q does not exist or you don't have permission to access the repository", from)
+						}
+						return imagemanifest.NewImageForbidden(msg, err)
+					}
+					if imagemanifest.IsImageNotFound(err) {
+						var msg string
+						if len(o.Image) == 1 {
+							msg = "image does not exist"
+						} else {
+							msg = fmt.Sprintf("image %q does not exist", from)
+						}
+						return imagemanifest.NewImageNotFound(msg, err)
+					}
+					return fmt.Errorf("unable to read image %s: %v", from, err)
+				}
+
+				for srcDigest, srcManifest := range allManifests {
+					imageConfig, layers, err := imagemanifest.ManifestToImageConfig(ctx, srcManifest, repo.Blobs(ctx), from.Exact())
+					if o.ImageMetadataCallback != nil {
+						mediaType, _, _ := srcManifest.Payload()
+
+						if err := o.ImageMetadataCallback(name, &Image{
+							Name:      from.Exact(),
+							MediaType: mediaType,
+							Digest:    srcDigest,
+							Config:    imageConfig,
+							Layers:    layers,
+						}, err); err != nil {
+							return err
+						}
+					} else {
+						if err != nil {
+							return err
+						}
+					}
+				}
+				return nil
+			})
+		}
+	})
 }
