@@ -6,13 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/formats"
-	"github.com/containers/libpod/libpod/adapter"
+	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod/image"
-	"github.com/docker/go-units"
+	units "github.com/docker/go-units"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 const createdByTruncLength = 45
@@ -35,44 +34,53 @@ type historyOptions struct {
 }
 
 var (
-	historyCommand cliconfig.HistoryValues
+	historyFlags = []cli.Flag{
+		cli.BoolTFlag{
+			Name:  "human, H",
+			Usage: "Display sizes and dates in human readable format",
+		},
+		cli.BoolFlag{
+			Name:  "no-trunc, notruncate",
+			Usage: "Do not truncate the output",
+		},
+		cli.BoolFlag{
+			Name:  "quiet, q",
+			Usage: "Display the numeric IDs only",
+		},
+		cli.StringFlag{
+			Name:  "format",
+			Usage: "Change the output to JSON or a Go template",
+		},
+	}
 
 	historyDescription = "Displays the history of an image. The information can be printed out in an easy to read, " +
 		"or user specified format, and can be truncated."
-	_historyCommand = &cobra.Command{
-		Use:   "history",
-		Short: "Show history of a specified image",
-		Long:  historyDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			historyCommand.InputArgs = args
-			historyCommand.GlobalFlags = MainGlobalOpts
-			return historyCmd(&historyCommand)
-		},
+	historyCommand = cli.Command{
+		Name:                   "history",
+		Usage:                  "Show history of a specified image",
+		Description:            historyDescription,
+		Flags:                  sortFlags(historyFlags),
+		Action:                 historyCmd,
+		ArgsUsage:              "",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	historyCommand.Command = _historyCommand
-	historyCommand.SetUsageTemplate(UsageTemplate())
-	flags := historyCommand.Flags()
-	flags.StringVar(&historyCommand.Format, "format", "", "Change the output to JSON or a Go template")
-	flags.BoolVarP(&historyCommand.Human, "human", "H", true, "Display sizes and dates in human readable format")
-	// notrucate needs to be added
-	flags.BoolVar(&historyCommand.NoTrunc, "no-trunc", false, "Do not truncate the output")
-	flags.BoolVarP(&historyCommand.Quiet, "quiet", "q", false, "Display the numeric IDs only")
+func historyCmd(c *cli.Context) error {
+	if err := validateFlags(c, historyFlags); err != nil {
+		return err
+	}
 
-}
-
-func historyCmd(c *cliconfig.HistoryValues) error {
-	runtime, err := adapter.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	format := genHistoryFormat(c.Format, c.Quiet)
+	format := genHistoryFormat(c.String("format"), c.Bool("quiet"))
 
-	args := c.InputArgs
+	args := c.Args()
 	if len(args) == 0 {
 		return errors.Errorf("an image name must be specified")
 	}
@@ -80,14 +88,14 @@ func historyCmd(c *cliconfig.HistoryValues) error {
 		return errors.Errorf("podman history takes at most 1 argument")
 	}
 
-	image, err := runtime.NewImageFromLocal(args[0])
+	image, err := runtime.ImageRuntime().NewFromLocal(args[0])
 	if err != nil {
 		return err
 	}
 	opts := historyOptions{
-		human:   c.Human,
-		noTrunc: c.NoTrunc,
-		quiet:   c.Quiet,
+		human:   c.BoolT("human"),
+		noTrunc: c.Bool("no-trunc"),
+		quiet:   c.Bool("quiet"),
 		format:  format,
 	}
 

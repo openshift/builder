@@ -5,74 +5,84 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	cc "github.com/containers/libpod/pkg/spec"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	startCommand     cliconfig.StartValues
+	startFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "attach, a",
+			Usage: "Attach container's STDOUT and STDERR",
+		},
+		cli.StringFlag{
+			Name:  "detach-keys",
+			Usage: "Override the key sequence for detaching a container. Format is a single character [a-Z] or ctrl-<value> where <value> is one of: a-z, @, ^, [, , or _.",
+		},
+		cli.BoolFlag{
+			Name:  "interactive, i",
+			Usage: "Keep STDIN open even if not attached",
+		},
+		cli.BoolTFlag{
+			Name:  "sig-proxy",
+			Usage: "proxy received signals to the process (default true if attaching, false otherwise)",
+		},
+		LatestFlag,
+	}
 	startDescription = `
    podman start
 
    Starts one or more containers.  The container name or ID can be used.
 `
-	_startCommand = &cobra.Command{
-		Use:   "start",
-		Short: "Start one or more containers",
-		Long:  startDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			startCommand.InputArgs = args
-			startCommand.GlobalFlags = MainGlobalOpts
-			return startCmd(&startCommand)
-		},
-		Example: "CONTAINER-NAME [CONTAINER-NAME ...]",
+
+	startCommand = cli.Command{
+		Name:                   "start",
+		Usage:                  "Start one or more containers",
+		Description:            startDescription,
+		Flags:                  sortFlags(startFlags),
+		Action:                 startCmd,
+		ArgsUsage:              "CONTAINER-NAME [CONTAINER-NAME ...]",
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	startCommand.Command = _startCommand
-	startCommand.SetUsageTemplate(UsageTemplate())
-	flags := startCommand.Flags()
-	flags.BoolVarP(&startCommand.Attach, "attach", "a", false, "Attach container's STDOUT and STDERR")
-	flags.StringVar(&startCommand.DetachKeys, "detach-keys", "", "Override the key sequence for detaching a container. Format is a single character [a-Z] or ctrl-<value> where <value> is one of: a-z, @, ^, [, , or _")
-	flags.BoolVarP(&startCommand.Interactive, "interactive", "i", false, "Keep STDIN open even if not attached")
-	flags.BoolVarP(&startCommand.Latest, "latest", "l", false, "Act on the latest container podman is aware of")
-	flags.BoolVar(&startCommand.SigProxy, "sig-proxy", true, "Proxy received signals to the process (default true if attaching, false otherwise)")
-}
-
-func startCmd(c *cliconfig.StartValues) error {
-	args := c.InputArgs
-	if len(args) < 1 && !c.Latest {
+func startCmd(c *cli.Context) error {
+	args := c.Args()
+	if len(args) < 1 && !c.Bool("latest") {
 		return errors.Errorf("you must provide at least one container name or id")
 	}
 
-	attach := c.Attach
+	attach := c.Bool("attach")
 
 	if len(args) > 1 && attach {
 		return errors.Errorf("you cannot start and attach multiple containers at once")
 	}
 
-	sigProxy := c.SigProxy
+	if err := validateFlags(c, startFlags); err != nil {
+		return err
+	}
+
+	sigProxy := c.BoolT("sig-proxy")
 
 	if sigProxy && !attach {
-		if c.Flag("sig-proxy").Changed {
+		if c.IsSet("sig-proxy") {
 			return errors.Wrapf(libpod.ErrInvalidArg, "you cannot use sig-proxy without --attach")
 		} else {
 			sigProxy = false
 		}
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
 	defer runtime.Shutdown(false)
-	if c.Latest {
+	if c.Bool("latest") {
 		lastCtr, err := runtime.GetLatestContainer()
 		if err != nil {
 			return errors.Wrapf(err, "unable to get latest container")
@@ -102,12 +112,12 @@ func startCmd(c *cliconfig.StartValues) error {
 
 		if attach {
 			inputStream := os.Stdin
-			if !c.Interactive {
+			if !c.Bool("interactive") {
 				inputStream = nil
 			}
 
 			// attach to the container and also start it not already running
-			err = startAttachCtr(ctr, os.Stdout, os.Stderr, inputStream, c.DetachKeys, sigProxy, !ctrRunning)
+			err = startAttachCtr(ctr, os.Stdout, os.Stderr, inputStream, c.String("detach-keys"), sigProxy, !ctrRunning)
 			if ctrRunning {
 				return err
 			}

@@ -2,6 +2,7 @@ package shared
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/shlex"
 	"io"
@@ -88,7 +89,6 @@ type PsContainerOutput struct {
 	PIDNS     string
 	User      string
 	UTS       string
-	Mounts    string
 }
 
 // Namespace describes output for ps namespace
@@ -229,7 +229,6 @@ func NewBatchContainer(ctr *libpod.Container, opts PsOptions) (PsContainerOutput
 	pso.CreatedAt = ctr.CreatedTime()
 	pso.StartedAt = startedAt
 	pso.Labels = ctr.Labels()
-	pso.Mounts = strings.Join(ctr.UserVolumes(), " ")
 
 	if opts.Namespace {
 		pso.Cgroup = ns.Cgroup
@@ -447,7 +446,8 @@ func getStrFromSquareBrackets(cmd string) string {
 
 // GetCtrInspectInfo takes container inspect data and collects all its info into a ContainerData
 // structure for inspection related methods
-func GetCtrInspectInfo(config *libpod.ContainerConfig, ctrInspectData *inspect.ContainerInspectData, createArtifact *cc.CreateConfig) (*inspect.ContainerData, error) {
+func GetCtrInspectInfo(ctr *libpod.Container, ctrInspectData *inspect.ContainerInspectData) (*inspect.ContainerData, error) {
+	config := ctr.Config()
 	spec := config.Spec
 
 	cpus, mems, period, quota, realtimePeriod, realtimeRuntime, shares := getCPUInfo(spec)
@@ -455,6 +455,16 @@ func GetCtrInspectInfo(config *libpod.ContainerConfig, ctrInspectData *inspect.C
 	memKernel, memReservation, memSwap, memSwappiness, memDisableOOMKiller := getMemoryInfo(spec)
 	pidsLimit := getPidsInfo(spec)
 	cgroup := getCgroup(spec)
+
+	var createArtifact cc.CreateConfig
+	artifact, err := ctr.GetArtifact("create-config")
+	if err == nil {
+		if err := json.Unmarshal(artifact, &createArtifact); err != nil {
+			return nil, err
+		}
+	} else {
+		logrus.Errorf("couldn't get some inspect information, error getting artifact %q: %v", ctr.ID(), err)
+	}
 
 	data := &inspect.ContainerData{
 		ctrInspectData,
@@ -483,7 +493,7 @@ func GetCtrInspectInfo(config *libpod.ContainerConfig, ctrInspectData *inspect.C
 			PidsLimit:            pidsLimit,
 			Privileged:           config.Privileged,
 			ReadonlyRootfs:       spec.Root.Readonly,
-			Runtime:              config.OCIRuntime,
+			Runtime:              ctr.RuntimeName(),
 			NetworkMode:          string(createArtifact.NetMode),
 			IpcMode:              string(createArtifact.IpcMode),
 			Cgroup:               cgroup,
@@ -611,7 +621,7 @@ func GetRunlabel(label string, runlabelImage string, ctx context.Context, runtim
 			registryCreds = creds
 		}
 		dockerRegistryOptions.DockerRegistryCreds = registryCreds
-		newImage, err = runtime.ImageRuntime().New(ctx, runlabelImage, signaturePolicyPath, authfile, output, &dockerRegistryOptions, image.SigningOptions{}, false, &label)
+		newImage, err = runtime.ImageRuntime().New(ctx, runlabelImage, signaturePolicyPath, authfile, output, &dockerRegistryOptions, image.SigningOptions{}, false)
 	} else {
 		newImage, err = runtime.ImageRuntime().NewFromLocal(runlabelImage)
 	}

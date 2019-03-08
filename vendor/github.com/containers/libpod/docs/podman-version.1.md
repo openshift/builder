@@ -16,7 +16,7 @@ OS, and Architecture.
 
 Print usage statement
 
-**--format**, **-f**
+**--format**
 
 Change output format to "json" or a Go template.
 

@@ -35,7 +35,6 @@ var _ = Describe("Podman export", func() {
 	})
 
 	It("podman export output flag", func() {
-		SkipIfRemote()
 		_, ec, cid := podmanTest.RunLsContainer("")
 		Expect(ec).To(Equal(0))
 

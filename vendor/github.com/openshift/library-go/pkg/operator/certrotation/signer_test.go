@@ -35,7 +35,7 @@ func TestEnsureSigningCertKeyPair(t *testing.T) {
 					t.Fatal(spew.Sdump(actions))
 				}
 
-				if !actions[0].Matches("update", "secrets") {
+				if !actions[0].Matches("get", "secrets") {
 					t.Error(actions[0])
 				}
 				if !actions[1].Matches("create", "secrets") {
@@ -56,15 +56,15 @@ func TestEnsureSigningCertKeyPair(t *testing.T) {
 			verifyActions: func(t *testing.T, client *kubefake.Clientset) {
 				t.Helper()
 				actions := client.Actions()
-				if len(actions) != 1 {
+				if len(actions) != 2 {
 					t.Fatal(spew.Sdump(actions))
 				}
 
-				if !actions[0].Matches("update", "secrets") {
-					t.Error(actions[0])
+				if !actions[1].Matches("update", "secrets") {
+					t.Error(actions[1])
 				}
 
-				actual := actions[0].(clienttesting.UpdateAction).GetObject().(*corev1.Secret)
+				actual := actions[1].(clienttesting.UpdateAction).GetObject().(*corev1.Secret)
 				if len(actual.Data["tls.crt"]) == 0 || len(actual.Data["tls.key"]) == 0 {
 					t.Error(actual.Data)
 				}
@@ -75,7 +75,8 @@ func TestEnsureSigningCertKeyPair(t *testing.T) {
 			initialSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "signer",
 					Annotations: map[string]string{
-						"auth.openshift.io/certificate-expiry-date": "2108-09-08T22:47:31-07:00",
+						"auth.openshift.io/certificate-not-after":  "2108-09-08T22:47:31-07:00",
+						"auth.openshift.io/certificate-not-before": "2108-09-08T20:47:31-07:00",
 					}},
 			},
 			verifyActions: func(t *testing.T, client *kubefake.Clientset) {
@@ -100,13 +101,13 @@ func TestEnsureSigningCertKeyPair(t *testing.T) {
 			}
 
 			c := &SigningRotation{
-				Namespace:         "ns",
-				Name:              "signer",
-				Validity:          24 * time.Hour,
-				RefreshPercentage: .50,
-				Client:            client.CoreV1(),
-				Lister:            corev1listers.NewSecretLister(indexer),
-				EventRecorder:     events.NewInMemoryRecorder("test"),
+				Namespace:     "ns",
+				Name:          "signer",
+				Validity:      24 * time.Hour,
+				Refresh:       12 * time.Hour,
+				Client:        client.CoreV1(),
+				Lister:        corev1listers.NewSecretLister(indexer),
+				EventRecorder: events.NewInMemoryRecorder("test"),
 			}
 
 			_, err := c.ensureSigningCertKeyPair()

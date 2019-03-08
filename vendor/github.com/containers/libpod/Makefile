@@ -1,6 +1,6 @@
 GO ?= go
 DESTDIR ?= /
-EPOCH_TEST_COMMIT ?= 4406e1cfeed18fe89c0ad4e20a3c3b2f4b9ffcae
+EPOCH_TEST_COMMIT ?= d32e2d1fecb80f74a727f857bacda08bea9b7d67
 HEAD ?= HEAD
 CHANGELOG_BASE ?= HEAD~
 CHANGELOG_TARGET ?= HEAD
@@ -25,7 +25,6 @@ ifneq (,$(findstring varlink,$(BUILDTAGS)))
 	PODMAN_VARLINK_DEPENDENCIES = cmd/podman/varlink/iopodman.go
 endif
 CONTAINER_RUNTIME := $(shell command -v podman 2> /dev/null || echo docker)
-OCI_RUNTIME ?= ""
 
 BASHINSTALLDIR=${PREFIX}/share/bash-completion/completions
 OCIUMOUNTINSTALLDIR=$(PREFIX)/share/oci-umount/oci-umount.d
@@ -34,17 +33,12 @@ SELINUXOPT ?= $(shell test -x /usr/sbin/selinuxenabled && selinuxenabled && echo
 PACKAGES ?= $(shell $(GO) list -tags "${BUILDTAGS}" ./... | grep -v github.com/containers/libpod/vendor | grep -v e2e | grep -v system )
 
 COMMIT_NO ?= $(shell git rev-parse HEAD 2> /dev/null || true)
-GIT_COMMIT ?= $(if $(shell git status --porcelain --untracked-files=no),${COMMIT_NO}-dirty,${COMMIT_NO})
+GIT_COMMIT ?= $(if $(shell git status --porcelain --untracked-files=no),"${COMMIT_NO}-dirty","${COMMIT_NO}")
 BUILD_INFO ?= $(shell date +%s)
 LIBPOD := ${PROJECT}/libpod
 LDFLAGS_PODMAN ?= $(LDFLAGS) -X $(LIBPOD).gitCommit=$(GIT_COMMIT) -X $(LIBPOD).buildInfo=$(BUILD_INFO)
 ISODATE ?= $(shell date --iso-8601)
-#Update to LIBSECCOMP_COMMIT should reflect in Dockerfile too.
 LIBSECCOMP_COMMIT := release-2.3
-
-# Rarely if ever should integration tests take more than 50min,
-# caller may override in special circumstances if needed.
-GINKGOTIMEOUT ?= -timeout=50m
 
 # If GOPATH not specified, use one in the local directory
 ifeq ($(GOPATH),)
@@ -72,39 +66,36 @@ all: binaries docs
 
 default: help
 
-define PRINT_HELP_PYSCRIPT
-import re, sys
-
-print("Usage: make <target>")
-cmds = {}
-for line in sys.stdin:
-	match = re.match(r'^([a-zA-Z_-]+):.*?## (.*)$$', line)
-	if match:
-	  target, help = match.groups()
-	  cmds.update({target: help})
-for cmd in sorted(cmds):
-		print(" * '%s' - %s" % (cmd, cmds[cmd]))
-endef
-export PRINT_HELP_PYSCRIPT
-
 help:
-	@python -c "$$PRINT_HELP_PYSCRIPT" < $(MAKEFILE_LIST)
+	@echo "Usage: make <target>"
+	@echo
+	@echo " * 'install' - Install binaries to system locations"
+	@echo " * 'binaries' - Build podman"
+	@echo " * 'integration' - Execute integration tests"
+	@echo " * 'clean' - Clean artifacts"
+	@echo " * 'lint' - Execute the source code linter"
+	@echo " * 'gofmt' - Verify the source code gofmt"
 
 .gopathok:
 ifeq ("$(wildcard $(GOPKGDIR))","")
 	mkdir -p "$(GOPKGBASEDIR)"
-	ln -sf "$(CURDIR)" "$(GOPKGBASEDIR)"
+	ln -s "$(CURDIR)" "$(GOPKGBASEDIR)"
 endif
 	touch $@
 
-lint: .gopathok varlink_generate ## Execute the source code linter
+lint: .gopathok varlink_generate
 	@echo "checking lint"
 	@./.tool/lint
 
-gofmt: ## Verify the source code gofmt
+gofmt:
 	find . -name '*.go' ! -path './vendor/*' -exec gofmt -s -w {} \+
 	git diff --exit-code
 
+test/bin2img/bin2img: .gopathok $(wildcard test/bin2img/*.go)
+	$(GO) build -ldflags '$(LDFLAGS)' -tags "$(BUILDTAGS) containers_image_ostree_stub" -o $@ $(PROJECT)/test/bin2img
+
+test/copyimg/copyimg: .gopathok $(wildcard test/copyimg/*.go)
+	$(GO) build -ldflags '$(LDFLAGS)' -tags "$(BUILDTAGS) containers_image_ostree_stub" -o $@ $(PROJECT)/test/copyimg
 
 test/checkseccomp/checkseccomp: .gopathok $(wildcard test/checkseccomp/*.go)
 	$(GO) build -ldflags '$(LDFLAGS)' -tags "$(BUILDTAGS) containers_image_ostree_stub" -o $@ $(PROJECT)/test/checkseccomp
@@ -112,16 +103,13 @@ test/checkseccomp/checkseccomp: .gopathok $(wildcard test/checkseccomp/*.go)
 test/goecho/goecho: .gopathok $(wildcard test/goecho/*.go)
 	$(GO) build -ldflags '$(LDFLAGS)' -o $@ $(PROJECT)/test/goecho
 
-podman: .gopathok $(PODMAN_VARLINK_DEPENDENCIES) ## Build with podman
+podman: .gopathok $(PODMAN_VARLINK_DEPENDENCIES)
 	$(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags "$(BUILDTAGS)" -o bin/$@ $(PROJECT)/cmd/podman
 
-podman-remote: .gopathok $(PODMAN_VARLINK_DEPENDENCIES) ## Build with podman on remote environment
+podman-remote: .gopathok $(PODMAN_VARLINK_DEPENDENCIES)
 	$(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags "$(BUILDTAGS) remoteclient" -o bin/$@ $(PROJECT)/cmd/podman
 
-podman-remote-darwin: .gopathok $(PODMAN_VARLINK_DEPENDENCIES) ## Build with podman on remote OSX environment
-	GOOS=darwin $(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags "remoteclient containers_image_openpgp exclude_graphdriver_devicemapper" -o bin/$@ $(PROJECT)/cmd/podman
-
-local-cross: $(CROSS_BUILD_TARGETS) ## Cross local compilation
+local-cross: $(CROSS_BUILD_TARGETS)
 
 bin/podman.cross.%: .gopathok
 	TARGET="$*"; \
@@ -129,13 +117,15 @@ bin/podman.cross.%: .gopathok
 	GOARCH="$${TARGET##*.}" \
 	$(GO) build -ldflags '$(LDFLAGS_PODMAN)' -tags '$(BUILDTAGS_CROSS)' -o "$@" $(PROJECT)/cmd/podman
 
-clean: ## Clean artifacts
+clean:
 	rm -rf \
 		.gopathok \
 		_output \
 		bin \
 		build \
+		test/bin2img/bin2img \
 		test/checkseccomp/checkseccomp \
+		test/copyimg/copyimg \
 		test/goecho/goecho \
 		test/testdata/redis-image \
 		cmd/podman/varlink/iopodman.go \
@@ -147,17 +137,17 @@ clean: ## Clean artifacts
 	find . -name \*~ -delete
 	find . -name \#\* -delete
 
-libpodimage: ## Build the libpod image
+libpodimage:
 	${CONTAINER_RUNTIME} build -t ${LIBPOD_IMAGE} .
 
 dbuild: libpodimage
 	${CONTAINER_RUNTIME} run --name=${LIBPOD_INSTANCE} --privileged -v ${PWD}:/go/src/${PROJECT} --rm ${LIBPOD_IMAGE} make all
 
-test: libpodimage ## Run tests on built image
-	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e OCI_RUNTIME -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all localunit install.catatonit localintegration
+test: libpodimage
+	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all localunit install.catatonit localintegration
 
-integration: libpodimage ## Execute integration tests
-	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e OCI_RUNTIME -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all install.catatonit localintegration
+integration: libpodimage
+	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make clean all install.catatonit localintegration
 
 integration.fedora:
 	DIST=Fedora sh .papr_prepare.sh
@@ -165,45 +155,42 @@ integration.fedora:
 integration.centos:
 	DIST=CentOS sh .papr_prepare.sh
 
-shell: libpodimage ## Run the built image and attach a shell
-	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e CGROUP_MANAGER=cgroupfs -e TESTFLAGS -e OCI_RUNTIME -e TRAVIS -it --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} sh
+shell: libpodimage
+	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e CGROUP_MANAGER=cgroupfs -e TESTFLAGS -e TRAVIS -it --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} sh
 
-testunit: libpodimage ## Run unittest on the built image
-	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e OCI_RUNTIME -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make localunit
+testunit: libpodimage
+	${CONTAINER_RUNTIME} run -e STORAGE_OPTIONS="--storage-driver=vfs" -e TESTFLAGS -e CGROUP_MANAGER=cgroupfs -e TRAVIS -t --privileged --rm -v ${CURDIR}:/go/src/${PROJECT} ${LIBPOD_IMAGE} make localunit
 
 localunit: test/goecho/goecho varlink_generate
 	$(GO) test -tags "$(BUILDTAGS)" -cover $(PACKAGES)
 	$(MAKE) -C contrib/cirrus/packer test
 
 ginkgo:
-	ginkgo -v -tags "$(BUILDTAGS)" $(GINKGOTIMEOUT) -cover -flakeAttempts 3 -progress -trace -noColor test/e2e/.
+	ginkgo -v -tags "$(BUILDTAGS)" -cover -flakeAttempts 3 -progress -trace -noColor test/e2e/.
 
-ginkgo-remote:
-	ginkgo -v -tags "$(BUILDTAGS) remoteclient" $(GINKGOTIMEOUT) -cover -flakeAttempts 3 -progress -trace -noColor test/e2e/.
+localintegration: varlink_generate test-binaries ginkgo
 
-localintegration: varlink_generate test-binaries ginkgo ginkgo-remote
-
-localsystem: .install.ginkgo
+localsystem: .install.ginkgo .install.gomega
 	ginkgo -v -noColor test/system/
 
-system.test-binary: .install.ginkgo
+system.test-binary: .install.ginkgo .install.gomega
 	$(GO) test -c ./test/system
 
-perftest:  ## Build perf tests
+perftest:
 	$ cd contrib/perftest;go build
 
-run-perftest: perftest ## Build and run perf tests
+run-perftest: perftest
 	$ contrib/perftest/perftest
 
 vagrant-check:
 	BOX=$(BOX) sh ./vagrant.sh
 
-binaries: varlink_generate podman podman-remote  ## Build podman
+binaries: varlink_generate easyjson_generate podman
 
 install.catatonit:
 	./hack/install_catatonit.sh
 
-test-binaries: test/checkseccomp/checkseccomp test/goecho/goecho install.catatonit
+test-binaries: test/bin2img/bin2img test/copyimg/copyimg test/checkseccomp/checkseccomp test/goecho/goecho install.catatonit
 
 MANPAGES_MD ?= $(wildcard docs/*.md pkg/*/docs/*.md)
 MANPAGES ?= $(MANPAGES_MD:%.md=%)
@@ -211,12 +198,12 @@ MANPAGES ?= $(MANPAGES_MD:%.md=%)
 $(MANPAGES): %: %.md .gopathok
 	@sed -e 's/\((podman.*\.md)\)//' -e 's/\[\(podman.*\)\]/\1/' $<  | $(GOMD2MAN) -in /dev/stdin -out $@
 
-docs: $(MANPAGES) ## Generate documentation
+docs: $(MANPAGES)
 
 docker-docs: docs
 	(cd docs; ./dckrman.sh *.1)
 
-changelog: ## Generate changelog
+changelog:
 	@echo "Creating changelog from $(CHANGELOG_BASE) to $(CHANGELOG_TARGET)"
 	$(eval TMPFILE := $(shell mktemp))
 	$(shell cat changelog.txt > $(TMPFILE))
@@ -226,12 +213,11 @@ changelog: ## Generate changelog
 	$(shell cat $(TMPFILE) >> changelog.txt)
 	$(shell rm $(TMPFILE))
 
-install: .gopathok install.bin install.man install.cni install.systemd  ## Install binaries to system locations
+install: .gopathok install.bin install.man install.cni install.systemd
 
 install.bin:
 	install ${SELINUXOPT} -d -m 755 $(BINDIR)
 	install ${SELINUXOPT} -m 755 bin/podman $(BINDIR)/podman
-	test -z "${SELINUXOPT}" || chcon --verbose --reference=$(BINDIR)/podman bin/podman
 
 install.man: docs
 	install ${SELINUXOPT} -d -m 755 $(MANDIR)/man1
@@ -279,14 +265,14 @@ uninstall:
 
 .PHONY: install.tools
 
-install.tools: .install.gitvalidation .install.gometalinter .install.md2man .install.ginkgo ## Install needed tools
+install.tools: .install.gitvalidation .install.gometalinter .install.md2man .install.easyjson .install.ginkgo .install.gomega
 
-.install.vndr: .gopathok
-	$(GO) get -u github.com/LK4D4/vndr
+.install.gomega: .gopathok
+	$(GO) get github.com/onsi/gomega/...
 
 .install.ginkgo: .gopathok
 	if [ ! -x "$(GOBIN)/ginkgo" ]; then \
-		$(GO) build -o ${GOPATH}/bin/ginkgo ./vendor/github.com/onsi/ginkgo/ginkgo ; \
+		$(GO) get -u github.com/onsi/ginkgo/ginkgo; \
 	fi
 
 .install.gitvalidation: .gopathok
@@ -308,6 +294,11 @@ install.tools: .install.gitvalidation .install.gometalinter .install.md2man .ins
 		   $(GO) get -u github.com/cpuguy83/go-md2man; \
 	fi
 
+.install.easyjson: .gopathok
+	if [ ! -x "$(GOBIN)/easyffjson" ]; then \
+		  $(GO) get -u github.com/mailru/easyjson/...; \
+	fi
+
 .install.ostree: .gopathok
 	if ! pkg-config ostree-1 2> /dev/null ; then \
 		git clone https://github.com/ostreedev/ostree $(FIRST_GOPATH)/src/github.com/ostreedev/ostree ; \
@@ -316,8 +307,18 @@ install.tools: .install.gitvalidation .install.gometalinter .install.md2man .ins
 		make all install; \
 	fi
 
-varlink_generate: .gopathok cmd/podman/varlink/iopodman.go ## Generate varlink
+varlink_generate: .gopathok cmd/podman/varlink/iopodman.go
 varlink_api_generate: .gopathok API.md
+
+easyjson_generate: .gopathok libpod/container_easyjson.go libpod/pod_easyjson.go
+
+libpod/container_easyjson.go: libpod/container.go
+	rm -f libpod/container_easyjson.go
+	cd "$(GOPKGDIR)" && easyjson -build_tags "$(BUILDTAGS)" ./libpod/container.go
+
+libpod/pod_easyjson.go: libpod/pod.go
+	rm -f libpod/pod_easyjson.go
+	cd "$(GOPKGDIR)" && easyjson -build_tags "$(BUILDTAGS)" ./libpod/pod.go
 
 .PHONY: install.libseccomp.sudo
 install.libseccomp.sudo:
@@ -341,13 +342,6 @@ build-all-new-commits:
 	# Validate that all the commits build on top of $(GIT_BASE_BRANCH)
 	git rebase $(GIT_BASE_BRANCH) -x make
 
-vendor: .install.vndr
-	$(GOPATH)/bin/vndr \
-		-whitelist "github.com/varlink/go"  \
-		-whitelist "github.com/onsi/ginkgo" \
-		-whitelist "github.com/onsi/gomega" \
-		-whitelist "gopkg.in/fsnotify.v1"
-
 .PHONY: \
 	.gopathok \
 	binaries \
@@ -365,4 +359,3 @@ vendor: .install.vndr
 	changelog \
 	validate \
 	install.libseccomp.sudo \
-	vendor

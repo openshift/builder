@@ -11,8 +11,14 @@ import (
 
 func init() {
 	var (
-		mountDescription = "\n  Mounts a working container's root filesystem for manipulation."
-		noTruncate       bool
+		mountDescription = `buildah mount
+  mounts a working container's root filesystem for manipulation.
+
+  Note:  In rootless mode you need to first execute buildah unshare, to put you
+  into the usernamespace. Afterwards you can buildah mount the container and
+  view/modify the content in the containers root file system.
+`
+		noTruncate bool
 	)
 	mountCommand := &cobra.Command{
 		Use:   "mount",
@@ -23,8 +29,14 @@ func init() {
 		},
 		Example: `buildah mount
   buildah mount containerID
-  buildah mount containerID1 containerID2`,
+  buildah mount containerID1 containerID2
+
+  In rootless mode you must use buildah unshare first.
+  buildah unshare
+  buildah mount containerID
+`,
 	}
+	mountCommand.SetUsageTemplate(UsageTemplate())
 
 	flags := mountCommand.Flags()
 	flags.SetInterspersed(false)
@@ -51,7 +63,7 @@ func mountCmd(c *cobra.Command, args []string, noTruncate bool) error {
 		// Differently, allow the mount if we are already in a userns, as the mount point will still
 		// be accessible once "buildah mount" exits.
 		if os.Getenv(startedInUserNS) != "" && store.GraphDriverName() != "vfs" {
-			return fmt.Errorf("cannot mount using driver %s in rootless mode", store.GraphDriverName())
+			return fmt.Errorf("cannot mount using driver %s in rootless mode. You need to run it in a `buildah unshare` session", store.GraphDriverName())
 		}
 
 		for _, name := range args {

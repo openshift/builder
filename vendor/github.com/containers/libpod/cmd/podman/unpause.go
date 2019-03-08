@@ -3,44 +3,38 @@ package main
 import (
 	"os"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/libpod"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	unpauseCommand cliconfig.UnpauseValues
-
+	unpauseFlags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "all, a",
+			Usage: "unpause all paused containers",
+		},
+	}
 	unpauseDescription = `
    podman unpause
 
    Unpauses one or more running containers.  The container name or ID can be used.
 `
-	_unpauseCommand = &cobra.Command{
-		Use:   "unpause",
-		Short: "Unpause the processes in one or more containers",
-		Long:  unpauseDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			unpauseCommand.InputArgs = args
-			unpauseCommand.GlobalFlags = MainGlobalOpts
-			return unpauseCmd(&unpauseCommand)
-		},
-		Example: "CONTAINER-NAME [CONTAINER-NAME ...]",
+	unpauseCommand = cli.Command{
+		Name:         "unpause",
+		Usage:        "Unpause the processes in one or more containers",
+		Description:  unpauseDescription,
+		Flags:        unpauseFlags,
+		Action:       unpauseCmd,
+		ArgsUsage:    "CONTAINER-NAME [CONTAINER-NAME ...]",
+		OnUsageError: usageErrorHandler,
 	}
 )
 
-func init() {
-	unpauseCommand.Command = _unpauseCommand
-	unpauseCommand.SetUsageTemplate(UsageTemplate())
-	flags := unpauseCommand.Flags()
-	flags.BoolVarP(&unpauseCommand.All, "all", "a", false, "Unpause all paused containers")
-}
-
-func unpauseCmd(c *cliconfig.UnpauseValues) error {
+func unpauseCmd(c *cli.Context) error {
 	var (
 		unpauseContainers []*libpod.Container
 		unpauseFuncs      []shared.ParallelWorkerInput
@@ -49,18 +43,18 @@ func unpauseCmd(c *cliconfig.UnpauseValues) error {
 		return errors.New("unpause is not supported for rootless containers")
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	args := c.InputArgs
-	if len(args) < 1 && !c.All {
+	args := c.Args()
+	if len(args) < 1 && !c.Bool("all") {
 		return errors.Errorf("you must provide at least one container name or id")
 	}
-	if c.All {
-		cs, err := getAllOrLatestContainers(&c.PodmanCommand, runtime, libpod.ContainerStatePaused, "paused")
+	if c.Bool("all") {
+		cs, err := getAllOrLatestContainers(c, runtime, libpod.ContainerStatePaused, "paused")
 		if err != nil {
 			return err
 		}
@@ -90,7 +84,7 @@ func unpauseCmd(c *cliconfig.UnpauseValues) error {
 
 	maxWorkers := shared.Parallelize("unpause")
 	if c.GlobalIsSet("max-workers") {
-		maxWorkers = c.GlobalFlags.MaxWorks
+		maxWorkers = c.GlobalInt("max-workers")
 	}
 	logrus.Debugf("Setting maximum workers to %d", maxWorkers)
 

@@ -331,9 +331,6 @@ func (c *CreateConfig) createExitCommand() []string {
 		"--cgroup-manager", config.CgroupManager,
 		"--tmpdir", config.TmpDir,
 	}
-	if config.OCIRuntime != "" {
-		command = append(command, []string{"--runtime", config.OCIRuntime}...)
-	}
 	if config.StorageConfig.GraphDriverName != "" {
 		command = append(command, []string{"--storage-driver", config.StorageConfig.GraphDriverName}...)
 	}
@@ -344,9 +341,10 @@ func (c *CreateConfig) createExitCommand() []string {
 }
 
 // GetContainerCreateOptions takes a CreateConfig and returns a slice of CtrCreateOptions
-func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime, pod *libpod.Pod) ([]libpod.CtrCreateOption, error) {
+func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]libpod.CtrCreateOption, error) {
 	var options []libpod.CtrCreateOption
 	var portBindings []ocicni.PortMapping
+	var pod *libpod.Pod
 	var err error
 
 	if c.Interactive {
@@ -360,14 +358,12 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime, pod *l
 		logrus.Debugf("appending name %s", c.Name)
 		options = append(options, libpod.WithName(c.Name))
 	}
-	if c.Pod != "" || pod != nil {
-		if pod == nil {
-			pod, err = runtime.LookupPod(c.Pod)
-			if err != nil {
-				return nil, errors.Wrapf(err, "unable to add container to pod %s", c.Pod)
-			}
-		}
+	if c.Pod != "" {
 		logrus.Debugf("adding container to pod %s", c.Pod)
+		pod, err = runtime.LookupPod(c.Pod)
+		if err != nil {
+			return nil, errors.Wrapf(err, "unable to add container to pod %s", c.Pod)
+		}
 		options = append(options, runtime.WithPod(pod))
 	}
 	if len(c.PortBindings) > 0 {
@@ -425,7 +421,11 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime, pod *l
 		}
 		options = append(options, libpod.WithNetNSFrom(connectedCtr))
 	} else if !c.NetMode.IsHost() && !c.NetMode.IsNone() {
+		isRootless := rootless.IsRootless()
 		postConfigureNetNS := c.NetMode.IsSlirp4netns() || (len(c.IDMappings.UIDMap) > 0 || len(c.IDMappings.GIDMap) > 0) && !c.UsernsMode.IsHost()
+		if isRootless && len(portBindings) > 0 {
+			return nil, errors.New("port bindings are not yet supported by rootless containers")
+		}
 		options = append(options, libpod.WithNetNS(portBindings, postConfigureNetNS, string(c.NetMode), networks))
 	}
 

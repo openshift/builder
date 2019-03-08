@@ -49,10 +49,11 @@ func init() {
 			}
 			return budCmd(cmd, args, br)
 		},
-		Example: `  buildah bud -f Dockerfile.simple .
+		Example: `buildah bud -f Dockerfile.simple .
   buildah bud --volume /home/test:/myvol:ro,Z -t imageName .
   buildah bud -f Dockerfile.simple -f Dockerfile.notsosimple .`,
 	}
+	budCommand.SetUsageTemplate(UsageTemplate())
 
 	flags := budCommand.Flags()
 	flags.SetInterspersed(false)
@@ -214,10 +215,9 @@ func budCmd(c *cobra.Command, inputArgs []string, iopts budResults) error {
 		logrus.Debugf("--compress option specified but is ignored")
 	}
 
-	compression := imagebuildah.Uncompressed
-
-	if c.Flag("disable-compression").Changed && !iopts.DisableCompression {
-		compression = imagebuildah.Gzip
+	compression := imagebuildah.Gzip
+	if iopts.DisableCompression {
+		compression = imagebuildah.Uncompressed
 	}
 
 	if c.Flag("disable-content-trust").Changed {
@@ -271,6 +271,7 @@ func budCmd(c *cobra.Command, inputArgs []string, iopts budResults) error {
 		RemoveIntermediateCtrs:  iopts.Rm,
 		ForceRmIntermediateCtrs: iopts.ForceRm,
 		BlobDirectory:           iopts.BlobCache,
+		Target:                  iopts.Target,
 	}
 
 	if iopts.Quiet {

@@ -213,7 +213,6 @@
 // test/extended/testdata/templates/templateservicebroker_bind.yaml
 // test/extended/testdata/test-cli-debug.yaml
 // test/extended/testdata/test-env-pod.json
-// test/extended/testdata/test-gitserver-tokenauth.yaml
 // test/extended/testdata/test-gitserver.yaml
 // test/extended/testdata/test-secret.json
 // test/extended/testdata/weighted-router.yaml
@@ -1789,13 +1788,12 @@ func testExtendedTestdataBuildsBuildTimingTestS2iBuildJson() (*asset, error) {
 	return a, nil
 }
 
-var _testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml = []byte(`kind: Build
+var _testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml = []byte(`kind: Image
 apiVersion: config.openshift.io/v1
 metadata:
   name: cluster
 spec:
-  buildDefaults:
-    registriesConfig:
+  registrySources:
       blockedRegistries:
       - docker.io
       - quay.io
@@ -1816,13 +1814,12 @@ func testExtendedTestdataBuildsClusterConfigRegistryBlacklistYaml() (*asset, err
 	return a, nil
 }
 
-var _testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml = []byte(`kind: Build
+var _testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml = []byte(`kind: Image
 apiVersion: config.openshift.io/v1
 metadata:
   name: cluster
 spec:
-  buildDefaults:
-    registriesConfig:
+  registrySources:
       allowedRegistries:
       - quay.io
 `)
@@ -1842,7 +1839,7 @@ func testExtendedTestdataBuildsClusterConfigRegistryWhitelistYaml() (*asset, err
 	return a, nil
 }
 
-var _testExtendedTestdataBuildsClusterConfigYaml = []byte(`kind: Build
+var _testExtendedTestdataBuildsClusterConfigYaml = []byte(`kind: Image
 apiVersion: config.openshift.io/v1
 metadata:
   name: cluster
@@ -12236,201 +12233,6 @@ func testExtendedTestdataTestEnvPodJson() (*asset, error) {
 	return a, nil
 }
 
-var _testExtendedTestdataTestGitserverTokenauthYaml = []byte(`apiVersion: v1
-kind: Template
-labels:
-  template: gitserver
-metadata:
-  name: gitserver
-objects:
-# The gitserver is deployed as a singleton pod and uses a very small amount
-# of resources. It can host or transiently serve Git repositories, as well
-# as automatically integrate with builds in a namespace.
-- apiVersion: v1
-  kind: DeploymentConfig
-  metadata:
-    name: gitserver
-    labels:
-      app: gitserver
-  spec:
-    replicas: 1 # the gitserver is not HA and should not be scaled past 1
-    selector:
-      run-container: gitserver
-    template:
-      metadata:
-        labels:
-          run-container: gitserver
-      spec:
-        containers:
-        - name: gitserver
-          image: openshift/origin-gitserver
-          readinessProbe:
-            tcpSocket:
-              port: 8080
-          ports:
-          - containerPort: 8080
-
-          env:
-          # Each environment variable matching GIT_INITIAL_CLONE_* will
-          # be cloned when the process starts; failures will be logged.
-          # <name> must be [A-Z0-9_\-\.], the cloned directory name will
-          # be lowercased. If the name is invalid the pod will halt. If
-          # the repository already exists on disk, it will be updated
-          # from the remote.
-          #
-          - name: GIT_INITIAL_CLONE_1
-            value: https://github.com/openshift/ruby-hello-world.git;ruby-hello-world
-
-
-          # The namespace of the pod is required for implicit config
-          # (passing '-' to AUTOLINK_KUBECONFIG or REQUIRE_SERVER_AUTH)
-          # and can also be used to target a specific namespace.
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-
-          # The URL that builds must use to access the Git repositories
-          # stored in this app.
-          # TODO: support HTTPS
-          - name: PUBLIC_URL
-            value: http://gitserver-tokenauth.$(POD_NAMESPACE).svc.cluster.local:8080
-          # The directory to store Git repositories in. If not backed
-          # by a persistent volume, repositories will be lost when
-          # deployments occur. Use INITIAL_GIT_CLONE and AUTOLINK_*
-          # to remove the need to use a persistent volume.
-          - name: GIT_HOME
-            value: /var/lib/git
-          # The directory to use as the default hook directory for any
-          # cloned or autolinked directories.
-          - name: HOOK_PATH
-            value: /var/lib/git-hooks
-
-          # Authentication and authorization
-
-          # If 'yes', clients may push to the server with git push.
-          - name: ALLOW_GIT_PUSH
-            value: "yes"
-          # If 'yes', clients may set hooks via the API. However, unless
-          # the Git home is backed by a persistent volume, any deployment
-          # will result in the hooks being lost.
-          - name: ALLOW_GIT_HOOKS
-            value: "yes"
-          # If 'yes', clients can create new git repositories on demand
-          # by pushing. If the data on disk is not backed by a persistent
-          # volume, the Git repo will be deleted if the deployment is
-          # updated.
-          - name: ALLOW_LAZY_CREATE
-            value: "yes"
-          # If 'yes', clients can pull without being authenticated.
-          - name: ALLOW_ANON_GIT_PULL
-
-          # Provides the path to a kubeconfig file in the image that
-          # should be used to authorize against the server. The value
-          # '-' will use the pod's service account.
-          # May not be used in combination with REQUIRE_GIT_AUTH
-          - name: REQUIRE_SERVER_AUTH
-            value: "-"
-          
-          # The namespace to check authorization against when
-          # REQUIRE_SERVICE_AUTH is used. Users must have 'get' on
-          # 'pods' to pull and 'create' on 'pods' to push.
-          - name: AUTH_NAMESPACE
-            value: $(POD_NAMESPACE)
-          # Require BASIC authentication with a username and password
-          # to push or pull.
-          # May not be used in combination with REQUIRE_SERVER_AUTH
-          #- name: REQUIRE_GIT_AUTH
-          #  value: gituser:gituserpassword
-
-          # Autolinking:
-          #
-          # The gitserver can automatically clone Git repositories
-          # associated with a build config and replace the URL with
-          # a link to the repo on PUBLIC_URL. The default post-receive
-          # hook on the cloned repo will then trigger a build. You
-          # may customize the hook with AUTOLINK_HOOK (path to hook).
-          # To autolink, the account the pod runs under must have 'edit'
-          # on the AUTOLINK_NAMESPACE:
-          #
-          #    oc policy add-role-to-user \
-          #      system:serviceaccount:${namespace}:gitserver edit
-          #
-          # Links are checked every time the pod starts.
-
-          # The location to read auth configuration from for autolinking.
-          # If '-', use the service account token to link. The account
-          # represented by this config must have the edit role on the
-          # namespace.
-          #- name: AUTOLINK_KUBECONFIG
-          #  value: "-"
-
-          # The namespace to autolink
-          #- name: AUTOLINK_NAMESPACE
-          #  value: $(POD_NAMESPACE)
-
-          # The path to a script in the image to use as the default
-          # post-receive hook - only set during link, so has no effect
-          # on cloned repositories. See the "hooks" directory in the
-          # image for examples.
-          #- name: AUTOLINK_HOOK
-
-          # The master service host is not signed with the service IP
-          # so we override with the consistent DNS name. Required for
-          # connections to the server.
-          - name: KUBERNETES_SERVICE_HOST
-            value: kubernetes.default
-
-          volumeMounts:
-          - mountPath: /var/lib/git/
-            name: git
-        volumes:
-        - name: git
-    triggers:
-    - type: ConfigChange
-
-# The gitserver service is required for DNS resolution
-- apiVersion: v1
-  kind: Service
-  metadata:
-    name: gitserver-tokenauth
-    labels:
-      app: gitserver
-  spec:
-    ports:
-    - port: 8080
-      targetPort: 8080
-    selector:
-      run-container: gitserver
-- apiVersion: v1
-  kind: Route
-  metadata:
-    name: gitserver-tokenauth
-    labels:
-      app: gitserver
-  spec:
-    tls:
-      termination: edge
-    to:
-      kind: Service
-      name: gitserver-tokenauth
-`)
-
-func testExtendedTestdataTestGitserverTokenauthYamlBytes() ([]byte, error) {
-	return _testExtendedTestdataTestGitserverTokenauthYaml, nil
-}
-
-func testExtendedTestdataTestGitserverTokenauthYaml() (*asset, error) {
-	bytes, err := testExtendedTestdataTestGitserverTokenauthYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "test/extended/testdata/test-gitserver-tokenauth.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
 var _testExtendedTestdataTestGitserverYaml = []byte(`apiVersion: v1
 kind: Template
 labels:
@@ -16504,7 +16306,7 @@ var _examplesImageStreamsImageStreamsCentos7Json = []byte(`{
               "sampleRef": "dotnetcore-2.0",
               "sampleRepo": "https://github.com/redhat-developer/s2i-dotnetcore-ex.git",
               "supports": "dotnet:2.0,dotnet",
-              "tags": "builder,.net,dotnet,dotnetcore,rh-dotnet20",
+              "tags": "hidden,builder,.net,dotnet,dotnetcore,rh-dotnet20",
               "version": "2.0"
             },
             "from": {
@@ -16599,24 +16401,6 @@ var _examplesImageStreamsImageStreamsCentos7Json = []byte(`{
           },
           {
             "annotations": {
-              "description": "Provides a Jenkins 1.X server on CentOS 7. For more information about using this container image, including OpenShift considerations, see https://github.com/openshift/jenkins/blob/master/README.md.",
-              "iconClass": "icon-jenkins",
-              "openshift.io/display-name": "Jenkins 1.X",
-              "openshift.io/provider-display-name": "Red Hat, Inc.",
-              "tags": "hidden,jenkins",
-              "version": "1.x"
-            },
-            "from": {
-              "kind": "DockerImage",
-              "name": "docker.io/openshift/jenkins-1-centos7:latest"
-            },
-            "name": "1",
-            "referencePolicy": {
-              "type": "Local"
-            }
-          },
-          {
-            "annotations": {
               "description": "Provides a Jenkins v2.x server on CentOS 7. For more information about using this container image, including OpenShift considerations, see https://github.com/openshift/jenkins/blob/master/README.md.",
               "iconClass": "icon-jenkins",
               "openshift.io/display-name": "Jenkins 2.X",
@@ -16626,7 +16410,7 @@ var _examplesImageStreamsImageStreamsCentos7Json = []byte(`{
             },
             "from": {
               "kind": "DockerImage",
-              "name": "docker.io/openshift/jenkins-2-centos7:v4.0"
+              "name": "quay.io/openshift/origin-jenkins:v4.0"
             },
             "name": "2",
             "referencePolicy": {
@@ -17025,7 +16809,7 @@ var _examplesImageStreamsImageStreamsCentos7Json = []byte(`{
             },
             "from": {
               "kind": "ImageStreamTag",
-              "name": "10"
+              "name": "11"
             },
             "name": "latest",
             "referencePolicy": {
@@ -17145,6 +16929,25 @@ var _examplesImageStreamsImageStreamsCentos7Json = []byte(`{
               "name": "docker.io/nodeshift/centos7-s2i-nodejs:10.x"
             },
             "name": "10",
+            "referencePolicy": {
+              "type": "Local"
+            }
+          },
+          {
+            "annotations": {
+              "description": "Build and run Node.js 11 applications on CentOS 7. For more information about using this builder image, including OpenShift considerations, see https://github.com/nodeshift/centos7-s2i-nodejs.",
+              "iconClass": "icon-nodejs",
+              "openshift.io/display-name": "Node.js 11",
+              "openshift.io/provider-display-name": "Red Hat, Inc.",
+              "sampleRepo": "https://github.com/sclorg/nodejs-ex.git",
+              "tags": "builder,nodejs",
+              "version": "11"
+            },
+            "from": {
+              "kind": "DockerImage",
+              "name": "docker.io/nodeshift/centos7-s2i-nodejs:11.x"
+            },
+            "name": "11",
             "referencePolicy": {
               "type": "Local"
             }
@@ -17837,7 +17640,7 @@ var _examplesImageStreamsImageStreamsCentos7Json = []byte(`{
             },
             "from": {
               "kind": "ImageStreamTag",
-              "name": "14.0"
+              "name": "15.0"
             },
             "name": "latest",
             "referencePolicy": {
@@ -18003,6 +17806,26 @@ var _examplesImageStreamsImageStreamsCentos7Json = []byte(`{
             "referencePolicy": {
               "type": "Local"
             }
+          },
+          {
+            "annotations": {
+              "description": "Build and run WildFly 15 applications on CentOS 7. For more information about using this builder image, including OpenShift considerations, see https://github.com/openshift-s2i/s2i-wildfly/blob/master/README.md.",
+              "iconClass": "icon-wildfly",
+              "openshift.io/display-name": "WildFly 15",
+              "openshift.io/provider-display-name": "Red Hat, Inc.",
+              "sampleRepo": "https://github.com/openshift/openshift-jee-sample.git",
+              "supports": "wildfly:15,jee,java",
+              "tags": "builder,wildfly,java",
+              "version": "15.0"
+            },
+            "from": {
+              "kind": "DockerImage",
+              "name": "docker.io/openshift/wildfly-150-centos7:latest"
+            },
+            "name": "15.0",
+            "referencePolicy": {
+              "type": "Local"
+            }
           }
         ]
       }
@@ -18043,20 +17866,41 @@ var _examplesImageStreamsImageStreamsRhel7Json = []byte(`{
         "tags": [
           {
             "annotations": {
-              "description": "Build and run .NET Core applications on RHEL 7. For more information about using this builder image, including OpenShift considerations, see https://github.com/redhat-developer/s2i-dotnetcore/tree/master/2.1/build/README.md.\n\nWARNING: By selecting this tag, your application will automatically update to use the latest version of .NET Core available on OpenShift, including major versions updates.",
+              "description": "Build and run .NET Core applications on RHEL 7. For more information about using this builder image, including OpenShift considerations, see https://github.com/redhat-developer/s2i-dotnetcore/tree/master/2.2/build/README.md.\n\nWARNING: By selecting this tag, your application will automatically update to use the latest version of .NET Core available on OpenShift, including major versions updates.",
               "iconClass": "icon-dotnet",
               "openshift.io/display-name": ".NET Core (Latest)",
               "sampleContextDir": "app",
-              "sampleRef": "dotnetcore-2.1",
+              "sampleRef": "dotnetcore-2.2",
               "sampleRepo": "https://github.com/redhat-developer/s2i-dotnetcore-ex.git",
               "supports": "dotnet",
               "tags": "builder,.net,dotnet,dotnetcore"
             },
             "from": {
               "kind": "ImageStreamTag",
-              "name": "2.1"
+              "name": "2.2"
             },
             "name": "latest",
+            "referencePolicy": {
+              "type": "Local"
+            }
+          },
+          {
+            "annotations": {
+              "description": "Build and run .NET Core 2.2 applications on RHEL 7. For more information about using this builder image, including OpenShift considerations, see https://github.com/redhat-developer/s2i-dotnetcore/tree/master/2.2/build/README.md.",
+              "iconClass": "icon-dotnet",
+              "openshift.io/display-name": ".NET Core 2.2",
+              "sampleContextDir": "app",
+              "sampleRef": "dotnetcore-2.2",
+              "sampleRepo": "https://github.com/redhat-developer/s2i-dotnetcore-ex.git",
+              "supports": "dotnet:2.2,dotnet",
+              "tags": "builder,.net,dotnet,dotnetcore,rh-dotnet22",
+              "version": "2.2"
+            },
+            "from": {
+              "kind": "DockerImage",
+              "name": "registry.redhat.io/dotnet/dotnet-22-rhel7:2.2"
+            },
+            "name": "2.2",
             "referencePolicy": {
               "type": "Local"
             }
@@ -18091,7 +17935,7 @@ var _examplesImageStreamsImageStreamsRhel7Json = []byte(`{
               "sampleRef": "dotnetcore-2.0",
               "sampleRepo": "https://github.com/redhat-developer/s2i-dotnetcore-ex.git",
               "supports": "dotnet:2.0,dotnet",
-              "tags": "builder,.net,dotnet,dotnetcore,rh-dotnet20",
+              "tags": "hidden,builder,.net,dotnet,dotnetcore,rh-dotnet20",
               "version": "2.0"
             },
             "from": {
@@ -18231,24 +18075,6 @@ var _examplesImageStreamsImageStreamsRhel7Json = []byte(`{
           },
           {
             "annotations": {
-              "description": "Provides a Jenkins 1.X server on RHEL 7. For more information about using this container image, including OpenShift considerations, see https://github.com/openshift/jenkins/blob/master/README.md.",
-              "iconClass": "icon-jenkins",
-              "openshift.io/display-name": "Jenkins 1.X",
-              "openshift.io/provider-display-name": "Red Hat, Inc.",
-              "tags": "hidden,jenkins",
-              "version": "1.x"
-            },
-            "from": {
-              "kind": "DockerImage",
-              "name": "registry.redhat.io/openshift3/jenkins-1-rhel7:latest"
-            },
-            "name": "1",
-            "referencePolicy": {
-              "type": "Local"
-            }
-          },
-          {
-            "annotations": {
               "description": "Provides a Jenkins 2.X server on RHEL 7. For more information about using this container image, including OpenShift considerations, see https://github.com/openshift/jenkins/blob/master/README.md.",
               "iconClass": "icon-jenkins",
               "openshift.io/display-name": "Jenkins 2.X",
@@ -18258,7 +18084,7 @@ var _examplesImageStreamsImageStreamsRhel7Json = []byte(`{
             },
             "from": {
               "kind": "DockerImage",
-              "name": "registry.redhat.io/openshift3/jenkins-2-rhel7:v4.0"
+              "name": "registry.redhat.io/openshift/jenkins-2-rhel7:v4.0"
             },
             "name": "2",
             "referencePolicy": {
@@ -25359,18 +25185,6 @@ var _examplesQuickstartsDotnetPgsqlPersistentJson = []byte(`{
                                         "containerPort": 5432
                                     }
                                 ],
-                                "readinessProbe": {
-                                    "exec": {
-                                        "command": [
-                                            "/bin/sh",
-                                            "-i",
-                                            "-c",
-                                            "psql -h 127.0.0.1 -U ${POSTGRESQL_USER} -q -d ${POSTGRESQL_DATABASE} -c 'SELECT 1'"
-                                        ]
-                                    },
-                                    "initialDelaySeconds": 5,
-                                    "timeoutSeconds": 1
-                                },
                                 "resources": {
                                     "limits": {
                                         "memory": "${MEMORY_POSTGRESQL_LIMIT}"
@@ -25840,7 +25654,7 @@ var _examplesQuickstartsDotnetJson = []byte(`{
             "displayName": ".NET builder",
             "name": "DOTNET_IMAGE_STREAM_TAG",
             "required": true,
-            "value": "dotnet:2.1"
+            "value": "dotnet:2.2"
         },
         {
             "description": "The OpenShift Namespace where the ImageStream resides.",
@@ -25860,7 +25674,7 @@ var _examplesQuickstartsDotnetJson = []byte(`{
             "description": "Set this to a branch name, tag or other ref of your repository if you are not using the default branch.",
             "displayName": "Git Reference",
             "name": "SOURCE_REPOSITORY_REF",
-            "value": "dotnetcore-2.1"
+            "value": "dotnetcore-2.2"
         },
         {
             "description": "Set this to use a subdirectory of the source code repository",
@@ -33001,7 +32815,6 @@ var _bindata = map[string]func() (*asset, error){
 	"test/extended/testdata/templates/templateservicebroker_bind.yaml": testExtendedTestdataTemplatesTemplateservicebroker_bindYaml,
 	"test/extended/testdata/test-cli-debug.yaml": testExtendedTestdataTestCliDebugYaml,
 	"test/extended/testdata/test-env-pod.json": testExtendedTestdataTestEnvPodJson,
-	"test/extended/testdata/test-gitserver-tokenauth.yaml": testExtendedTestdataTestGitserverTokenauthYaml,
 	"test/extended/testdata/test-gitserver.yaml": testExtendedTestdataTestGitserverYaml,
 	"test/extended/testdata/test-secret.json": testExtendedTestdataTestSecretJson,
 	"test/extended/testdata/weighted-router.yaml": testExtendedTestdataWeightedRouterYaml,
@@ -33512,7 +33325,6 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				}},
 				"test-cli-debug.yaml": &bintree{testExtendedTestdataTestCliDebugYaml, map[string]*bintree{}},
 				"test-env-pod.json": &bintree{testExtendedTestdataTestEnvPodJson, map[string]*bintree{}},
-				"test-gitserver-tokenauth.yaml": &bintree{testExtendedTestdataTestGitserverTokenauthYaml, map[string]*bintree{}},
 				"test-gitserver.yaml": &bintree{testExtendedTestdataTestGitserverYaml, map[string]*bintree{}},
 				"test-secret.json": &bintree{testExtendedTestdataTestSecretJson, map[string]*bintree{}},
 				"weighted-router.yaml": &bintree{testExtendedTestdataWeightedRouterYaml, map[string]*bintree{}},

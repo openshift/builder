@@ -6,17 +6,21 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/libpod"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	podTopCommand cliconfig.PodTopValues
-
+	podTopFlags = []cli.Flag{
+		LatestFlag,
+		cli.BoolFlag{
+			Name:   "list-descriptors",
+			Hidden: true,
+		},
+	}
 	podTopDescription = fmt.Sprintf(`Display the running processes containers in a pod.  Specify format descriptors
 to alter the output.  You may run "podman pod top -l pid pcpu seccomp" to print
 the process ID, the CPU percentage and the seccomp mode of each process of
@@ -24,35 +28,24 @@ the latest pod.
 %s
 `, getDescriptorString())
 
-	_podTopCommand = &cobra.Command{
-		Use:   "top",
-		Short: "Display the running processes of containers in a pod",
-		Long:  podTopDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			podTopCommand.InputArgs = args
-			podTopCommand.GlobalFlags = MainGlobalOpts
-			return podTopCmd(&podTopCommand)
-		},
-		Example: "POD-NAME [format descriptors]",
+	podTopCommand = cli.Command{
+		Name:           "top",
+		Usage:          "Display the running processes of containers in a pod",
+		Description:    podTopDescription,
+		Flags:          sortFlags(podTopFlags),
+		Action:         podTopCmd,
+		ArgsUsage:      "POD-NAME [format descriptors]",
+		SkipArgReorder: true,
+		OnUsageError:   usageErrorHandler,
 	}
 )
 
-func init() {
-	podTopCommand.Command = _podTopCommand
-	podTopCommand.SetUsageTemplate(UsageTemplate())
-	flags := podTopCommand.Flags()
-	flags.BoolVarP(&podTopCommand.Latest, "latest,", "l", false, "Act on the latest pod podman is aware of")
-	flags.BoolVar(&podTopCommand.ListDescriptors, "list-descriptors", false, "")
-	flags.MarkHidden("list-descriptors")
-
-}
-
-func podTopCmd(c *cliconfig.PodTopValues) error {
+func podTopCmd(c *cli.Context) error {
 	var pod *libpod.Pod
 	var err error
-	args := c.InputArgs
+	args := c.Args()
 
-	if c.ListDescriptors {
+	if c.Bool("list-descriptors") {
 		descriptors, err := libpod.GetContainerPidInformationDescriptors()
 		if err != nil {
 			return err
@@ -61,18 +54,21 @@ func podTopCmd(c *cliconfig.PodTopValues) error {
 		return nil
 	}
 
-	if len(args) < 1 && !c.Latest {
+	if len(args) < 1 && !c.Bool("latest") {
 		return errors.Errorf("you must provide the name or id of a running pod")
 	}
+	if err := validateFlags(c, podTopFlags); err != nil {
+		return err
+	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
 	defer runtime.Shutdown(false)
 
 	var descriptors []string
-	if c.Latest {
+	if c.Bool("latest") {
 		descriptors = args
 		pod, err = runtime.GetLatestPod()
 	} else {

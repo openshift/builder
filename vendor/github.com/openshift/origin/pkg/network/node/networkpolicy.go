@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -18,9 +19,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	kapi "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/networking"
+	"k8s.io/kubernetes/pkg/util/async"
 
 	networkapi "github.com/openshift/api/network/v1"
 	"github.com/openshift/origin/pkg/network"
@@ -35,6 +38,8 @@ type networkPolicyPlugin struct {
 	namespaces  map[uint32]*npNamespace
 	kNamespaces map[string]kapi.Namespace
 	pods        map[ktypes.UID]kapi.Pod
+
+	runner *async.BoundedFrequencyRunner
 }
 
 // npNamespace tracks NetworkPolicy-related data for a Namespace
@@ -42,6 +47,7 @@ type npNamespace struct {
 	name  string
 	vnid  uint32
 	inUse bool
+	dirty bool
 
 	policies map[ktypes.UID]*npPolicy
 }
@@ -95,6 +101,12 @@ func (np *networkPolicyPlugin) Start(node *OsdnNode) error {
 		return err
 	}
 
+	// Rate-limit calls to np.syncFlows to 1-per-second after the 2nd call within 1
+	// second. The maxInterval (time.Hour) is irrelevant here because we always call
+	// np.runner.Run() if there is syncing to be done.
+	np.runner = async.NewBoundedFrequencyRunner("NetworkPolicy", np.syncFlows, time.Second, time.Hour, 2)
+	go np.runner.Loop(utilwait.NeverStop)
+
 	if err := np.initNamespaces(); err != nil {
 		return err
 	}
@@ -109,6 +121,15 @@ func (np *networkPolicyPlugin) initNamespaces() error {
 	np.lock.Lock()
 	defer np.lock.Unlock()
 
+	pods, err := np.node.GetLocalPods(metav1.NamespaceAll)
+	if err != nil {
+		return err
+	}
+	inUseNamespaces := sets.NewString()
+	for _, pod := range pods {
+		inUseNamespaces.Insert(pod.Namespace)
+	}
+
 	namespaces, err := np.node.kClient.Core().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
 		return err
@@ -120,7 +141,7 @@ func (np *networkPolicyPlugin) initNamespaces() error {
 			np.namespaces[vnid] = &npNamespace{
 				name:     ns.Name,
 				vnid:     vnid,
-				inUse:    false,
+				inUse:    inUseNamespaces.Has(ns.Name),
 				policies: make(map[ktypes.UID]*npPolicy),
 			}
 		}
@@ -174,7 +195,15 @@ func (np *networkPolicyPlugin) DeleteNetNamespace(netns *networkapi.NetNamespace
 	np.lock.Lock()
 	defer np.lock.Unlock()
 
-	delete(np.namespaces, netns.NetID)
+	if npns, exists := np.namespaces[netns.NetID]; exists {
+		if npns.inUse {
+			npns.inUse = false
+			// We call syncNamespaceFlows() not syncNamespace() because it
+			// needs to happen before we forget about the namespace.
+			np.syncNamespaceFlows(npns)
+		}
+		delete(np.namespaces, netns.NetID)
+	}
 }
 
 func (np *networkPolicyPlugin) GetVNID(namespace string) (uint32, error) {
@@ -190,6 +219,25 @@ func (np *networkPolicyPlugin) GetMulticastEnabled(vnid uint32) bool {
 }
 
 func (np *networkPolicyPlugin) syncNamespace(npns *npNamespace) {
+	if !npns.dirty {
+		npns.dirty = true
+		np.runner.Run()
+	}
+}
+
+func (np *networkPolicyPlugin) syncFlows() {
+	np.lock.Lock()
+	defer np.lock.Unlock()
+
+	for _, npns := range np.namespaces {
+		if npns.dirty {
+			np.syncNamespaceFlows(npns)
+			npns.dirty = false
+		}
+	}
+}
+
+func (np *networkPolicyPlugin) syncNamespaceFlows(npns *npNamespace) {
 	glog.V(5).Infof("syncNamespace %d", npns.vnid)
 	otx := np.node.oc.NewTransaction()
 	otx.DeleteFlows("table=80, reg1=%d", npns.vnid)

@@ -2,20 +2,15 @@ package libpod
 
 import (
 	"errors"
-
-	"github.com/containers/libpod/libpod/image"
 )
 
 var (
 	// ErrNoSuchCtr indicates the requested container does not exist
-	ErrNoSuchCtr = image.ErrNoSuchCtr
-
+	ErrNoSuchCtr = errors.New("no such container")
 	// ErrNoSuchPod indicates the requested pod does not exist
-	ErrNoSuchPod = image.ErrNoSuchPod
-
+	ErrNoSuchPod = errors.New("no such pod")
 	// ErrNoSuchImage indicates the requested image does not exist
-	ErrNoSuchImage = image.ErrNoSuchImage
-
+	ErrNoSuchImage = errors.New("no such image")
 	// ErrNoSuchVolume indicates the requested volume does not exist
 	ErrNoSuchVolume = errors.New("no such volume")
 

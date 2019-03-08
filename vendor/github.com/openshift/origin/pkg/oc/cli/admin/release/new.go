@@ -48,6 +48,10 @@ func NewNewOptions(streams genericclioptions.IOStreams) *NewOptions {
 		//   another operator.
 		AlwaysInclude:  []string{"cluster-version-operator", "cli", "installer"},
 		ToImageBaseTag: "cluster-version-operator",
+		// We strongly control the set of allowed component versions to prevent confusion
+		// about what component versions may be used for. Changing this list requires
+		// approval from the release architects.
+		AllowedComponents: []string{"kubernetes"},
 	}
 }
 
@@ -102,6 +106,7 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 	flags.StringVar(&o.FromDirectory, "from-dir", o.FromDirectory, "Use this directory as the source for the release payload.")
 	flags.StringVar(&o.FromReleaseImage, "from-release", o.FromReleaseImage, "Use an existing release image as input.")
 	flags.StringVar(&o.ReferenceMode, "reference-mode", o.ReferenceMode, "By default, the image reference from an image stream points to the public registry for the stream and the image digest. Pass 'source' to build references to the originating image.")
+	flags.StringVar(&o.ExtraComponentVersions, "component-versions", o.ExtraComponentVersions, "Supply additional version strings to the release in key=value[,key=value] form.")
 
 	// properties of the release
 	flags.StringVar(&o.Name, "name", o.Name, "The name of the release. Will default to the current time.")
@@ -148,6 +153,9 @@ type NewOptions struct {
 	FromImageStream string
 	Namespace       string
 	ReferenceMode   string
+
+	ExtraComponentVersions string
+	AllowedComponents      []string
 
 	Exclude       []string
 	AlwaysInclude []string
@@ -274,6 +282,11 @@ func (o *NewOptions) Run() error {
 		}
 	}
 
+	extraComponentVersions, err := parseComponentVersionsLabel(o.ExtraComponentVersions)
+	if err != nil {
+		return fmt.Errorf("--component-versions is invalid: %v", err)
+	}
+
 	now := time.Now().UTC()
 	name := o.Name
 	if len(name) == 0 {
@@ -328,47 +341,74 @@ func (o *NewOptions) Run() error {
 
 	switch {
 	case len(o.FromReleaseImage) > 0:
-		dir := o.Directory
-		if len(dir) == 0 {
-			tempDir, err := ioutil.TempDir("", "release-manifests")
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err := os.RemoveAll(tempDir); err != nil {
-					glog.Warningf("Unable to remove temporary payload directory %s: %v", dir, err)
-				}
-			}()
-			dir = tempDir
+		ref, err := imagereference.Parse(o.FromReleaseImage)
+		if err != nil {
+			return fmt.Errorf("--from-release was not a valid pullspec: %v", err)
 		}
 
 		var baseDigest string
+		var imageReferencesData, releaseMetadata []byte
+
 		buf := &bytes.Buffer{}
-		extractOpts := NewExtractOptions(genericclioptions.IOStreams{Out: buf, ErrOut: o.ErrOut})
+		extractOpts := extract.NewOptions(genericclioptions.IOStreams{Out: buf, ErrOut: o.ErrOut})
 		extractOpts.RegistryConfig = o.RegistryConfig
+		extractOpts.OnlyFiles = true
+		extractOpts.Mappings = []extract.Mapping{
+			{
+				ImageRef: ref,
+				From:     "release-manifests/",
+			},
+		}
 		extractOpts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {
 			if config.Config != nil {
-				baseDigest = config.Config.Labels["io.openshift.release.base-image-digest"]
+				baseDigest = config.Config.Labels[annotationReleaseBaseImageDigest]
 				glog.V(4).Infof("Release image was built on top of %s", baseDigest)
 			}
 		}
-		extractOpts.From = o.FromReleaseImage
-		extractOpts.Directory = dir
+		extractOpts.TarEntryCallback = func(hdr *tar.Header, _ extract.LayerInfo, r io.Reader) (bool, error) {
+			var err error
+			if hdr.Name == "image-references" {
+				imageReferencesData, err = ioutil.ReadAll(r)
+				if err != nil {
+					return false, err
+				}
+			}
+			if hdr.Name == "release-metadata" {
+				releaseMetadata, err = ioutil.ReadAll(r)
+				if err != nil {
+					return false, err
+				}
+			}
+			if len(imageReferencesData) > 0 && len(releaseMetadata) > 0 {
+				return false, nil
+			}
+			return true, nil
+		}
 		if err := extractOpts.Run(); err != nil {
-			return fmt.Errorf("unable to retrieve release image info: %v", err)
+			return err
+		}
+		if len(imageReferencesData) == 0 {
+			return fmt.Errorf("release image did not contain any image-references content")
 		}
 
-		payload = NewPayload(dir)
-
-		inputIS, err := payload.References()
+		inputIS, err := readReleaseImageReferences(imageReferencesData)
 		if err != nil {
-			return fmt.Errorf("unable to load payload from release contents: %v", err)
+			return fmt.Errorf("unable to load image-references from release contents: %v", err)
 		}
 		is = inputIS.DeepCopy()
 		if is.Annotations == nil {
 			is.Annotations = map[string]string{}
 		}
-		is.Annotations["release.openshift.io/from-release"] = o.FromReleaseImage
+		is.Annotations[annotationReleaseFromRelease] = o.FromReleaseImage
+
+		if inputIS.Annotations == nil {
+			inputIS.Annotations = make(map[string]string)
+		}
+		inputIS.Annotations[annotationBuildVersions] = extraComponentVersions.String()
+
+		for _, tag := range is.Spec.Tags {
+			ordered = append(ordered, tag.Name)
+		}
 
 		// default the base image to a matching release payload digest or error
 		if len(o.ToImageBase) == 0 && len(baseDigest) > 0 {
@@ -394,11 +434,13 @@ func (o *NewOptions) Run() error {
 			o.Name = is.Name
 		}
 
+		fmt.Fprintf(o.ErrOut, "info: Found %d images in release\n", len(is.Spec.Tags))
+
 	case len(o.FromImageStream) > 0:
 		is = &imageapi.ImageStream{}
 		is.Annotations = map[string]string{}
 		if len(o.FromImageStream) > 0 && len(o.Namespace) > 0 {
-			is.Annotations["release.openshift.io/from-image-stream"] = fmt.Sprintf("%s/%s", o.Namespace, o.FromImageStream)
+			is.Annotations[annotationReleaseFromImageStream] = fmt.Sprintf("%s/%s", o.Namespace, o.FromImageStream)
 		}
 
 		inputIS, err := o.ImageClient.ImageV1().ImageStreams(o.Namespace).Get(o.FromImageStream, metav1.GetOptions{})
@@ -406,80 +448,20 @@ func (o *NewOptions) Run() error {
 			return err
 		}
 
-		switch o.ReferenceMode {
-		case "public", "", "source":
-			forceExternal := o.ReferenceMode == "public" || o.ReferenceMode == ""
-			internal := inputIS.Status.DockerImageRepository
-			external := inputIS.Status.PublicDockerImageRepository
-			if forceExternal && len(external) == 0 {
-				return fmt.Errorf("only image streams with public image repositories can be the source for releases when using the default --reference-mode")
-			}
-			for _, tag := range inputIS.Status.Tags {
-				if exclude.Has(tag.Tag) {
-					glog.V(2).Infof("Excluded status tag %s", tag.Tag)
-					continue
-				}
-				if len(tag.Items) == 0 {
-					continue
-				}
-
-				// attempt to identify the source image
-				source := tag.Items[0].DockerImageReference
-				if len(tag.Items[0].Image) == 0 {
-					glog.V(2).Infof("Ignored tag %q because it had no image id or reference", tag.Tag)
-					continue
-				}
-				// eliminate status tag references that point to the outside
-				if len(source) > 0 {
-					if len(internal) > 0 && strings.HasPrefix(tag.Items[0].DockerImageReference, internal) {
-						glog.V(2).Infof("Can't use tag %q source %s because it points to the internal registry", tag.Tag, source)
-						source = ""
-					}
-				}
-				ref := findSpecTag(inputIS.Spec.Tags, tag.Tag)
-				if ref == nil {
-					ref = &imageapi.TagReference{Name: tag.Tag}
-				} else {
-					// prevent unimported images from being skipped
-					if ref.Generation != nil && *ref.Generation != tag.Items[0].Generation {
-						return fmt.Errorf("the tag %q in the source input stream has not been imported yet", tag.Tag)
-					}
-					// use the tag ref as the source
-					if ref.From != nil && ref.From.Kind == "DockerImage" && !strings.HasPrefix(ref.From.Name, internal) {
-						if from, err := imagereference.Parse(ref.From.Name); err == nil {
-							from.Tag = ""
-							from.ID = tag.Items[0].Image
-							source = from.Exact()
-						} else {
-							glog.V(2).Infof("Can't use tag %q from %s because it isn't a valid image reference", tag.Tag, ref.From.Name)
-						}
-					}
-					ref = ref.DeepCopy()
-				}
-				// default to the external registry name
-				if (forceExternal || len(source) == 0) && len(external) > 0 {
-					source = external + "@" + tag.Items[0].Image
-				}
-				if len(source) == 0 {
-					glog.V(2).Infof("Can't use tag %q because we cannot locate or calculate a source location", tag.Tag)
-					continue
-				}
-				sourceRef, err := imagereference.Parse(source)
-				if err != nil {
-					return fmt.Errorf("the tag %q points to source %q which is not valid", tag.Tag, source)
-				}
-				sourceRef.Tag = ""
-				sourceRef.ID = tag.Items[0].Image
-				source = sourceRef.Exact()
-
-				ref.From = &corev1.ObjectReference{Kind: "DockerImage", Name: source}
-				is.Spec.Tags = append(is.Spec.Tags, *ref)
-				ordered = append(ordered, tag.Tag)
-			}
-			fmt.Fprintf(o.ErrOut, "info: Found %d images in image stream\n", len(inputIS.Status.Tags))
-		default:
-			return fmt.Errorf("supported reference modes are: \"public\" (default) and \"source\"")
+		if inputIS.Annotations == nil {
+			inputIS.Annotations = make(map[string]string)
 		}
+		inputIS.Annotations[annotationBuildVersions] = extraComponentVersions.String()
+
+		if err := resolveImageStreamTagsToReferenceMode(inputIS, is, o.ReferenceMode, exclude); err != nil {
+			return err
+		}
+
+		for _, tag := range is.Spec.Tags {
+			ordered = append(ordered, tag.Name)
+		}
+
+		fmt.Fprintf(o.ErrOut, "info: Found %d images in image stream\n", len(is.Spec.Tags))
 
 	case len(o.FromDirectory) > 0:
 		fmt.Fprintf(o.ErrOut, "info: Using %s as the input to the release\n", o.FromDirectory)
@@ -557,7 +539,7 @@ func (o *NewOptions) Run() error {
 		if tag.Annotations == nil {
 			tag.Annotations = make(map[string]string)
 		}
-		tag.Annotations["io.openshift.release.override"] = "true"
+		tag.Annotations[annotationReleaseOverride] = "true"
 		tag.From = &corev1.ObjectReference{
 			Name: m.Destination,
 			Kind: "DockerImage",
@@ -647,8 +629,7 @@ func (o *NewOptions) Run() error {
 	}()
 
 	br := bufio.NewReaderSize(pr, 500*1024)
-	_, err := br.Peek(br.Size())
-	if err != nil && err != io.EOF {
+	if _, err := br.Peek(br.Size()); err != nil && err != io.EOF {
 		return fmt.Errorf("unable to create a release: %v", err)
 	}
 
@@ -668,6 +649,82 @@ func (o *NewOptions) Run() error {
 	return nil
 }
 
+func resolveImageStreamTagsToReferenceMode(inputIS, is *imageapi.ImageStream, referenceMode string, exclude sets.String) error {
+	switch referenceMode {
+	case "public", "", "source":
+		forceExternal := referenceMode == "public" || referenceMode == ""
+		internal := inputIS.Status.DockerImageRepository
+		external := inputIS.Status.PublicDockerImageRepository
+		if forceExternal && len(external) == 0 {
+			return fmt.Errorf("only image streams or releases with public image repositories can be the source for releases when using the default --reference-mode")
+		}
+		for _, tag := range inputIS.Status.Tags {
+			if exclude.Has(tag.Tag) {
+				glog.V(2).Infof("Excluded status tag %s", tag.Tag)
+				continue
+			}
+			if len(tag.Items) == 0 {
+				continue
+			}
+
+			// attempt to identify the source image
+			source := tag.Items[0].DockerImageReference
+			if len(tag.Items[0].Image) == 0 {
+				glog.V(2).Infof("Ignored tag %q because it had no image id or reference", tag.Tag)
+				continue
+			}
+			// eliminate status tag references that point to the outside
+			if len(source) > 0 {
+				if len(internal) > 0 && strings.HasPrefix(tag.Items[0].DockerImageReference, internal) {
+					glog.V(2).Infof("Can't use tag %q source %s because it points to the internal registry", tag.Tag, source)
+					source = ""
+				}
+			}
+			ref := findSpecTag(inputIS.Spec.Tags, tag.Tag)
+			if ref == nil {
+				ref = &imageapi.TagReference{Name: tag.Tag}
+			} else {
+				// prevent unimported images from being skipped
+				if ref.Generation != nil && *ref.Generation != tag.Items[0].Generation {
+					return fmt.Errorf("the tag %q in the source input stream has not been imported yet", tag.Tag)
+				}
+				// use the tag ref as the source
+				if ref.From != nil && ref.From.Kind == "DockerImage" && !strings.HasPrefix(ref.From.Name, internal) {
+					if from, err := imagereference.Parse(ref.From.Name); err == nil {
+						from.Tag = ""
+						from.ID = tag.Items[0].Image
+						source = from.Exact()
+					} else {
+						glog.V(2).Infof("Can't use tag %q from %s because it isn't a valid image reference", tag.Tag, ref.From.Name)
+					}
+				}
+				ref = ref.DeepCopy()
+			}
+			// default to the external registry name
+			if (forceExternal || len(source) == 0) && len(external) > 0 {
+				source = external + "@" + tag.Items[0].Image
+			}
+			if len(source) == 0 {
+				glog.V(2).Infof("Can't use tag %q because we cannot locate or calculate a source location", tag.Tag)
+				continue
+			}
+			sourceRef, err := imagereference.Parse(source)
+			if err != nil {
+				return fmt.Errorf("the tag %q points to source %q which is not valid", tag.Tag, source)
+			}
+			sourceRef.Tag = ""
+			sourceRef.ID = tag.Items[0].Image
+			source = sourceRef.Exact()
+
+			ref.From = &corev1.ObjectReference{Kind: "DockerImage", Name: source}
+			is.Spec.Tags = append(is.Spec.Tags, *ref)
+		}
+		return nil
+	default:
+		return fmt.Errorf("supported reference modes are: \"public\" (default) and \"source\"")
+	}
+}
+
 func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, metadata map[string]imageData) error {
 	if len(is.Spec.Tags) == 0 {
 		return fmt.Errorf("no component images defined, unable to build a release payload")
@@ -684,19 +741,6 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 		}
 		o.cleanupFns = append(o.cleanupFns, func() { os.RemoveAll(dir) })
 		fmt.Fprintf(o.ErrOut, "info: Manifests will be extracted to %s\n", dir)
-	}
-
-	if len(is.Spec.Tags) > 0 {
-		if err := os.MkdirAll(dir, 0770); err != nil {
-			return err
-		}
-		data, err := json.MarshalIndent(is, "", "  ")
-		if err != nil {
-			return err
-		}
-		if err := ioutil.WriteFile(filepath.Join(dir, "image-references"), data, 0640); err != nil {
-			return err
-		}
 	}
 
 	var lock sync.Mutex
@@ -732,7 +776,7 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 		// an unsupported release configuration
 		var custom bool
 		filter := extract.NewPositionLayerFilter(-1)
-		if tag.Annotations["io.openshift.release.override"] == "true" {
+		if tag.Annotations[annotationReleaseOverride] == "true" {
 			custom = true
 			filter = nil
 		}
@@ -755,12 +799,26 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 				if tag.Annotations == nil {
 					tag.Annotations = make(map[string]string)
 				}
-				tag.Annotations["io.openshift.build.commit.id"] = labels["io.openshift.build.commit.id"]
-				tag.Annotations["io.openshift.build.commit.ref"] = labels["io.openshift.build.commit.ref"]
-				tag.Annotations["io.openshift.build.source-location"] = labels["io.openshift.build.source-location"]
+				tag.Annotations[annotationBuildSourceCommit] = labels[annotationBuildSourceCommit]
+				tag.Annotations[annotationBuildSourceRef] = labels[annotationBuildSourceRef]
+				tag.Annotations[annotationBuildSourceLocation] = labels[annotationBuildSourceLocation]
 
-				if len(labels["io.openshift.release.operator"]) == 0 {
-					glog.V(2).Infof("Image %s has no io.openshift.release.operator label, skipping", m.ImageRef)
+				if versions := labels[annotationBuildVersions]; len(versions) > 0 {
+					components, err := parseComponentVersionsLabel(versions)
+					if err != nil {
+						return false, fmt.Errorf("tag %q has an invalid %s label: %v", tag.Name, annotationBuildVersions, err)
+					}
+					// TODO: eventually this can be relaxed
+					for component := range components {
+						if !stringArrContains(o.AllowedComponents, component) {
+							return false, fmt.Errorf("tag %q references a component version %q which is not in the allowed list", tag.Name, component)
+						}
+					}
+					tag.Annotations[annotationBuildVersions] = versions
+				}
+
+				if len(labels[annotationReleaseOperator]) == 0 {
+					glog.V(2).Infof("Image %s has no %s label, skipping", m.ImageRef, annotationReleaseOperator)
 					return false, nil
 				}
 				if err := os.MkdirAll(dstDir, 0770); err != nil {
@@ -776,7 +834,22 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 		})
 	}
 	glog.V(4).Infof("Manifests will be extracted from:\n%#v", opts.Mappings)
-	return opts.Run()
+	if err := opts.Run(); err != nil {
+		return err
+	}
+	if len(is.Spec.Tags) > 0 {
+		if err := os.MkdirAll(dir, 0770); err != nil {
+			return err
+		}
+		data, err := json.MarshalIndent(is, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := ioutil.WriteFile(filepath.Join(dir, "image-references"), data, 0640); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (o *NewOptions) mirrorImages(is *imageapi.ImageStream, payload *Payload) error {
@@ -928,7 +1001,7 @@ func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time)
 				{Comment: "Release image for OpenShift", Created: now},
 			}
 			if len(dgst) > 0 {
-				config.Config.Labels["io.openshift.release.base-image-digest"] = dgst.String()
+				config.Config.Labels[annotationReleaseBaseImageDigest] = dgst.String()
 			}
 			return nil
 		}
@@ -1040,7 +1113,7 @@ func writePayload(w io.Writer, now time.Time, is *imageapi.ImageStream, cm *Cinc
 		if fi := takeFileByName(&contents, "image-references"); fi != nil {
 			path := filepath.Join(image.Directory, fi.Name())
 			glog.V(2).Infof("Perform image replacement based on inclusion of %s", path)
-			transform, err = NewImageMapperFromImageStreamFile(path, is, allowMissingImages)
+			transform, err = NewTransformFromImageStreamFile(path, is, allowMissingImages)
 			if err != nil {
 				return nil, fmt.Errorf("operator %q failed to map images: %s", name, err)
 			}
@@ -1059,10 +1132,10 @@ func writePayload(w io.Writer, now time.Time, is *imageapi.ImageStream, cm *Cinc
 				filename = fmt.Sprintf("0000_70_%s_%s", name, filename)
 			}
 			if count, ok := files[filename]; ok {
-				count++
 				ext := path.Ext(path.Base(filename))
-				filename = fmt.Sprintf("%s_%d%s", strings.TrimSuffix(filename, ext), count, ext)
-				files[filename] = count
+				files[filename] = count + 1
+				filename = fmt.Sprintf("%s_%d%s", strings.TrimSuffix(filename, ext), count+1, ext)
+				files[filename] = 1
 			} else {
 				files[filename] = 1
 			}

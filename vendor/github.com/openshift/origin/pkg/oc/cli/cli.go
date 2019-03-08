@@ -23,7 +23,6 @@ import (
 	"github.com/openshift/origin/pkg/oc/cli/admin"
 	"github.com/openshift/origin/pkg/oc/cli/admin/buildchain"
 	sync "github.com/openshift/origin/pkg/oc/cli/admin/groups/sync"
-	exipfailover "github.com/openshift/origin/pkg/oc/cli/admin/ipfailover"
 	"github.com/openshift/origin/pkg/oc/cli/buildlogs"
 	"github.com/openshift/origin/pkg/oc/cli/cancelbuild"
 	"github.com/openshift/origin/pkg/oc/cli/debug"
@@ -32,7 +31,6 @@ import (
 	"github.com/openshift/origin/pkg/oc/cli/extract"
 	"github.com/openshift/origin/pkg/oc/cli/idle"
 	"github.com/openshift/origin/pkg/oc/cli/image"
-	"github.com/openshift/origin/pkg/oc/cli/importer"
 	"github.com/openshift/origin/pkg/oc/cli/importimage"
 	"github.com/openshift/origin/pkg/oc/cli/kubectlwrappers"
 	"github.com/openshift/origin/pkg/oc/cli/login"
@@ -58,7 +56,6 @@ import (
 	"github.com/openshift/origin/pkg/oc/cli/startbuild"
 	"github.com/openshift/origin/pkg/oc/cli/status"
 	"github.com/openshift/origin/pkg/oc/cli/tag"
-	"github.com/openshift/origin/pkg/oc/cli/version"
 	"github.com/openshift/origin/pkg/oc/cli/whoami"
 )
 
@@ -157,7 +154,6 @@ func NewOcCommand(name, fullName string, in io.Reader, out, errout io.Writer) *c
 				project.NewCmdProject(fullName, f, ioStreams),
 				projects.NewCmdProjects(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdExplain(fullName, f, ioStreams),
-				kubectlwrappers.NewCmdClusterInfo(fullName, f, ioStreams),
 			},
 		},
 		{
@@ -175,6 +171,8 @@ func NewOcCommand(name, fullName string, in io.Reader, out, errout io.Writer) *c
 		{
 			Message: "Application Management Commands:",
 			Commands: []*cobra.Command{
+				kubectlwrappers.NewCmdCreate(fullName, f, ioStreams),
+				kubectlwrappers.NewCmdApply(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdGet(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdDescribe(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdEdit(fullName, f, ioStreams),
@@ -209,22 +207,20 @@ func NewOcCommand(name, fullName string, in io.Reader, out, errout io.Writer) *c
 			Message: "Advanced Commands:",
 			Commands: []*cobra.Command{
 				admin.NewCommandAdmin("adm", fullName+" "+"adm", f, ioStreams),
-				kubectlwrappers.NewCmdCreate(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdReplace(fullName, f, ioStreams),
-				kubectlwrappers.NewCmdApply(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdPatch(fullName, f, ioStreams),
 				process.NewCmdProcess(fullName, f, ioStreams),
 				extract.NewCmdExtract(fullName, f, ioStreams),
-				idle.NewCmdIdle(fullName, f, ioStreams),
 				observe.NewCmdObserve(fullName, f, ioStreams),
 				policy.NewCmdPolicy(policy.PolicyRecommendedName, fullName+" "+policy.PolicyRecommendedName, f, ioStreams),
 				kubectlwrappers.NewCmdAuth(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdConvert(fullName, f, ioStreams),
-				importer.NewCmdImport(fullName, f, ioStreams),
 				image.NewCmdImage(fullName, f, ioStreams),
 				registry.NewCmd(fullName, f, ioStreams),
+				idle.NewCmdIdle(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdApiVersions(fullName, f, ioStreams),
 				kubectlwrappers.NewCmdApiResources(fullName, f, ioStreams),
+				kubectlwrappers.NewCmdClusterInfo(fullName, f, ioStreams),
 			},
 		},
 		{
@@ -262,9 +258,7 @@ func NewOcCommand(name, fullName string, in io.Reader, out, errout io.Writer) *c
 	cmds.AddCommand(newExperimentalCommand("ex", name+" ex", f, ioStreams))
 
 	cmds.AddCommand(kubectlwrappers.NewCmdPlugin(fullName, f, ioStreams))
-	if name == fullName {
-		cmds.AddCommand(version.NewCmdVersion(fullName, f, version.NewVersionOptions(true, ioStreams)))
-	}
+	cmds.AddCommand(kubecmd.NewCmdVersion(f, ioStreams))
 	cmds.AddCommand(options.NewCmdOptions(ioStreams))
 
 	if cmds.Flag("namespace") != nil {
@@ -326,7 +320,6 @@ func newExperimentalCommand(name, fullName string, f kcmdutil.Factory, ioStreams
 		BashCompletionFunction: admin.BashCompletionFunc,
 	}
 
-	experimental.AddCommand(exipfailover.NewCmdIPFailoverConfig(f, fullName, "ipfailover", ioStreams))
 	experimental.AddCommand(dockergc.NewCmdDockerGCConfig(f, fullName, "dockergc", ioStreams))
 	experimental.AddCommand(buildchain.NewCmdBuildChain(name, fullName+" "+buildchain.BuildChainRecommendedCommandName, f, ioStreams))
 	experimental.AddCommand(options.NewCmdOptions(ioStreams))

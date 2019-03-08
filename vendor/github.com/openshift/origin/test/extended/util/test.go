@@ -69,10 +69,6 @@ func InitTest() {
 	TestContext.DeleteNamespace = os.Getenv("DELETE_NAMESPACE") != "false"
 	TestContext.VerifyServiceAccount = true
 	TestContext.RepoRoot = os.Getenv("KUBE_REPO_ROOT")
-	TestContext.KubeVolumeDir = os.Getenv("VOLUME_DIR")
-	if len(TestContext.KubeVolumeDir) == 0 {
-		TestContext.KubeVolumeDir = "/var/lib/origin/volumes"
-	}
 	TestContext.KubectlPath = "kubectl"
 	TestContext.KubeConfig = KubeConfigPath()
 	os.Setenv("KUBECONFIG", TestContext.KubeConfig)
@@ -224,7 +220,6 @@ func AnnotateTestSuite() {
 func InitDefaultEnvironmentVariables() {
 	if ad := os.Getenv("ARTIFACT_DIR"); len(strings.TrimSpace(ad)) == 0 {
 		os.Setenv("ARTIFACT_DIR", filepath.Join(os.TempDir(), "artifacts"))
-		e2e.Logf("ARTIFACT_DIR env setting now %s", os.Getenv("ARTIFACT_DIR"))
 	}
 }
 
@@ -247,38 +242,25 @@ func testNameContains(name string) bool {
 	return strings.Contains(ginkgo.CurrentGinkgoTestDescription().FullTestText, name)
 }
 
+func isOriginUpgradeTest() bool {
+	return isPackage("/origin/test/e2e/upgrade/")
+}
+
 func skipTestNamespaceCustomization() bool {
 	return (isPackage("/kubernetes/test/e2e/namespace.go") && (testNameContains("should always delete fast") || testNameContains("should delete fast enough")))
 }
 
-// Holds custom namespace creation functions so we can customize per-test
-var customCreateTestingNSFuncs = map[string]e2e.CreateTestingNSFn{}
-
-// Registers a namespace creation function for the given basename
-// Fails if a create function is already registered
-func setCreateTestingNSFunc(baseName string, fn e2e.CreateTestingNSFn) {
-	if _, exists := customCreateTestingNSFuncs[baseName]; exists {
-		FatalErr("Double registered custom namespace creation function for " + baseName)
-	}
-	customCreateTestingNSFuncs[baseName] = fn
-}
-
-// createTestingNS delegates to custom namespace creation functions if registered.
-// otherwise, it ensures that kubernetes e2e tests have their service accounts in the privileged and anyuid SCCs
+// createTestingNS ensures that kubernetes e2e tests have their service accounts in the privileged and anyuid SCCs
 func createTestingNS(baseName string, c kclientset.Interface, labels map[string]string) (*kapiv1.Namespace, error) {
-	// If a custom function exists, call it
-	if fn, exists := customCreateTestingNSFuncs[baseName]; exists {
-		return fn(baseName, c, labels)
-	}
-
-	// Otherwise use the upstream default
 	ns, err := e2e.CreateTestingNS(baseName, c, labels)
 	if err != nil {
 		return ns, err
 	}
 
+	glog.V(2).Infof("blah=%s", ginkgo.CurrentGinkgoTestDescription().FileName)
+
 	// Add anyuid and privileged permissions for upstream tests
-	if isKubernetesE2ETest() && !skipTestNamespaceCustomization() {
+	if (isKubernetesE2ETest() && !skipTestNamespaceCustomization()) || isOriginUpgradeTest() {
 		clientConfig, err := testutil.GetClusterAdminClientConfig(KubeConfigPath())
 		if err != nil {
 			return ns, err
@@ -440,7 +422,6 @@ var (
 			`openshift mongodb replication creating from a template`,                                     // flaking on deployment
 			`should use be able to process many pods and reuse local volumes`,                            // https://bugzilla.redhat.com/show_bug.cgi?id=1635893
 
-			`Volume limits should verify that all nodes have volume limits`, // flaking due to a kubelet issue
 		},
 		// tests that must be run without competition
 		"[Serial]": {

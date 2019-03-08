@@ -1,5 +1,3 @@
-// +build !remoteclient
-
 package integration
 
 import (
@@ -35,12 +33,6 @@ var _ = Describe("Podman Info", func() {
 
 	It("podman info json output", func() {
 		session := podmanTest.Podman([]string{"info", "--format=json"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-
-	})
-	It("podman system info json output", func() {
-		session := podmanTest.Podman([]string{"system", "info", "--format=json"})
 		session.Wait()
 		Expect(session.ExitCode()).To(Equal(0))
 

@@ -4,12 +4,11 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/formats"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 // volumeOptions is the "ls" command options
@@ -38,58 +37,64 @@ type volumeLsJSONParams struct {
 	Scope      string            `json:"scope"`
 }
 
-var (
-	volumeLsCommand cliconfig.VolumeLsValues
-
-	volumeLsDescription = `
+var volumeLsDescription = `
 podman volume ls
 
 List all available volumes. The output of the volumes can be filtered
 and the output format can be changed to JSON or a user specified Go template.
 `
-	_volumeLsCommand = &cobra.Command{
-		Use:     "ls",
-		Aliases: []string{"list"},
-		Short:   "List volumes",
-		Long:    volumeLsDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			volumeLsCommand.InputArgs = args
-			volumeLsCommand.GlobalFlags = MainGlobalOpts
-			return volumeLsCmd(&volumeLsCommand)
-		},
-	}
-)
 
-func init() {
-	volumeLsCommand.Command = _volumeLsCommand
-	volumeLsCommand.SetUsageTemplate(UsageTemplate())
-	flags := volumeLsCommand.Flags()
-
-	flags.StringVarP(&volumeLsCommand.Filter, "filter", "f", "", "Filter volume output")
-	flags.StringVar(&volumeLsCommand.Format, "format", "table {{.Driver}}\t{{.Name}}", "Format volume output using Go template")
-	flags.BoolVarP(&volumeLsCommand.Quiet, "quiet", "q", false, "Print volume output in quiet mode")
+var volumeLsFlags = []cli.Flag{
+	cli.StringFlag{
+		Name:  "filter, f",
+		Usage: "Filter volume output",
+	},
+	cli.StringFlag{
+		Name:  "format",
+		Usage: "Format volume output using Go template",
+		Value: "table {{.Driver}}\t{{.Name}}",
+	},
+	cli.BoolFlag{
+		Name:  "quiet, q",
+		Usage: "Print volume output in quiet mode",
+	},
 }
 
-func volumeLsCmd(c *cliconfig.VolumeLsValues) error {
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+var volumeLsCommand = cli.Command{
+	Name:                   "ls",
+	Aliases:                []string{"list"},
+	Usage:                  "List volumes",
+	Description:            volumeLsDescription,
+	Flags:                  volumeLsFlags,
+	Action:                 volumeLsCmd,
+	SkipArgReorder:         true,
+	UseShortOptionHandling: true,
+}
+
+func volumeLsCmd(c *cli.Context) error {
+	if err := validateFlags(c, volumeLsFlags); err != nil {
+		return err
+	}
+
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	if len(c.InputArgs) > 0 {
+	if len(c.Args()) > 0 {
 		return errors.Errorf("too many arguments, ls takes no arguments")
 	}
 
 	opts := volumeLsOptions{
-		Quiet: c.Quiet,
+		Quiet: c.Bool("quiet"),
 	}
 	opts.Format = genVolLsFormat(c)
 
 	// Get the filter functions based on any filters set
 	var filterFuncs []libpod.VolumeFilter
-	if c.Filter != "" {
-		filters := strings.Split(c.Filter, ",")
+	if c.String("filter") != "" {
+		filters := strings.Split(c.String("filter"), ",")
 		for _, f := range filters {
 			filterSplit := strings.Split(f, "=")
 			if len(filterSplit) < 2 {
@@ -124,14 +129,14 @@ func volumeLsCmd(c *cliconfig.VolumeLsValues) error {
 }
 
 // generate the template based on conditions given
-func genVolLsFormat(c *cliconfig.VolumeLsValues) string {
+func genVolLsFormat(c *cli.Context) string {
 	var format string
-	if c.Format != "" {
+	if c.String("format") != "" {
 		// "\t" from the command line is not being recognized as a tab
 		// replacing the string "\t" to a tab character if the user passes in "\t"
-		format = strings.Replace(c.Format, `\t`, "\t", -1)
+		format = strings.Replace(c.String("format"), `\t`, "\t", -1)
 	}
-	if c.Quiet {
+	if c.Bool("quiet") {
 		format = "{{.Name}}"
 	}
 	return format

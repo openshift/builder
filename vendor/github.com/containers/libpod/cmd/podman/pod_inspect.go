@@ -2,54 +2,46 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
+	"fmt"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	podInspectCommand     cliconfig.PodInspectValues
-	podInspectDescription = "Display the configuration for a pod by name or id"
-	_podInspectCommand    = &cobra.Command{
-		Use:   "inspect",
-		Short: "Displays a pod configuration",
-		Long:  podInspectDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			podInspectCommand.InputArgs = args
-			podInspectCommand.GlobalFlags = MainGlobalOpts
-			return podInspectCmd(&podInspectCommand)
-		},
-		Example: "[POD_NAME_OR_ID]",
+	podInspectFlags = []cli.Flag{
+		LatestPodFlag,
+	}
+	podInspectDescription = "display the configuration for a pod by name or id"
+	podInspectCommand     = cli.Command{
+		Name:                   "inspect",
+		Usage:                  "displays a pod configuration",
+		Description:            podInspectDescription,
+		Flags:                  sortFlags(podInspectFlags),
+		Action:                 podInspectCmd,
+		UseShortOptionHandling: true,
+		ArgsUsage:              "[POD_NAME_OR_ID]",
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	podInspectCommand.Command = _podInspectCommand
-	podInspectCommand.SetUsageTemplate(UsageTemplate())
-	flags := podInspectCommand.Flags()
-	flags.BoolVarP(&podInspectCommand.Latest, "latest", "l", false, "Act on the latest container podman is aware of")
-
-}
-
-func podInspectCmd(c *cliconfig.PodInspectValues) error {
+func podInspectCmd(c *cli.Context) error {
 	var (
 		pod *libpod.Pod
 	)
-	if err := checkMutuallyExclusiveFlags(&c.PodmanCommand); err != nil {
+	if err := checkMutuallyExclusiveFlags(c); err != nil {
 		return err
 	}
-	args := c.InputArgs
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	args := c.Args()
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	if c.Latest {
+	if c.Bool("latest") {
 		pod, err = runtime.GetLatestPod()
 		if err != nil {
 			return errors.Wrapf(err, "unable to get latest pod")

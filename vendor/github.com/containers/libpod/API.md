@@ -9,21 +9,13 @@ in the [API.md](https://github.com/containers/libpod/blob/master/API.md) file in
 
 [func Commit(name: string, image_name: string, changes: []string, author: string, message: string, pause: bool, manifestType: string) string](#Commit)
 
-[func ContainerArtifacts(name: string, artifactName: string) string](#ContainerArtifacts)
-
 [func ContainerCheckpoint(name: string, keep: bool, leaveRunning: bool, tcpEstablished: bool) string](#ContainerCheckpoint)
 
-[func ContainerConfig(name: string) string](#ContainerConfig)
-
 [func ContainerExists(name: string) int](#ContainerExists)
-
-[func ContainerInspectData(name: string) string](#ContainerInspectData)
 
 [func ContainerRestore(name: string, keep: bool, tcpEstablished: bool) string](#ContainerRestore)
 
 [func ContainerRunlabel(runlabel: Runlabel) ](#ContainerRunlabel)
-
-[func ContainerStateData(name: string) string](#ContainerStateData)
 
 [func CreateContainer(create: Create) string](#CreateContainer)
 
@@ -81,7 +73,7 @@ in the [API.md](https://github.com/containers/libpod/blob/master/API.md) file in
 
 [func ListContainerChanges(name: string) ContainerChanges](#ListContainerChanges)
 
-[func ListContainerMounts() map[string]](#ListContainerMounts)
+[func ListContainerMounts() []string](#ListContainerMounts)
 
 [func ListContainerPorts(name: string) NotImplemented](#ListContainerPorts)
 
@@ -247,24 +239,12 @@ attributes: _CMD, ENTRYPOINT, ENV, EXPOSE, LABEL, ONBUILD, STOPSIGNAL, USER, VOL
 container while it is being committed, pass a _true_ bool for the pause argument.  If the container cannot
 be found by the ID or name provided, a (ContainerNotFound)[#ContainerNotFound] error will be returned; otherwise,
 the resulting image's ID will be returned as a string.
-### <a name="ContainerArtifacts"></a>func ContainerArtifacts
-<div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
-
-method ContainerArtifacts(name: [string](https://godoc.org/builtin#string), artifactName: [string](https://godoc.org/builtin#string)) [string](https://godoc.org/builtin#string)</div>
-ContainerArtifacts returns a container's artifacts in string form.  This call is for
-development of Podman only and generally should not be used.
 ### <a name="ContainerCheckpoint"></a>func ContainerCheckpoint
 <div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
 
 method ContainerCheckpoint(name: [string](https://godoc.org/builtin#string), keep: [bool](https://godoc.org/builtin#bool), leaveRunning: [bool](https://godoc.org/builtin#bool), tcpEstablished: [bool](https://godoc.org/builtin#bool)) [string](https://godoc.org/builtin#string)</div>
 ContainerCheckPoint performs a checkpopint on a container by its name or full/partial container
 ID.  On successful checkpoint, the id of the checkpointed container is returned.
-### <a name="ContainerConfig"></a>func ContainerConfig
-<div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
-
-method ContainerConfig(name: [string](https://godoc.org/builtin#string)) [string](https://godoc.org/builtin#string)</div>
-ContainerConfig returns a container's config in string form. This call is for
-development of Podman only and generally should not be used.
 ### <a name="ContainerExists"></a>func ContainerExists
 <div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
 
@@ -278,12 +258,6 @@ $ varlink call -m unix:/run/podman/io.podman/io.podman.ContainerExists '{"name":
   "exists": 0
 }
 ~~~
-### <a name="ContainerInspectData"></a>func ContainerInspectData
-<div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
-
-method ContainerInspectData(name: [string](https://godoc.org/builtin#string)) [string](https://godoc.org/builtin#string)</div>
-ContainerInspectData returns a container's inspect data in string form.  This call is for
-development of Podman only and generally should not be used.
 ### <a name="ContainerRestore"></a>func ContainerRestore
 <div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
 
@@ -296,12 +270,6 @@ of the container's ID.
 
 method ContainerRunlabel(runlabel: [Runlabel](#Runlabel)) </div>
 ContainerRunlabel runs executes a command as described by a given container image label.
-### <a name="ContainerStateData"></a>func ContainerStateData
-<div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
-
-method ContainerStateData(name: [string](https://godoc.org/builtin#string)) [string](https://godoc.org/builtin#string)</div>
-ContainerStateData returns a container's state config in string form.  This call is for
-development of Podman only and generally should not be used.
 ### <a name="CreateContainer"></a>func CreateContainer
 <div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
 
@@ -643,17 +611,19 @@ its base image. It returns a struct of changed, deleted, and added path names.
 ### <a name="ListContainerMounts"></a>func ListContainerMounts
 <div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
 
-method ListContainerMounts() [map[string]](#map[string])</div>
+method ListContainerMounts() [[]string](#[]string)</div>
 ListContainerMounts gathers all the mounted container mount points and returns them as an array
 of strings
 #### Example
 ~~~
-$ varlink call unix:/run/podman/io.podman/io.podman.ListContainerMounts
+$ varlink call -m unix:/run/podman/io.podman/io.podman.ListContainerMounts
 {
-  "mounts": {
-    "04e4c255269ed2545e7f8bd1395a75f7949c50c223415c00c1d54bfa20f3b3d9": "/var/lib/containers/storage/overlay/a078925828f57e20467ca31cfca8a849210d21ec7e5757332b72b6924f441c17/merged",
-    "1d58c319f9e881a644a5122ff84419dccf6d138f744469281446ab243ef38924": "/var/lib/containers/storage/overlay/948fcf93f8cb932f0f03fd52e3180a58627d547192ffe3b88e0013b98ddcd0d2/merged"
-  }
+  "mounts": [
+    "/var/lib/containers/storage/overlay/b215fb622c65ba3b06c6d2341be80b76a9de7ae415ce419e65228873d4f0dcc8/merged",
+    "/var/lib/containers/storage/overlay/5eaf806073f79c0ed9a695180ad598e34f963f7407da1d2ccf3560bdab49b26f/merged",
+    "/var/lib/containers/storage/overlay/1ecb6b1dbb251737c7a24a31869096839c3719d8b250bf075f75172ddcc701e1/merged",
+    "/var/lib/containers/storage/overlay/7137b28a3c422165fe920cba851f2f8da271c6b5908672c451ebda03ad3919e2/merged"
+  ]
 }
 ~~~
 ### <a name="ListContainerPorts"></a>func ListContainerPorts
@@ -1403,8 +1373,6 @@ virtualSize [int](https://godoc.org/builtin#int)
 containers [int](https://godoc.org/builtin#int)
 
 labels [map[string]](#map[string])
-
-isParent [bool](https://godoc.org/builtin#bool)
 ### <a name="ImageSearch"></a>type ImageSearch
 
 ImageSearch is the returned structure for SearchImage.  It is returned
@@ -1492,7 +1460,7 @@ graph_status [InfoGraphStatus](#InfoGraphStatus)
 run_root [string](https://godoc.org/builtin#string)
 ### <a name="ListContainerData"></a>type ListContainerData
 
-ListContainerData is the returned struct for an individual container
+ListContainer is the returned struct for an individual container
 
 id [string](https://godoc.org/builtin#string)
 
@@ -1652,8 +1620,6 @@ git_commit [string](https://godoc.org/builtin#string)
 built [int](https://godoc.org/builtin#int)
 
 os_arch [string](https://godoc.org/builtin#string)
-
-remote_api_version [int](https://godoc.org/builtin#int)
 ## Errors
 ### <a name="ContainerNotFound"></a>type ContainerNotFound
 

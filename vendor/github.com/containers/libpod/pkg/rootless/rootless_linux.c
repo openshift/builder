@@ -70,12 +70,9 @@ get_cmd_line_args (pid_t pid)
       if (allocated == used)
         {
           allocated += 512;
-          char *tmp = realloc (buffer, allocated);
-          if (buffer == NULL) {
-		  free(buffer);
-		  return NULL;
-	  }
-	  buffer=tmp;
+          buffer = realloc (buffer, allocated);
+          if (buffer == NULL)
+            return NULL;
         }
     }
   close (fd);

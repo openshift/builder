@@ -1,21 +1,20 @@
 package varlinkapi
 
 import (
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	iopodman "github.com/containers/libpod/cmd/podman/varlink"
 	"github.com/containers/libpod/libpod"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 // LibpodAPI is the basic varlink struct for libpod
 type LibpodAPI struct {
-	Cli *cobra.Command
+	Cli *cli.Context
 	iopodman.VarlinkInterface
 	Runtime *libpod.Runtime
 }
 
 // New creates a new varlink client
-func New(cli *cliconfig.PodmanCommand, runtime *libpod.Runtime) *iopodman.VarlinkInterface {
-	lp := LibpodAPI{Cli: cli.Command, Runtime: runtime}
+func New(cli *cli.Context, runtime *libpod.Runtime) *iopodman.VarlinkInterface {
+	lp := LibpodAPI{Cli: cli, Runtime: runtime}
 	return iopodman.VarlinkNew(&lp)
 }

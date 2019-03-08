@@ -3,55 +3,57 @@ package main
 import (
 	"os"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	attachCommand     cliconfig.AttachValues
-	attachDescription = "The podman attach command allows you to attach to a running container using the container's ID or name, either to view its ongoing output or to control it interactively."
-	_attachCommand    = &cobra.Command{
-		Use:   "attach",
-		Short: "Attach to a running container",
-		Long:  attachDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			attachCommand.InputArgs = args
-			attachCommand.GlobalFlags = MainGlobalOpts
-			return attachCmd(&attachCommand)
+	attachFlags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "detach-keys",
+			Usage: "Override the key sequence for detaching a container. Format is a single character [a-Z] or ctrl-<value> where <value> is one of: a-z, @, ^, [, , or _.",
 		},
-		Example: "",
+		cli.BoolFlag{
+			Name:  "no-stdin",
+			Usage: "Do not attach STDIN. The default is false.",
+		},
+		cli.BoolTFlag{
+			Name:  "sig-proxy",
+			Usage: "proxy received signals to the process (default true)",
+		},
+		LatestFlag,
+	}
+	attachDescription = "The podman attach command allows you to attach to a running container using the container's ID or name, either to view its ongoing output or to control it interactively."
+	attachCommand     = cli.Command{
+		Name:         "attach",
+		Usage:        "Attach to a running container",
+		Description:  attachDescription,
+		Flags:        sortFlags(attachFlags),
+		Action:       attachCmd,
+		ArgsUsage:    "",
+		OnUsageError: usageErrorHandler,
 	}
 )
 
-func init() {
-	attachCommand.Command = _attachCommand
-	attachCommand.SetUsageTemplate(UsageTemplate())
-	flags := attachCommand.Flags()
-	flags.StringVar(&attachCommand.DetachKeys, "detach-keys", "", "Override the key sequence for detaching a container. Format is a single character [a-Z] or ctrl-<value> where <value> is one of: a-z, @, ^, [, , or _")
-	flags.BoolVar(&attachCommand.NoStdin, "no-stdin", false, "Do not attach STDIN. The default is false")
-	flags.BoolVar(&attachCommand.SigProxy, "sig-proxy", true, "Proxy received signals to the process (default true)")
-
-	flags.BoolVarP(&attachCommand.Latest, "latest", "l", false, "Act on the latest container podman is aware of")
-}
-
-func attachCmd(c *cliconfig.AttachValues) error {
-	args := c.InputArgs
+func attachCmd(c *cli.Context) error {
+	args := c.Args()
 	var ctr *libpod.Container
-
-	if len(c.InputArgs) > 1 || (len(c.InputArgs) == 0 && !c.Latest) {
+	if err := validateFlags(c, attachFlags); err != nil {
+		return err
+	}
+	if len(c.Args()) > 1 || (len(c.Args()) == 0 && !c.Bool("latest")) {
 		return errors.Errorf("attach requires the name or id of one running container or the latest flag")
 	}
 
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	if c.Latest {
+	if c.Bool("latest") {
 		ctr, err = runtime.GetLatestContainer()
 	} else {
 		ctr, err = runtime.LookupContainer(args[0])
@@ -70,11 +72,11 @@ func attachCmd(c *cliconfig.AttachValues) error {
 	}
 
 	inputStream := os.Stdin
-	if c.NoStdin {
+	if c.Bool("no-stdin") {
 		inputStream = nil
 	}
 
-	if err := startAttachCtr(ctr, os.Stdout, os.Stderr, inputStream, c.DetachKeys, c.SigProxy, false); err != nil {
+	if err := startAttachCtr(ctr, os.Stdout, os.Stderr, inputStream, c.String("detach-keys"), c.BoolT("sig-proxy"), false); err != nil {
 		return errors.Wrapf(err, "error attaching to container %s", ctr.ID())
 	}
 

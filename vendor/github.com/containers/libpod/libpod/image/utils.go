@@ -17,7 +17,6 @@ import (
 // findImageInRepotags takes an imageParts struct and searches images' repotags for
 // a match on name:tag
 func findImageInRepotags(search imageParts, images []*Image) (*storage.Image, error) {
-	_, searchName, searchSuspiciousTagValueForSearch := search.suspiciousRefNameTagValuesForSearch()
 	var results []*storage.Image
 	for _, image := range images {
 		for _, name := range image.Names() {
@@ -26,22 +25,21 @@ func findImageInRepotags(search imageParts, images []*Image) (*storage.Image, er
 			if err != nil {
 				continue
 			}
-			_, dName, dSuspiciousTagValueForSearch := d.suspiciousRefNameTagValuesForSearch()
-			if dName == searchName && dSuspiciousTagValueForSearch == searchSuspiciousTagValueForSearch {
+			if d.name == search.name && d.tag == search.tag {
 				results = append(results, image.image)
 				continue
 			}
 			// account for registry:/somedir/image
-			if strings.HasSuffix(dName, searchName) && dSuspiciousTagValueForSearch == searchSuspiciousTagValueForSearch {
+			if strings.HasSuffix(d.name, search.name) && d.tag == search.tag {
 				results = append(results, image.image)
 				continue
 			}
 		}
 	}
 	if len(results) == 0 {
-		return &storage.Image{}, errors.Errorf("unable to find a name and tag match for %s in repotags", searchName)
+		return &storage.Image{}, errors.Errorf("unable to find a name and tag match for %s in repotags", search.name)
 	} else if len(results) > 1 {
-		return &storage.Image{}, errors.Errorf("found multiple name and tag matches for %s in repotags", searchName)
+		return &storage.Image{}, errors.Errorf("found multiple name and tag matches for %s in repotags", search.name)
 	}
 	return results[0], nil
 }

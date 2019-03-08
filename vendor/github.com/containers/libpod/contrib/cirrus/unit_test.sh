@@ -9,15 +9,17 @@ OS_RELEASE_ID $OS_RELEASE_ID
 OS_RELEASE_VER $OS_RELEASE_VER
 "
 
-record_timestamp "unit test start"
-
 clean_env
 
 set -x
 cd "$GOSRC"
 case "${OS_RELEASE_ID}-${OS_RELEASE_VER}" in
-    ubuntu-18) ;&  # Continue to the next item
-    fedora-29) ;&
+    ubuntu-18)
+        make install.tools "BUILDTAGS=$BUILDTAGS"
+        make localunit "BUILDTAGS=$BUILDTAGS"
+        make "BUILDTAGS=$BUILDTAGS"
+        ;;
+    fedora-29) ;&  # Continue to the next item
     fedora-28) ;&
     centos-7) ;&
     rhel-7)
@@ -27,5 +29,3 @@ case "${OS_RELEASE_ID}-${OS_RELEASE_VER}" in
         ;;
     *) bad_os_id_ver ;;
 esac
-
-record_timestamp "unit test end"

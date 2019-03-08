@@ -1,5 +1,3 @@
-// +build !remoteclient
-
 package integration
 
 import (
@@ -63,10 +61,10 @@ var _ = Describe("Podman search", func() {
 	})
 
 	It("podman search single registry flag", func() {
-		search := podmanTest.Podman([]string{"search", "quay.io/libpod/gate:latest"})
+		search := podmanTest.Podman([]string{"search", "registry.access.redhat.com/rhel7"})
 		search.WaitWithDefaultTimeout()
 		Expect(search.ExitCode()).To(Equal(0))
-		Expect(search.LineInOutputContains("quay.io/libpod/gate")).To(BeTrue())
+		Expect(search.LineInOutputContains("registry.access.redhat.com/rhel7")).To(BeTrue())
 	})
 
 	It("podman search format flag", func() {

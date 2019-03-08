@@ -23,8 +23,6 @@ SCRIPT_BASE $SCRIPT_BASE
 PACKER_BASE $PACKER_BASE
 "
 
-record_timestamp "cache-image build start"
-
 show_env_vars
 
 # Everything here is running on the 'image-builder-image' GCE image
@@ -42,33 +40,13 @@ then
     fi
 fi
 
+set -x
+
 cd "$GOSRC/$PACKER_BASE"
-
-# Separate PR-produced images from those produced on master.
-if [[ "${CIRRUS_BRANCH:-}" == "master" ]]
-then
-    POST_MERGE_BUCKET_SUFFIX="-master"
-else
-    POST_MERGE_BUCKET_SUFFIX=""
-fi
-
 make libpod_images \
     PACKER_BUILDS=$PACKER_BUILDS \
     PACKER_VER=$PACKER_VER \
     GOSRC=$GOSRC \
     SCRIPT_BASE=$SCRIPT_BASE \
     PACKER_BASE=$PACKER_BASE \
-    POST_MERGE_BUCKET_SUFFIX=$POST_MERGE_BUCKET_SUFFIX \
     BUILT_IMAGE_SUFFIX=$BUILT_IMAGE_SUFFIX
-
-record_timestamp "cache-image build end"
-
-# When successful, upload manifest of produced images using a filename unique
-# to this build.
-URI="gs://packer-import${POST_MERGE_BUCKET_SUFFIX}/manifest${BUILT_IMAGE_SUFFIX}.json"
-gsutil cp packer-manifest.json "$URI"
-
-echo "Finished."
-echo "Any tarball URI's referenced above at at $URI"
-echo "may be used to create VM images suitable for use in"
-echo ".cirrus.yml as values for the 'image_name' keys."

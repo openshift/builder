@@ -610,12 +610,6 @@ It will also set the default stop signal to SIGRTMIN+3.
 
 This allow systemd to run in a confined container without any modifications.
 
-Note: On `SELinux` systems, systemd attempts to write to the cgroup
-file system.  Containers writing to the cgroup file system are denied by default.
-The `container_manage_cgroup` boolean must be enabled for this to be allowed on an SELinux separated system.
-
-`setsebool -P container_manage_cgroup true`
-
 **--tmpfs**=[] Create a tmpfs mount
 
 Mount a temporary filesystem (`tmpfs`) mount into a container, for example:
@@ -657,21 +651,18 @@ The followings examples are all valid:
 
 Without this argument the command will be run as root in the container.
 
-**--userns**=host
-**--userns**=ns:my_namespace
+**--userns**=""
 
-Set the user namespace mode for the container. The use of userns is disabled by default.
+Set the usernamespace mode for the container. The use of userns is disabled by default.
 
-- `host`: run in the user namespace of the caller. This is the default if no user namespace options are set. The processes running in the container will have the same privileges on the host as any other process launched by the calling user.
-- `ns`: run the container in the given existing user namespace.
-
-This option is incompatible with --gidmap, --uidmap, --subuid and --subgid
+    **host**: use the host usernamespace and enable all privileged options (e.g., `pid=host` or `--privileged`).
+    **ns**: specify the usernamespace to use.
 
 **--uts**=*host*
 
 Set the UTS mode for the container
     **host**: use the host's UTS namespace inside the container.
-    **ns**: specify the user namespace to use.
+    **ns**: specify the usernamespace to use.
     Note: the host mode gives the container access to changing the host's hostname and is therefore considered insecure.
 
 **--volume**, **-v**[=*[HOST-DIR:CONTAINER-DIR[:OPTIONS]]*]
@@ -785,8 +776,8 @@ can override the working directory by using the **-w** option.
 
 ### Set UID/GID mapping in a new user namespace
 
-Running a container in a new user namespace requires a mapping of
-the uids and gids from the host.
+If you want to run the container in a new user namespace and define the mapping of
+the uid and gid from the host.
 
 ```
 $ podman create --uidmap 0:30000:7000 --gidmap 0:30000:7000 fedora echo hello
@@ -807,27 +798,13 @@ KillMode=process
 WantedBy=multi-user.target
 ```
 
-### Rootless Containers
-
-Podman runs as a non root user on most systems. This feature requires that a new enough version of shadow-utils
-be installed.  The shadow-utils package must include the newuidmap and newgidmap executables.
-
-Note: RHEL7 and Centos 7 will not have this feature until RHEL7.7 is released.
-
-In order for users to run rootless, there must be an entry for their username in /etc/subuid and /etc/subgid which lists the UIDs for their user namespace.
-
-Rootless podman works better if the fuse-overlayfs and slirp4netns packages are installed.
-The fuse-overlay package provides a userspace overlay storage driver, otherwise users need to use
-the vfs storage driver, which is diskspace expensive and does not perform well. slirp4netns is
-required for VPN, without it containers need to be run with the --net=host flag.
-
 ## FILES
 
 **/etc/subuid**
 **/etc/subgid**
 
 ## SEE ALSO
-subgid(5), subuid(5), libpod.conf(5), systemd.unit(5), setsebool(8), slirp4netns(1), fuse-overlayfs(1)
+subgid(5), subuid(5), libpod.conf(5), systemd.unit(5)
 
 ## HISTORY
 October 2017, converted from Docker documentation to podman by Dan Walsh for podman <dwalsh@redhat.com>

@@ -4,38 +4,48 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
-	"github.com/containers/libpod/libpod/adapter"
+	"github.com/containers/libpod/cmd/podman/libpodruntime"
+	"github.com/containers/libpod/libpod/image"
 	"github.com/containers/storage"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 var (
-	rmiCommand     cliconfig.RmiValues
 	rmiDescription = "Removes one or more locally stored images."
-	_rmiCommand    = &cobra.Command{
-		Use:   "rmi",
-		Short: "Removes one or more images from local storage",
-		Long:  rmiDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rmiCommand.InputArgs = args
-			rmiCommand.GlobalFlags = MainGlobalOpts
-			return rmiCmd(&rmiCommand)
+	rmiFlags       = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "all, a",
+			Usage: "remove all images",
 		},
-		Example: "IMAGE-NAME-OR-ID [...]",
+		cli.BoolFlag{
+			Name:  "force, f",
+			Usage: "force removal of the image",
+		},
+	}
+	rmiCommand = cli.Command{
+		Name:                   "rmi",
+		Usage:                  "Removes one or more images from local storage",
+		Description:            rmiDescription,
+		Action:                 rmiCmd,
+		ArgsUsage:              "IMAGE-NAME-OR-ID [...]",
+		Flags:                  sortFlags(rmiFlags),
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
+	}
+	rmImageCommand = cli.Command{
+		Name:                   "rm",
+		Usage:                  "removes one or more images from local storage",
+		Description:            rmiDescription,
+		Action:                 rmiCmd,
+		ArgsUsage:              "IMAGE-NAME-OR-ID [...]",
+		Flags:                  rmiFlags,
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
 	}
 )
 
-func init() {
-	rmiCommand.Command = _rmiCommand
-	rmiCommand.SetUsageTemplate(UsageTemplate())
-	flags := rmiCommand.Flags()
-	flags.BoolVarP(&rmiCommand.All, "all", "a", false, "Remove all images")
-	flags.BoolVarP(&rmiCommand.Force, "force", "f", false, "Force Removal of the image")
-}
-
-func rmiCmd(c *cliconfig.RmiValues) error {
+func rmiCmd(c *cli.Context) error {
 	var (
 		lastError error
 		deleted   bool
@@ -44,14 +54,17 @@ func rmiCmd(c *cliconfig.RmiValues) error {
 	)
 
 	ctx := getContext()
-	removeAll := c.All
-	runtime, err := adapter.GetRuntime(&c.PodmanCommand)
+	if err := validateFlags(c, rmiFlags); err != nil {
+		return err
+	}
+	removeAll := c.Bool("all")
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "could not get runtime")
 	}
 	defer runtime.Shutdown(false)
 
-	args := c.InputArgs
+	args := c.Args()
 	if len(args) == 0 && !removeAll {
 		return errors.Errorf("image name or ID must be specified")
 	}
@@ -61,9 +74,9 @@ func rmiCmd(c *cliconfig.RmiValues) error {
 
 	images := args[:]
 
-	removeImage := func(img *adapter.ContainerImage) {
+	removeImage := func(img *image.Image) {
 		deleted = true
-		msg, deleteErr = runtime.RemoveImage(ctx, img, c.Force)
+		msg, deleteErr = runtime.RemoveImage(ctx, img, c.Bool("force"))
 		if deleteErr != nil {
 			if errors.Cause(deleteErr) == storage.ErrImageUsedByContainer {
 				fmt.Printf("A container associated with containers/storage, i.e. via Buildah, CRI-O, etc., may be associated with this image: %-12.12s\n", img.ID())
@@ -78,8 +91,8 @@ func rmiCmd(c *cliconfig.RmiValues) error {
 	}
 
 	if removeAll {
-		var imagesToDelete []*adapter.ContainerImage
-		imagesToDelete, err = runtime.GetImages()
+		var imagesToDelete []*image.Image
+		imagesToDelete, err = runtime.ImageRuntime().GetImages()
 		if err != nil {
 			return errors.Wrapf(err, "unable to query local images")
 		}
@@ -99,7 +112,7 @@ func rmiCmd(c *cliconfig.RmiValues) error {
 				removeImage(i)
 			}
 			lastNumberofImages = len(imagesToDelete)
-			imagesToDelete, err = runtime.GetImages()
+			imagesToDelete, err = runtime.ImageRuntime().GetImages()
 			if err != nil {
 				return err
 			}
@@ -117,7 +130,7 @@ func rmiCmd(c *cliconfig.RmiValues) error {
 		// See https://github.com/containers/libpod/issues/930 as
 		// an exemplary inconsistency issue.
 		for _, i := range images {
-			newImage, err := runtime.NewImageFromLocal(i)
+			newImage, err := runtime.ImageRuntime().NewFromLocal(i)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				continue

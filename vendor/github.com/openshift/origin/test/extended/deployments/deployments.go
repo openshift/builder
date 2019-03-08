@@ -56,10 +56,6 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 			ctx:    ctx,
 			cancel: cancel,
 		}
-
-		// FIXME: remove this when https://github.com/openshift/origin/issues/20225 gets fixed
-		err := exutil.WaitForServiceAccount(oc.KubeClient().CoreV1().ServiceAccounts(oc.Namespace()), "default")
-		o.Expect(err).NotTo(o.HaveOccurred())
 	})
 
 	// This have to be registered before we create kube framework (NewCLI).
@@ -466,11 +462,6 @@ var _ = g.Describe("[Feature:DeploymentConfig] deploymentconfigs", func() {
 		})
 
 		g.It("should successfully tag the deployed image", func() {
-			// TODO: either this or create role for imagestreams for deployer is needed
-			out, err := oc.Run("create").Args("imagestream", "sample-stream").Output()
-			e2e.Logf("%s", out)
-			o.Expect(err).NotTo(o.HaveOccurred())
-
 			g.By("creating the deployment config fixture")
 			dc, err := createDeploymentConfig(oc, tagImagesFixture)
 			o.Expect(err).NotTo(o.HaveOccurred())

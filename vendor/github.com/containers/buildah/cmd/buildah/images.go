@@ -47,8 +47,8 @@ type imageOptions struct {
 type filterParams struct {
 	dangling         string
 	label            string
-	beforeImage      string // Images are sorted by date, so we can just output until we see the image
-	sinceImage       string // Images are sorted by date, so we can just output until we don't see the image
+	beforeImage      string
+	sinceImage       string
 	beforeDate       time.Time
 	sinceDate        time.Time
 	referencePattern string
@@ -71,10 +71,11 @@ func init() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imagesCmd(cmd, args, &opts)
 		},
-		Example: `  buildah images --all
+		Example: `buildah images --all
   buildah images [imageName]
   buildah images --format '{{.ID}} {{.Name}} {{.Size}} {{.CreatedAtRaw}}'`,
 	}
+	imagesCommand.SetUsageTemplate(UsageTemplate())
 
 	flags := imagesCommand.Flags()
 	flags.SetInterspersed(false)
@@ -244,12 +245,14 @@ func outputImages(ctx context.Context, images []storage.Image, store storage.Sto
 		// If all is false and the image doesn't have a name, check to see if the top layer of the image is a parent
 		// to another image's top layer. If it is, then it is an intermediate image so don't print out if the --all flag
 		// is not set.
-		isParent, err := imageIsParent(store, image.TopLayer)
-		if err != nil {
-			logrus.Errorf("error checking if image is a parent %q: %v", image.ID, err)
-		}
-		if !opts.all && len(image.Names) == 0 && isParent {
-			continue
+		if !opts.all && len(image.Names) == 0 {
+			isParent, err := imageIsParent(store, image.TopLayer)
+			if err != nil {
+				logrus.Errorf("error checking if image is a parent %q: %v", image.ID, err)
+			}
+			if isParent {
+				continue
+			}
 		}
 
 		names := []string{}

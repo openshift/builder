@@ -12,8 +12,8 @@ import (
 	kubecontrolplanev1 "github.com/openshift/api/kubecontrolplane/v1"
 	legacyconfigv1 "github.com/openshift/api/legacyconfig/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
-	externaliprangerv1 "github.com/openshift/origin/pkg/service/admission/apis/externalipranger/v1"
-	restrictedendpointsv1 "github.com/openshift/origin/pkg/service/admission/apis/restrictedendpoints/v1"
+	externaliprangerv1 "github.com/openshift/origin/pkg/network/admission/apis/externalipranger/v1"
+	restrictedendpointsv1 "github.com/openshift/origin/pkg/network/admission/apis/restrictedendpoints/v1"
 )
 
 func convertNetworkConfigToAdmissionConfig(masterConfig *legacyconfigv1.MasterConfig) error {
@@ -22,10 +22,10 @@ func convertNetworkConfigToAdmissionConfig(masterConfig *legacyconfigv1.MasterCo
 	}
 
 	scheme := runtime.NewScheme()
-	utilruntime.Must(externaliprangerv1.DeprecatedInstall(scheme))
-	utilruntime.Must(restrictedendpointsv1.DeprecatedInstall(scheme))
+	utilruntime.Must(externaliprangerv1.Install(scheme))
+	utilruntime.Must(restrictedendpointsv1.Install(scheme))
 	codecs := serializer.NewCodecFactory(scheme)
-	encoder := codecs.LegacyCodec(externaliprangerv1.DeprecatedSchemeGroupVersion, restrictedendpointsv1.DeprecatedSchemeGroupVersion)
+	encoder := codecs.LegacyCodec(externaliprangerv1.GroupVersion, restrictedendpointsv1.GroupVersion)
 
 	// convert the networkconfig to admissionconfig
 	var restricted []string
@@ -100,6 +100,8 @@ func ConvertMasterConfigToKubeAPIServerConfig(input *legacyconfigv1.MasterConfig
 	for k, v := range input.KubernetesMasterConfig.APIServerArguments {
 		ret.APIServerArguments[k] = v
 	}
+	ret.AdmissionConfig.EnabledAdmissionPlugins = ToKubeAdmissionPluginList(input.KubernetesMasterConfig.APIServerArguments["enable-admission-plugins"])
+	ret.AdmissionConfig.DisabledAdmissionPlugins = ToKubeAdmissionPluginList(input.KubernetesMasterConfig.APIServerArguments["disable-admission-plugins"])
 
 	// TODO this is likely to be a little weird.  I think we override most of this in the operator
 	ret.ServingInfo, err = ToHTTPServingInfo(&input.ServingInfo)
@@ -131,7 +133,7 @@ func ConvertMasterConfigToKubeAPIServerConfig(input *legacyconfigv1.MasterConfig
 	if err != nil {
 		return nil, err
 	}
-	ret.AdmissionPluginConfig, err = ToKubeAdmissionPluginConfigMap(input.AdmissionConfig.PluginConfig)
+	ret.AdmissionConfig.PluginConfig, err = ToKubeAdmissionPluginConfigMap(input.AdmissionConfig.PluginConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +179,8 @@ func ConvertMasterConfigToOpenShiftAPIServerConfig(input *legacyconfigv1.MasterC
 	for k, v := range input.KubernetesMasterConfig.APIServerArguments {
 		ret.APIServerArguments[k] = v
 	}
+	ret.AdmissionConfig.EnabledAdmissionPlugins = ToOpenShiftAdmissionPluginList(input.KubernetesMasterConfig.APIServerArguments["enable-admission-plugins"])
+	ret.AdmissionConfig.DisabledAdmissionPlugins = ToOpenShiftAdmissionPluginList(input.KubernetesMasterConfig.APIServerArguments["disable-admission-plugins"])
 
 	// TODO this is likely to be a little weird.  I think we override most of this in the operator
 	ret.ServingInfo, err = ToHTTPServingInfo(&input.ServingInfo)
@@ -195,7 +199,7 @@ func ConvertMasterConfigToOpenShiftAPIServerConfig(input *legacyconfigv1.MasterC
 	if err != nil {
 		return nil, err
 	}
-	ret.AdmissionPluginConfig, err = ToOpenShiftAdmissionPluginConfigMap(input.AdmissionConfig.PluginConfig)
+	ret.AdmissionConfig.PluginConfig, err = ToOpenShiftAdmissionPluginConfigMap(input.AdmissionConfig.PluginConfig)
 	if err != nil {
 		return nil, err
 	}

@@ -1,28 +1,52 @@
 package main
 
 import (
-	"github.com/containers/libpod/cmd/podman/cliconfig"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
-var containerDescription = "Manage containers"
-var containerCommand = cliconfig.PodmanCommand{
-	Command: &cobra.Command{
-		Use:              "container",
-		Short:            "Manage Containers",
-		Long:             containerDescription,
-		TraverseChildren: true,
-	},
-}
+var (
+	subCommands = []cli.Command{
+		attachCommand,
+		checkpointCommand,
+		cleanupCommand,
+		containerExistsCommand,
+		commitCommand,
+		createCommand,
+		diffCommand,
+		execCommand,
+		exportCommand,
+		inspectCommand,
+		killCommand,
+		logsCommand,
+		psCommand,
+		mountCommand,
+		pauseCommand,
+		portCommand,
+		pruneContainersCommand,
+		refreshCommand,
+		restartCommand,
+		restoreCommand,
+		rmCommand,
+		runCommand,
+		runlabelCommand,
+		startCommand,
+		statsCommand,
+		stopCommand,
+		topCommand,
+		umountCommand,
+		unpauseCommand,
+		//		updateCommand,
+		waitCommand,
+	}
 
-// Commands that are universally implemented.
-var containerCommands = []*cobra.Command{
-	_containerExistsCommand,
-}
-
-func init() {
-	containerCommand.AddCommand(containerCommands...)
-	containerCommand.AddCommand(getContainerSubCommands()...)
-	containerCommand.SetUsageTemplate(UsageTemplate())
-	rootCmd.AddCommand(containerCommand.Command)
-}
+	containerDescription = "Manage containers"
+	containerCommand     = cli.Command{
+		Name:                   "container",
+		Usage:                  "Manage Containers",
+		Description:            containerDescription,
+		ArgsUsage:              "",
+		Subcommands:            subCommands,
+		UseShortOptionHandling: true,
+		OnUsageError:           usageErrorHandler,
+	}
+)

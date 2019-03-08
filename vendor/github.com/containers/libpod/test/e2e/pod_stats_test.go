@@ -1,5 +1,3 @@
-// +build !remoteclient
-
 package integration
 
 import (
@@ -146,29 +144,6 @@ var _ = Describe("Podman pod stats", func() {
 		stats.WaitWithDefaultTimeout()
 		Expect(stats.ExitCode()).To(Equal(0))
 		Expect(stats.IsJSONOutputValid()).To(BeTrue())
-	})
-	It("podman stats with GO template", func() {
-		_, ec, podid := podmanTest.CreatePod("")
-		Expect(ec).To(Equal(0))
-
-		session := podmanTest.RunTopContainerInPod("", podid)
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-		stats := podmanTest.Podman([]string{"pod", "stats", "-a", "--no-reset", "--no-stream", "--format", "\"table {{.CID}} {{.Pod}} {{.Mem}} {{.MemUsage}} {{.CPU}} {{.NetIO}} {{.BlockIO}} {{.PIDS}} {{.Pod}}\""})
-		stats.WaitWithDefaultTimeout()
-		Expect(stats.ExitCode()).To(Equal(0))
-	})
-
-	It("podman stats with invalid GO template", func() {
-		_, ec, podid := podmanTest.CreatePod("")
-		Expect(ec).To(Equal(0))
-
-		session := podmanTest.RunTopContainerInPod("", podid)
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-		stats := podmanTest.Podman([]string{"pod", "stats", "-a", "--no-reset", "--no-stream", "--format", "\"table {{.ID}} \""})
-		stats.WaitWithDefaultTimeout()
-		Expect(stats.ExitCode()).ToNot(Equal(0))
 	})
 
 })

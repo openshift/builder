@@ -6,12 +6,11 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli"
 )
 
 func getDescriptorString() string {
@@ -25,7 +24,13 @@ Format Descriptors:
 }
 
 var (
-	topCommand     cliconfig.TopValues
+	topFlags = []cli.Flag{
+		LatestFlag,
+		cli.BoolFlag{
+			Name:   "list-descriptors",
+			Hidden: true,
+		},
+	}
 	topDescription = fmt.Sprintf(`Display the running processes of the container.  Specify format descriptors
 to alter the output.  You may run "podman top -l pid pcpu seccomp" to print
 the process ID, the CPU percentage and the seccomp mode of each process of
@@ -33,34 +38,24 @@ the latest container.
 %s
 `, getDescriptorString())
 
-	_topCommand = &cobra.Command{
-		Use:   "top",
-		Short: "Display the running processes of a container",
-		Long:  topDescription,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			topCommand.InputArgs = args
-			topCommand.GlobalFlags = MainGlobalOpts
-			return topCmd(&topCommand)
-		},
-		Example: "CONTAINER-NAME [format descriptors]",
+	topCommand = cli.Command{
+		Name:           "top",
+		Usage:          "Display the running processes of a container",
+		Description:    topDescription,
+		Flags:          sortFlags(topFlags),
+		Action:         topCmd,
+		ArgsUsage:      "CONTAINER-NAME [format descriptors]",
+		SkipArgReorder: true,
+		OnUsageError:   usageErrorHandler,
 	}
 )
 
-func init() {
-	topCommand.Command = _topCommand
-	topCommand.SetUsageTemplate(UsageTemplate())
-	flags := topCommand.Flags()
-	flags.BoolVar(&topCommand.ListDescriptors, "list-descriptors", false, "")
-	flags.MarkHidden("list-descriptors")
-	flags.BoolVarP(&topCommand.Latest, "latest", "l", false, "Act on the latest container podman is aware of")
-}
-
-func topCmd(c *cliconfig.TopValues) error {
+func topCmd(c *cli.Context) error {
 	var container *libpod.Container
 	var err error
-	args := c.InputArgs
+	args := c.Args()
 
-	if c.ListDescriptors {
+	if c.Bool("list-descriptors") {
 		descriptors, err := libpod.GetContainerPidInformationDescriptors()
 		if err != nil {
 			return err
@@ -69,19 +64,22 @@ func topCmd(c *cliconfig.TopValues) error {
 		return nil
 	}
 
-	if len(args) < 1 && !c.Latest {
+	if len(args) < 1 && !c.Bool("latest") {
 		return errors.Errorf("you must provide the name or id of a running container")
+	}
+	if err := validateFlags(c, topFlags); err != nil {
+		return err
 	}
 
 	rootless.SetSkipStorageSetup(true)
-	runtime, err := libpodruntime.GetRuntime(&c.PodmanCommand)
+	runtime, err := libpodruntime.GetRuntime(c)
 	if err != nil {
 		return errors.Wrapf(err, "error creating libpod runtime")
 	}
 	defer runtime.Shutdown(false)
 
 	var descriptors []string
-	if c.Latest {
+	if c.Bool("latest") {
 		descriptors = args
 		container, err = runtime.GetLatestContainer()
 	} else {

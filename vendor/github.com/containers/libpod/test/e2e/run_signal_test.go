@@ -1,5 +1,3 @@
-// +build !remoteclient
-
 package integration
 
 import (
@@ -55,7 +53,7 @@ var _ = Describe("Podman run with --sig-proxy", func() {
 
 		_, pid := podmanTest.PodmanPID([]string{"run", "-it", "-v", fmt.Sprintf("%s:/h:Z", udsDir), fedoraMinimal, "bash", "-c", sigCatch})
 
-		uds, _ := os.OpenFile(udsPath, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
+		uds, _ := os.OpenFile(udsPath, os.O_RDONLY, 0600)
 		defer uds.Close()
 
 		// Wait for the script in the container to alert us that it is READY
@@ -73,7 +71,7 @@ var _ = Describe("Podman run with --sig-proxy", func() {
 			}
 			time.Sleep(1 * time.Second)
 			if counter == 15 {
-				Fail("Timed out waiting for READY from container")
+				os.Exit(1)
 			}
 			counter++
 		}
@@ -99,7 +97,7 @@ var _ = Describe("Podman run with --sig-proxy", func() {
 			}
 			time.Sleep(1 * time.Second)
 			if counter == 15 {
-				Fail("timed out waiting for FOO from container")
+				os.Exit(1)
 			}
 			counter++
 		}
