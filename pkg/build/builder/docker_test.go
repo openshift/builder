@@ -16,9 +16,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/openshift/source-to-image/pkg/tar"
-	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
-
 	buildapiv1 "github.com/openshift/api/build/v1"
 	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
 	buildfake "github.com/openshift/client-go/build/clientset/versioned/fake"
@@ -457,7 +454,6 @@ func TestDockerfilePath(t *testing.T) {
 		dockerBuilder := &DockerBuilder{
 			dockerClient: dockerClient,
 			build:        build,
-			tar:          tar.New(s2ifs.NewFileSystem()),
 		}
 
 		// this will validate that the Dockerfile is readable
@@ -585,7 +581,6 @@ USER 1001`
 		client:       client.Build().Builds(""),
 		build:        build,
 		dockerClient: dockerClient,
-		tar:          tar.New(s2ifs.NewFileSystem()),
 		inputDir:     buildDir,
 	}
 	if err := ManageDockerfile(buildDir, build); err != nil {
