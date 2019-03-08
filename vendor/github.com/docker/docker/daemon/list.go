@@ -9,7 +9,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/container"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/volume"
 	"github.com/docker/go-connections/nat"
@@ -277,7 +276,7 @@ func (daemon *Daemon) foldFilter(view container.View, config *types.ContainerLis
 	}
 
 	var taskFilter, isTask bool
-	if psFilters.Contains("is-task") {
+	if psFilters.Include("is-task") {
 		if psFilters.ExactMatch("is-task", "true") {
 			taskFilter = true
 			isTask = true
@@ -291,7 +290,7 @@ func (daemon *Daemon) foldFilter(view container.View, config *types.ContainerLis
 
 	err = psFilters.WalkValues("health", func(value string) error {
 		if !container.IsValidHealthString(value) {
-			return errdefs.InvalidParameter(errors.Errorf("Unrecognised filter value for health: %s", value))
+			return validationError{errors.Errorf("Unrecognised filter value for health: %s", value)}
 		}
 
 		return nil
@@ -320,10 +319,10 @@ func (daemon *Daemon) foldFilter(view container.View, config *types.ContainerLis
 
 	imagesFilter := map[image.ID]bool{}
 	var ancestorFilter bool
-	if psFilters.Contains("ancestor") {
+	if psFilters.Include("ancestor") {
 		ancestorFilter = true
 		psFilters.WalkValues("ancestor", func(ancestor string) error {
-			id, os, err := daemon.GetImageIDAndOS(ancestor)
+			id, platform, err := daemon.GetImageIDAndPlatform(ancestor)
 			if err != nil {
 				logrus.Warnf("Error while looking up for image %v", ancestor)
 				return nil
@@ -333,7 +332,7 @@ func (daemon *Daemon) foldFilter(view container.View, config *types.ContainerLis
 				return nil
 			}
 			// Then walk down the graph and put the imageIds in imagesFilter
-			populateImageFilterByParents(imagesFilter, id, daemon.stores[os].imageStore.Children)
+			populateImageFilterByParents(imagesFilter, id, daemon.stores[platform].imageStore.Children)
 			return nil
 		})
 	}
@@ -466,7 +465,7 @@ func includeContainerInList(container *container.Snapshot, ctx *listContext) ite
 		return excludeContainer
 	}
 
-	if ctx.filters.Contains("volume") {
+	if ctx.filters.Include("volume") {
 		volumesByName := make(map[string]types.MountPoint)
 		for _, m := range container.Mounts {
 			if m.Name != "" {
@@ -510,7 +509,7 @@ func includeContainerInList(container *container.Snapshot, ctx *listContext) ite
 		networkExist = errors.New("container part of network")
 		noNetworks   = errors.New("container is not part of any networks")
 	)
-	if ctx.filters.Contains("network") {
+	if ctx.filters.Include("network") {
 		err := ctx.filters.WalkValues("network", func(value string) error {
 			if container.NetworkSettings == nil {
 				return noNetworks
@@ -567,7 +566,7 @@ func (daemon *Daemon) refreshImage(s *container.Snapshot, ctx *listContext) (*ty
 	c := s.Container
 	image := s.Image // keep the original ref if still valid (hasn't changed)
 	if image != s.ImageID {
-		id, _, err := daemon.GetImageIDAndOS(image)
+		id, _, err := daemon.GetImageIDAndPlatform(image)
 		if _, isDNE := err.(errImageDoesNotExist); err != nil && !isDNE {
 			return nil, err
 		}
@@ -586,7 +585,7 @@ func (daemon *Daemon) Volumes(filter string) ([]*types.Volume, []string, error) 
 	var (
 		volumesOut []*types.Volume
 	)
-	volFilters, err := filters.FromJSON(filter)
+	volFilters, err := filters.FromParam(filter)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -628,17 +627,17 @@ func (daemon *Daemon) filterVolumes(vols []volume.Volume, filter filters.Args) (
 
 	var retVols []volume.Volume
 	for _, vol := range vols {
-		if filter.Contains("name") {
+		if filter.Include("name") {
 			if !filter.Match("name", vol.Name()) {
 				continue
 			}
 		}
-		if filter.Contains("driver") {
+		if filter.Include("driver") {
 			if !filter.ExactMatch("driver", vol.DriverName()) {
 				continue
 			}
 		}
-		if filter.Contains("label") {
+		if filter.Include("label") {
 			v, ok := vol.(volume.DetailedVolume)
 			if !ok {
 				continue
@@ -650,7 +649,7 @@ func (daemon *Daemon) filterVolumes(vols []volume.Volume, filter filters.Args) (
 		retVols = append(retVols, vol)
 	}
 	danglingOnly := false
-	if filter.Contains("dangling") {
+	if filter.Include("dangling") {
 		if filter.ExactMatch("dangling", "true") || filter.ExactMatch("dangling", "1") {
 			danglingOnly = true
 		} else if !filter.ExactMatch("dangling", "false") && !filter.ExactMatch("dangling", "0") {

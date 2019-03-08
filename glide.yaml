@@ -4,9 +4,8 @@ import:
   subpackages:
   - reference
 - package: github.com/docker/docker
-  repo:    https://github.com/nalind/docker.git
-  version: master
-
+  repo:    https://github.com/openshift/moby-moby
+  version: openshift-3.10-docker-b68221c
   subpackages:
   - api/types
   - builder/dockerfile/command
@@ -97,7 +96,7 @@ import:
 - package: github.com/containers/libpod
   version: v1.0
 - package: github.com/containers/storage
-  version: v1.10
+  version: v1.11
 - package: github.com/opencontainers/go-digest
   version: c9281466c8b2f606084ac71339773efd177436e7
 - package: github.com/opencontainers/selinux

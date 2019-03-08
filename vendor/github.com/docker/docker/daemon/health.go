@@ -80,7 +80,6 @@ func (p *cmdProbe) run(ctx context.Context, d *Daemon, cntr *container.Container
 	execConfig.Tty = false
 	execConfig.Privileged = false
 	execConfig.User = cntr.Config.User
-	execConfig.WorkingDir = cntr.Config.WorkingDir
 
 	linkedEnv, err := d.setupLinkedContainers(cntr)
 	if err != nil {
@@ -130,7 +129,7 @@ func handleProbeResult(d *Daemon, c *container.Container, result *types.Healthch
 	}
 
 	h := c.State.Health
-	oldStatus := h.Status()
+	oldStatus := h.Status
 
 	if len(h.Log) >= maxLogEntries {
 		h.Log = append(h.Log[len(h.Log)+1-maxLogEntries:], result)
@@ -140,14 +139,14 @@ func handleProbeResult(d *Daemon, c *container.Container, result *types.Healthch
 
 	if result.ExitCode == exitStatusHealthy {
 		h.FailingStreak = 0
-		h.SetStatus(types.Healthy)
+		h.Status = types.Healthy
 	} else { // Failure (including invalid exit code)
 		shouldIncrementStreak := true
 
 		// If the container is starting (i.e. we never had a successful health check)
 		// then we check if we are within the start period of the container in which
 		// case we do not increment the failure streak.
-		if h.Status() == types.Starting {
+		if h.Status == types.Starting {
 			startPeriod := timeoutWithDefault(c.Config.Healthcheck.StartPeriod, defaultStartPeriod)
 			timeSinceStart := result.Start.Sub(c.State.StartedAt)
 
@@ -161,7 +160,7 @@ func handleProbeResult(d *Daemon, c *container.Container, result *types.Healthch
 			h.FailingStreak++
 
 			if h.FailingStreak >= retries {
-				h.SetStatus(types.Unhealthy)
+				h.Status = types.Unhealthy
 			}
 		}
 		// Else we're starting or healthy. Stay in that state.
@@ -174,9 +173,8 @@ func handleProbeResult(d *Daemon, c *container.Container, result *types.Healthch
 		logrus.Errorf("Error replicating health state for container %s: %v", c.ID, err)
 	}
 
-	current := h.Status()
-	if oldStatus != current {
-		d.LogContainerEvent(c, "health_status: "+current)
+	if oldStatus != h.Status {
+		d.LogContainerEvent(c, "health_status: "+h.Status)
 	}
 }
 
@@ -255,8 +253,6 @@ func getProbe(c *container.Container) probe {
 		return &cmdProbe{shell: false}
 	case "CMD-SHELL":
 		return &cmdProbe{shell: true}
-	case "NONE":
-		return nil
 	default:
 		logrus.Warnf("Unknown healthcheck type '%s' (expected 'CMD') in container %s", config.Test[0], c.ID)
 		return nil
@@ -297,11 +293,11 @@ func (d *Daemon) initHealthMonitor(c *container.Container) {
 	d.stopHealthchecks(c)
 
 	if h := c.State.Health; h != nil {
-		h.SetStatus(types.Starting)
+		h.Status = types.Starting
 		h.FailingStreak = 0
 	} else {
 		h := &container.Health{}
-		h.SetStatus(types.Starting)
+		h.Status = types.Starting
 		c.State.Health = h
 	}
 

@@ -1,8 +1,6 @@
 package plugingetter
 
-import (
-	"github.com/docker/docker/pkg/plugins"
-)
+import "github.com/docker/docker/pkg/plugins"
 
 const (
 	// Lookup doesn't update RefCount

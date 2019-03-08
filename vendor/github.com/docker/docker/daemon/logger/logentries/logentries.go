@@ -50,10 +50,8 @@ func New(info logger.Info) (logger.Logger, error) {
 		return nil, errors.Wrap(err, "error connecting to logentries")
 	}
 	var lineOnly bool
-	if info.Config[lineonly] != "" {
-		if lineOnly, err = strconv.ParseBool(info.Config[lineonly]); err != nil {
-			return nil, errors.Wrap(err, "error parsing lineonly option")
-		}
+	if lineOnly, err = strconv.ParseBool(info.Config[lineonly]); err != nil {
+		return nil, errors.Wrap(err, "error parsing lineonly option")
 	}
 	return &logentries{
 		containerID:   info.ContainerID,
@@ -78,7 +76,7 @@ func (f *logentries) Log(msg *logger.Message) error {
 		logger.PutMessage(msg)
 		f.writer.Println(f.tag, ts, data)
 	} else {
-		line := string(msg.Line)
+		line := msg.Line
 		logger.PutMessage(msg)
 		f.writer.Println(line)
 	}

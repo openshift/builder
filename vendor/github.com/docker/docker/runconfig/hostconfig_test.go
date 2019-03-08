@@ -195,7 +195,9 @@ func TestDecodeHostConfig(t *testing.T) {
 			t.Fatal(fmt.Errorf("Error parsing %s: %v", f, err))
 		}
 
-		assert.False(t, c.Privileged)
+		if c.Privileged != false {
+			t.Fatalf("Expected privileged false, found %v\n", c.Privileged)
+		}
 
 		if l := len(c.Binds); l != 1 {
 			t.Fatalf("Expected 1 bind, found %d\n", l)

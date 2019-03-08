@@ -229,18 +229,18 @@ func (s *DockerSuite) TestExecStopNotHanging(c *check.C) {
 	testRequires(c, DaemonIsLinux)
 	dockerCmd(c, "run", "-d", "--name", "testing", "busybox", "top")
 
-	result := icmd.StartCmd(icmd.Command(dockerBinary, "exec", "testing", "top"))
-	result.Assert(c, icmd.Success)
-	go icmd.WaitOnCmd(0, result)
+	err := exec.Command(dockerBinary, "exec", "testing", "top").Start()
+	c.Assert(err, checker.IsNil)
 
 	type dstop struct {
-		out string
+		out []byte
 		err error
 	}
+
 	ch := make(chan dstop)
 	go func() {
-		result := icmd.RunCommand(dockerBinary, "stop", "testing")
-		ch <- dstop{result.Combined(), result.Error}
+		out, err := exec.Command(dockerBinary, "stop", "testing").CombinedOutput()
+		ch <- dstop{out, err}
 		close(ch)
 	}()
 	select {

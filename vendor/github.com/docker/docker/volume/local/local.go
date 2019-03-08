@@ -13,8 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/daemon/names"
-	"github.com/docker/docker/errdefs"
+	"github.com/docker/docker/api"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/docker/volume"
@@ -36,7 +35,7 @@ var (
 	// volumeNameRegex ensures the name assigned for the volume is valid.
 	// This name is used to create the bind directory, so we need to avoid characters that
 	// would make the path to escape the root directory.
-	volumeNameRegex = names.RestrictedNamePattern
+	volumeNameRegex = api.RestrictedNamePattern
 )
 
 type activeMount struct {
@@ -140,6 +139,30 @@ func (r *Root) Name() string {
 	return volume.DefaultDriverName
 }
 
+type alreadyExistsError struct {
+	path string
+}
+
+func (e alreadyExistsError) Error() string {
+	return "local volume already exists under " + e.path
+}
+
+func (e alreadyExistsError) Conflict() {}
+
+type systemError struct {
+	err error
+}
+
+func (e systemError) Error() string {
+	return e.err.Error()
+}
+
+func (e systemError) SystemError() {}
+
+func (e systemError) Cause() error {
+	return e.err
+}
+
 // Create creates a new volume.Volume with the provided name, creating
 // the underlying directory tree required for this volume in the
 // process.
@@ -158,7 +181,10 @@ func (r *Root) Create(name string, opts map[string]string) (volume.Volume, error
 
 	path := r.DataPath(name)
 	if err := idtools.MkdirAllAndChown(path, 0755, r.rootIDs); err != nil {
-		return nil, errors.Wrapf(errdefs.System(err), "error while creating volume path '%s'", path)
+		if os.IsExist(err) {
+			return nil, alreadyExistsError{filepath.Dir(path)}
+		}
+		return nil, errors.Wrapf(systemError{err}, "error while creating volume path '%s'", path)
 	}
 
 	var err error
@@ -184,7 +210,7 @@ func (r *Root) Create(name string, opts map[string]string) (volume.Volume, error
 			return nil, err
 		}
 		if err = ioutil.WriteFile(filepath.Join(filepath.Dir(path), "opts.json"), b, 600); err != nil {
-			return nil, errdefs.System(errors.Wrap(err, "error while persisting volume options"))
+			return nil, errors.Wrap(systemError{err}, "error while persisting volume options")
 		}
 	}
 
@@ -202,11 +228,11 @@ func (r *Root) Remove(v volume.Volume) error {
 
 	lv, ok := v.(*localVolume)
 	if !ok {
-		return errdefs.System(errors.Errorf("unknown volume type %T", v))
+		return systemError{errors.Errorf("unknown volume type %T", v)}
 	}
 
 	if lv.active.count > 0 {
-		return errdefs.System(errors.Errorf("volume has active mounts"))
+		return systemError{errors.Errorf("volume has active mounts")}
 	}
 
 	if err := lv.unmount(); err != nil {
@@ -222,7 +248,7 @@ func (r *Root) Remove(v volume.Volume) error {
 	}
 
 	if !r.scopedPath(realPath) {
-		return errdefs.System(errors.Errorf("Unable to remove a directory of out the Docker root %s: %s", r.scope, realPath))
+		return systemError{errors.Errorf("Unable to remove a directory of out the Docker root %s: %s", r.scope, realPath)}
 	}
 
 	if err := removePath(realPath); err != nil {
@@ -238,7 +264,7 @@ func removePath(path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return errdefs.System(errors.Wrapf(err, "error removing volume path '%s'", path))
+		return errors.Wrapf(systemError{err}, "error removing volume path '%s'", path)
 	}
 	return nil
 }
@@ -272,7 +298,7 @@ func (r *Root) validateName(name string) error {
 		return validationError("volume name is too short, names should be at least two alphanumeric characters")
 	}
 	if !volumeNameRegex.MatchString(name) {
-		return validationError(fmt.Sprintf("%q includes invalid characters for a local volume name, only %q are allowed. If you intended to pass a host directory, use absolute path", name, names.RestrictedNameChars))
+		return validationError(fmt.Sprintf("%q includes invalid characters for a local volume name, only %q are allowed. If you intended to pass a host directory, use absolute path", name, api.RestrictedNameChars))
 	}
 	return nil
 }
@@ -308,11 +334,6 @@ func (v *localVolume) Path() string {
 	return v.path
 }
 
-// CachedPath returns the data location
-func (v *localVolume) CachedPath() string {
-	return v.path
-}
-
 // Mount implements the localVolume interface, returning the data location.
 // If there are any provided mount options, the resources will be mounted at this point
 func (v *localVolume) Mount(id string) (string, error) {
@@ -321,7 +342,7 @@ func (v *localVolume) Mount(id string) (string, error) {
 	if v.opts != nil {
 		if !v.active.mounted {
 			if err := v.mount(); err != nil {
-				return "", errdefs.System(err)
+				return "", systemError{err}
 			}
 			v.active.mounted = true
 		}
@@ -355,7 +376,7 @@ func (v *localVolume) unmount() error {
 	if v.opts != nil {
 		if err := mount.Unmount(v.path); err != nil {
 			if mounted, mErr := mount.Mounted(v.path); mounted || mErr != nil {
-				return errdefs.System(errors.Wrapf(err, "error while unmounting volume path '%s'", v.path))
+				return errors.Wrapf(systemError{err}, "error while unmounting volume path '%s'", v.path)
 			}
 		}
 		v.active.mounted = false

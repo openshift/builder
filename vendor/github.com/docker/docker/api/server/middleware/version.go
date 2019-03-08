@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"runtime"
 
-	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/types/versions"
 	"golang.org/x/net/context"
 )
@@ -29,14 +28,11 @@ func NewVersionMiddleware(s, d, m string) VersionMiddleware {
 }
 
 type versionUnsupportedError struct {
-	version, minVersion, maxVersion string
+	version, minVersion string
 }
 
 func (e versionUnsupportedError) Error() string {
-	if e.minVersion != "" {
-		return fmt.Sprintf("client version %s is too old. Minimum supported API version is %s, please upgrade your client to a newer version", e.version, e.minVersion)
-	}
-	return fmt.Sprintf("client version %s is too new. Maximum supported API version is %s", e.version, e.maxVersion)
+	return fmt.Sprintf("client version %s is too old. Minimum supported API version is %s, please upgrade your client to a newer version", e.version, e.minVersion)
 }
 
 func (e versionUnsupportedError) InvalidParameter() {}
@@ -44,21 +40,21 @@ func (e versionUnsupportedError) InvalidParameter() {}
 // WrapHandler returns a new handler function wrapping the previous one in the request chain.
 func (v VersionMiddleware) WrapHandler(handler func(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error) func(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-		w.Header().Set("Server", fmt.Sprintf("Docker/%s (%s)", v.serverVersion, runtime.GOOS))
-		w.Header().Set("API-Version", v.defaultVersion)
-		w.Header().Set("OSType", runtime.GOOS)
-
 		apiVersion := vars["version"]
 		if apiVersion == "" {
 			apiVersion = v.defaultVersion
 		}
+
 		if versions.LessThan(apiVersion, v.minVersion) {
-			return versionUnsupportedError{version: apiVersion, minVersion: v.minVersion}
+			return versionUnsupportedError{apiVersion, v.minVersion}
 		}
-		if versions.GreaterThan(apiVersion, v.defaultVersion) {
-			return versionUnsupportedError{version: apiVersion, maxVersion: v.defaultVersion}
-		}
-		ctx = context.WithValue(ctx, httputils.APIVersionKey, apiVersion)
+
+		header := fmt.Sprintf("Docker/%s (%s)", v.serverVersion, runtime.GOOS)
+		w.Header().Set("Server", header)
+		w.Header().Set("API-Version", v.defaultVersion)
+		w.Header().Set("OSType", runtime.GOOS)
+		// nolint: golint
+		ctx = context.WithValue(ctx, "api-version", apiVersion)
 		return handler(ctx, w, r, vars)
 	}
 

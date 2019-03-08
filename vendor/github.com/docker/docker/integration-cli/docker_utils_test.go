@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -233,7 +234,7 @@ func readFile(src string, c *check.C) (content string) {
 }
 
 func containerStorageFile(containerID, basename string) string {
-	return filepath.Join(testEnv.PlatformDefaults.ContainerStoragePath, containerID, basename)
+	return filepath.Join(testEnv.ContainerStoragePath(), containerID, basename)
 }
 
 // docker commands that use this function must be run with the '-d' switch.
@@ -265,7 +266,7 @@ func readContainerFileWithExec(c *check.C, containerID, filename string) []byte 
 
 // daemonTime provides the current time on the daemon host
 func daemonTime(c *check.C) time.Time {
-	if testEnv.IsLocalDaemon() {
+	if testEnv.LocalDaemon() {
 		return time.Now()
 	}
 	cli, err := client.NewEnvClient()
@@ -372,7 +373,8 @@ func waitInspectWithArgs(name, expr, expected string, timeout time.Duration, arg
 }
 
 func getInspectBody(c *check.C, version, id string) []byte {
-	cli, err := request.NewEnvClientWithVersion(version)
+	var httpClient *http.Client
+	cli, err := client.NewClient(daemonHost(), version, httpClient, nil)
 	c.Assert(err, check.IsNil)
 	defer cli.Close()
 	_, body, err := cli.ContainerInspectWithRaw(context.Background(), id, false)
@@ -399,7 +401,7 @@ func runSleepingContainerInImage(c *check.C, image string, extraArgs ...string) 
 // minimalBaseImage returns the name of the minimal base image for the current
 // daemon platform.
 func minimalBaseImage() string {
-	return testEnv.PlatformDefaults.BaseImage
+	return testEnv.MinimalBaseImage()
 }
 
 func getGoroutineNumber() (int, error) {

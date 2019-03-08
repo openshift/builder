@@ -10,10 +10,10 @@ import (
 	"github.com/docker/docker/volume"
 )
 
-// createContainerOSSpecificSettings performs host-OS specific container create functionality
-func (daemon *Daemon) createContainerOSSpecificSettings(container *container.Container, config *containertypes.Config, hostConfig *containertypes.HostConfig) error {
+// createContainerPlatformSpecificSettings performs platform specific container create functionality
+func (daemon *Daemon) createContainerPlatformSpecificSettings(container *container.Container, config *containertypes.Config, hostConfig *containertypes.HostConfig) error {
 
-	if container.OS == runtime.GOOS {
+	if container.Platform == runtime.GOOS {
 		// Make sure the host config has the default daemon isolation if not specified by caller.
 		if containertypes.Isolation.IsDefault(containertypes.Isolation(hostConfig.Isolation)) {
 			hostConfig.Isolation = daemon.defaultIsolation
@@ -26,10 +26,10 @@ func (daemon *Daemon) createContainerOSSpecificSettings(container *container.Con
 		}
 		hostConfig.Isolation = "hyperv"
 	}
-	parser := volume.NewParser(container.OS)
+
 	for spec := range config.Volumes {
 
-		mp, err := parser.ParseMountRaw(spec, hostConfig.VolumeDriver)
+		mp, err := volume.ParseMountRaw(spec, hostConfig.VolumeDriver)
 		if err != nil {
 			return fmt.Errorf("Unrecognised volume spec: %v", err)
 		}

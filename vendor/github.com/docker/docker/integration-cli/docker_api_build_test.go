@@ -28,9 +28,8 @@ import (
 
 func (s *DockerSuite) TestBuildAPIDockerFileRemote(c *check.C) {
 	testRequires(c, NotUserNamespace)
-
 	var testD string
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		testD = `FROM busybox
 RUN find / -name ba*
 RUN find /tmp/`
@@ -439,84 +438,6 @@ func (s *DockerSuite) TestBuildChownOnCopy(c *check.C) {
 	assert.Contains(c, string(out), "Successfully built")
 }
 
-func (s *DockerSuite) TestBuildCopyCacheOnFileChange(c *check.C) {
-
-	dockerfile := `FROM busybox
-COPY file /file`
-
-	ctx1 := fakecontext.New(c, "",
-		fakecontext.WithDockerfile(dockerfile),
-		fakecontext.WithFile("file", "foo"))
-	ctx2 := fakecontext.New(c, "",
-		fakecontext.WithDockerfile(dockerfile),
-		fakecontext.WithFile("file", "bar"))
-
-	var build = func(ctx *fakecontext.Fake) string {
-		res, body, err := request.Post("/build",
-			request.RawContent(ctx.AsTarReader(c)),
-			request.ContentType("application/x-tar"))
-
-		require.NoError(c, err)
-		assert.Equal(c, http.StatusOK, res.StatusCode)
-
-		out, err := request.ReadBody(body)
-		require.NoError(c, err)
-
-		ids := getImageIDsFromBuild(c, out)
-		return ids[len(ids)-1]
-	}
-
-	id1 := build(ctx1)
-	id2 := build(ctx1)
-	id3 := build(ctx2)
-
-	if id1 != id2 {
-		c.Fatal("didn't use the cache")
-	}
-	if id1 == id3 {
-		c.Fatal("COPY With different source file should not share same cache")
-	}
-}
-
-func (s *DockerSuite) TestBuildAddCacheOnFileChange(c *check.C) {
-
-	dockerfile := `FROM busybox
-ADD file /file`
-
-	ctx1 := fakecontext.New(c, "",
-		fakecontext.WithDockerfile(dockerfile),
-		fakecontext.WithFile("file", "foo"))
-	ctx2 := fakecontext.New(c, "",
-		fakecontext.WithDockerfile(dockerfile),
-		fakecontext.WithFile("file", "bar"))
-
-	var build = func(ctx *fakecontext.Fake) string {
-		res, body, err := request.Post("/build",
-			request.RawContent(ctx.AsTarReader(c)),
-			request.ContentType("application/x-tar"))
-
-		require.NoError(c, err)
-		assert.Equal(c, http.StatusOK, res.StatusCode)
-
-		out, err := request.ReadBody(body)
-		require.NoError(c, err)
-
-		ids := getImageIDsFromBuild(c, out)
-		return ids[len(ids)-1]
-	}
-
-	id1 := build(ctx1)
-	id2 := build(ctx1)
-	id3 := build(ctx2)
-
-	if id1 != id2 {
-		c.Fatal("didn't use the cache")
-	}
-	if id1 == id3 {
-		c.Fatal("COPY With different source file should not share same cache")
-	}
-}
-
 func (s *DockerSuite) TestBuildWithSession(c *check.C) {
 	testRequires(c, ExperimentalDaemon)
 
@@ -588,9 +509,7 @@ func testBuildWithSession(c *check.C, dir, dockerfile string) (outStr string) {
 	sess, err := session.NewSession("foo1", "foo")
 	assert.Nil(c, err)
 
-	fsProvider := filesync.NewFSSyncProvider([]filesync.SyncedDir{
-		{Dir: dir},
-	})
+	fsProvider := filesync.NewFSSyncProvider(dir, nil)
 	sess.Allow(fsProvider)
 
 	g, ctx := errgroup.WithContext(context.Background())
@@ -600,7 +519,7 @@ func testBuildWithSession(c *check.C, dir, dockerfile string) (outStr string) {
 	})
 
 	g.Go(func() error {
-		res, body, err := request.Post("/build?remote=client-session&session="+sess.ID(), func(req *http.Request) error {
+		res, body, err := request.Post("/build?remote=client-session&session="+sess.UUID(), func(req *http.Request) error {
 			req.Body = ioutil.NopCloser(strings.NewReader(dockerfile))
 			return nil
 		})
@@ -619,28 +538,6 @@ func testBuildWithSession(c *check.C, dir, dockerfile string) (outStr string) {
 	err = g.Wait()
 	assert.Nil(c, err)
 	return
-}
-
-func (s *DockerSuite) TestBuildScratchCopy(c *check.C) {
-	testRequires(c, DaemonIsLinux)
-	dockerfile := `FROM scratch
-ADD Dockerfile /
-ENV foo bar`
-	ctx := fakecontext.New(c, "",
-		fakecontext.WithDockerfile(dockerfile),
-	)
-	defer ctx.Close()
-
-	res, body, err := request.Post(
-		"/build",
-		request.RawContent(ctx.AsTarReader(c)),
-		request.ContentType("application/x-tar"))
-	c.Assert(err, checker.IsNil)
-	c.Assert(res.StatusCode, checker.Equals, http.StatusOK)
-
-	out, err := request.ReadBody(body)
-	require.NoError(c, err)
-	assert.Contains(c, string(out), "Successfully built")
 }
 
 type buildLine struct {

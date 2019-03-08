@@ -6,6 +6,7 @@ import (
 
 	"github.com/docker/docker/daemon/config"
 	"github.com/docker/docker/daemon/discovery"
+	"github.com/docker/docker/libcontainerd"
 	"github.com/sirupsen/logrus"
 )
 
@@ -61,7 +62,7 @@ func (daemon *Daemon) Reload(conf *config.Config) (err error) {
 	if err := daemon.reloadLiveRestore(conf, attributes); err != nil {
 		return err
 	}
-	return daemon.reloadNetworkDiagnosticPort(conf, attributes)
+	return nil
 }
 
 // reloadDebug updates configuration with Debug option
@@ -302,24 +303,12 @@ func (daemon *Daemon) reloadLiveRestore(conf *config.Config, attributes map[stri
 	// update corresponding configuration
 	if conf.IsValueSet("live-restore") {
 		daemon.configStore.LiveRestoreEnabled = conf.LiveRestoreEnabled
+		if err := daemon.containerdRemote.UpdateOptions(libcontainerd.WithLiveRestore(conf.LiveRestoreEnabled)); err != nil {
+			return err
+		}
 	}
 
 	// prepare reload event attributes with updatable configurations
 	attributes["live-restore"] = fmt.Sprintf("%t", daemon.configStore.LiveRestoreEnabled)
-	return nil
-}
-
-// reloadNetworkDiagnosticPort updates the network controller starting the diagnose mode if the config is valid
-func (daemon *Daemon) reloadNetworkDiagnosticPort(conf *config.Config, attributes map[string]string) error {
-	if conf == nil || daemon.netController == nil {
-		return nil
-	}
-	// Enable the network diagnose if the flag is set with a valid port withing the range
-	if conf.IsValueSet("network-diagnostic-port") && conf.NetworkDiagnosticPort > 0 && conf.NetworkDiagnosticPort < 65536 {
-		logrus.Warnf("Calling the diagnostic start with %d", conf.NetworkDiagnosticPort)
-		daemon.netController.StartDiagnose(conf.NetworkDiagnosticPort)
-	} else {
-		daemon.netController.StopDiagnose()
-	}
 	return nil
 }

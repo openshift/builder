@@ -55,8 +55,10 @@ func (s *DockerSwarmSuite) TestAPISwarmConfigsDelete(c *check.C) {
 	c.Assert(err, checker.IsNil)
 	defer cli.Close()
 
+	expected := "no such config"
+
 	_, _, err = cli.ConfigInspectWithRaw(context.Background(), id)
-	c.Assert(err.Error(), checker.Contains, "No such config")
+	c.Assert(err.Error(), checker.Contains, expected)
 }
 
 func (s *DockerSwarmSuite) TestAPISwarmConfigsUpdate(c *check.C) {

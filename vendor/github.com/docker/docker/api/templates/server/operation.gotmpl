@@ -20,7 +20,7 @@ import (
 
 
 {{ range .ExtraSchemas }}
-// {{ .Name }} {{ comment .Description }}
+// {{ .Name }} {{ template "docstring" . }}
 // swagger:model {{ .Name }}
 {{ template "schema" . }}
 {{ end }}

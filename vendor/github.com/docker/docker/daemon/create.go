@@ -13,7 +13,6 @@ import (
 	containertypes "github.com/docker/docker/api/types/container"
 	networktypes "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/container"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/idtools"
@@ -37,31 +36,27 @@ func (daemon *Daemon) ContainerCreate(params types.ContainerCreateConfig) (conta
 func (daemon *Daemon) containerCreate(params types.ContainerCreateConfig, managed bool) (containertypes.ContainerCreateCreatedBody, error) {
 	start := time.Now()
 	if params.Config == nil {
-		return containertypes.ContainerCreateCreatedBody{}, errdefs.InvalidParameter(errors.New("Config cannot be empty in order to create a container"))
+		return containertypes.ContainerCreateCreatedBody{}, validationError{errors.New("Config cannot be empty in order to create a container")}
 	}
 
-	os := runtime.GOOS
-	if params.Config.Image != "" {
-		img, err := daemon.GetImage(params.Config.Image)
-		if err == nil {
-			os = img.OS
-		}
-	} else {
-		// This mean scratch. On Windows, we can safely assume that this is a linux
-		// container. On other platforms, it's the host OS (which it already is)
-		if runtime.GOOS == "windows" && system.LCOWSupported() {
-			os = "linux"
-		}
+	// TODO: @jhowardmsft LCOW support - at a later point, can remove the hard-coding
+	// to force the platform to be linux.
+	// Default the platform if not supplied
+	if params.Platform == "" {
+		params.Platform = runtime.GOOS
+	}
+	if system.LCOWSupported() {
+		params.Platform = "linux"
 	}
 
-	warnings, err := daemon.verifyContainerSettings(os, params.HostConfig, params.Config, false)
+	warnings, err := daemon.verifyContainerSettings(params.Platform, params.HostConfig, params.Config, false)
 	if err != nil {
-		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, errdefs.InvalidParameter(err)
+		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, validationError{err}
 	}
 
 	err = verifyNetworkingConfig(params.NetworkingConfig)
 	if err != nil {
-		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, errdefs.InvalidParameter(err)
+		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, validationError{err}
 	}
 
 	if params.HostConfig == nil {
@@ -69,7 +64,7 @@ func (daemon *Daemon) containerCreate(params types.ContainerCreateConfig, manage
 	}
 	err = daemon.adaptContainerSettings(params.HostConfig, params.AdjustCPUShares)
 	if err != nil {
-		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, errdefs.InvalidParameter(err)
+		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, validationError{err}
 	}
 
 	container, err := daemon.create(params, managed)
@@ -90,40 +85,41 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 		err       error
 	)
 
-	os := runtime.GOOS
 	if params.Config.Image != "" {
 		img, err = daemon.GetImage(params.Config.Image)
 		if err != nil {
 			return nil, err
 		}
-		if img.OS != "" {
-			os = img.OS
-		} else {
-			// default to the host OS except on Windows with LCOW
-			if runtime.GOOS == "windows" && system.LCOWSupported() {
-				os = "linux"
-			}
+
+		if runtime.GOOS == "solaris" && img.OS != "solaris " {
+			return nil, errors.New("platform on which parent image was created is not Solaris")
 		}
 		imgID = img.ID()
 
 		if runtime.GOOS == "windows" && img.OS == "linux" && !system.LCOWSupported() {
-			return nil, errors.New("operating system on which parent image was created is not Windows")
+			return nil, errors.New("platform on which parent image was created is not Windows")
 		}
-	} else {
-		if runtime.GOOS == "windows" {
-			os = "linux" // 'scratch' case.
+	}
+
+	// Make sure the platform requested matches the image
+	if img != nil {
+		if params.Platform != img.Platform() {
+			// Ignore this in LCOW mode. @jhowardmsft TODO - This will need revisiting later.
+			if !system.LCOWSupported() {
+				return nil, fmt.Errorf("cannot create a %s container from a %s image", params.Platform, img.Platform())
+			}
 		}
 	}
 
 	if err := daemon.mergeAndVerifyConfig(params.Config, img); err != nil {
-		return nil, errdefs.InvalidParameter(err)
+		return nil, validationError{err}
 	}
 
 	if err := daemon.mergeAndVerifyLogConfig(&params.HostConfig.LogConfig); err != nil {
-		return nil, errdefs.InvalidParameter(err)
+		return nil, validationError{err}
 	}
 
-	if container, err = daemon.newContainer(params.Name, os, params.Config, params.HostConfig, imgID, managed); err != nil {
+	if container, err = daemon.newContainer(params.Name, params.Platform, params.Config, params.HostConfig, imgID, managed); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -159,7 +155,7 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 
 	// Set RWLayer for container after mount labels have been set
 	if err := daemon.setRWLayer(container); err != nil {
-		return nil, errdefs.System(err)
+		return nil, systemError{err}
 	}
 
 	rootIDs := daemon.idMappings.RootPair()
@@ -174,7 +170,7 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 		return nil, err
 	}
 
-	if err := daemon.createContainerOSSpecificSettings(container, params.Config, params.HostConfig); err != nil {
+	if err := daemon.createContainerPlatformSpecificSettings(container, params.Config, params.HostConfig); err != nil {
 		return nil, err
 	}
 
@@ -257,7 +253,7 @@ func (daemon *Daemon) generateSecurityOpt(hostConfig *containertypes.HostConfig)
 func (daemon *Daemon) setRWLayer(container *container.Container) error {
 	var layerID layer.ChainID
 	if container.ImageID != "" {
-		img, err := daemon.stores[container.OS].imageStore.Get(container.ImageID)
+		img, err := daemon.stores[container.Platform].imageStore.Get(container.ImageID)
 		if err != nil {
 			return err
 		}
@@ -270,7 +266,7 @@ func (daemon *Daemon) setRWLayer(container *container.Container) error {
 		StorageOpt: container.HostConfig.StorageOpt,
 	}
 
-	rwLayer, err := daemon.stores[container.OS].layerStore.CreateRWLayer(container.ID, layerID, rwLayerOpts)
+	rwLayer, err := daemon.stores[container.Platform].layerStore.CreateRWLayer(container.ID, layerID, rwLayerOpts)
 	if err != nil {
 		return err
 	}

@@ -29,22 +29,12 @@ func Clone(remoteURL string) (string, error) {
 		return "", err
 	}
 
-	return cloneGitRepo(repo)
-}
-
-func cloneGitRepo(repo gitRepo) (checkoutDir string, err error) {
 	fetch := fetchArgs(repo.remote, repo.ref)
 
 	root, err := ioutil.TempDir("", "docker-build-git")
 	if err != nil {
 		return "", err
 	}
-
-	defer func() {
-		if err != nil {
-			os.RemoveAll(root)
-		}
-	}()
 
 	if out, err := gitWithinDir(root, "init"); err != nil {
 		return "", errors.Wrapf(err, "failed to init repo at %s: %s", root, out)
@@ -60,19 +50,7 @@ func cloneGitRepo(repo gitRepo) (checkoutDir string, err error) {
 		return "", errors.Wrapf(err, "error fetching: %s", output)
 	}
 
-	checkoutDir, err = checkoutGit(root, repo.ref, repo.subdir)
-	if err != nil {
-		return "", err
-	}
-
-	cmd := exec.Command("git", "submodule", "update", "--init", "--recursive", "--depth=1")
-	cmd.Dir = root
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", errors.Wrapf(err, "error initializing submodules: %s", output)
-	}
-
-	return checkoutDir, nil
+	return checkoutGit(root, repo.ref, repo.subdir)
 }
 
 func parseRemoteURL(remoteURL string) (gitRepo, error) {
@@ -118,7 +96,7 @@ func getRefAndSubdir(fragment string) (ref string, subdir string) {
 }
 
 func fetchArgs(remoteURL string, ref string) []string {
-	args := []string{"fetch"}
+	args := []string{"fetch", "--recurse-submodules=yes"}
 
 	if supportsShallowClone(remoteURL) {
 		args = append(args, "--depth", "1")

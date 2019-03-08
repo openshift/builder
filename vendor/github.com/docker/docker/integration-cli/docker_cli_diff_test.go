@@ -20,7 +20,7 @@ func (s *DockerSuite) TestDiffFilenameShownInOutput(c *check.C) {
 	// a "Files/" prefix.
 	containerID := strings.TrimSpace(out)
 	lookingFor := "A /foo/bar"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		cli.WaitExited(c, containerID, 60*time.Second)
 		lookingFor = "C Files/foo/bar"
 	}

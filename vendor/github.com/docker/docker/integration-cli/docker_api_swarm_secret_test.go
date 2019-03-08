@@ -64,12 +64,14 @@ func (s *DockerSwarmSuite) TestAPISwarmSecretsDelete(c *check.C) {
 	c.Assert(err, checker.IsNil)
 	defer cli.Close()
 
+	expected := "no such secret"
 	_, _, err = cli.SecretInspectWithRaw(context.Background(), id)
-	c.Assert(err.Error(), checker.Contains, "No such secret")
+	c.Assert(err.Error(), checker.Contains, expected)
 
 	id = "non-existing"
+	expected = "secret non-existing not found"
 	err = cli.SecretRemove(context.Background(), id)
-	c.Assert(err.Error(), checker.Contains, "No such secret: non-existing")
+	c.Assert(err.Error(), checker.Contains, expected)
 }
 
 func (s *DockerSwarmSuite) TestAPISwarmSecretsUpdate(c *check.C) {

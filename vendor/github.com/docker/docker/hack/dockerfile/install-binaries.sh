@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 set -e
 set -x
 
@@ -32,24 +32,7 @@ install_containerd() {
 	git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.com/containerd/containerd"
 	cd "$GOPATH/src/github.com/containerd/containerd"
 	git checkout -q "$CONTAINERD_COMMIT"
-	(
-		export GOPATH
-		make
-	)
-	cp bin/containerd /usr/local/bin/docker-containerd
-	cp bin/containerd-shim /usr/local/bin/docker-containerd-shim
-	cp bin/ctr /usr/local/bin/docker-containerd-ctr
-}
-
-install_containerd_static() {
-	echo "Install containerd version $CONTAINERD_COMMIT"
-	git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.com/containerd/containerd"
-	cd "$GOPATH/src/github.com/containerd/containerd"
-	git checkout -q "$CONTAINERD_COMMIT"
-	(
-		export GOPATH
-		make BUILDTAGS='static_build netgo' EXTRA_FLAGS="-buildmode pie" EXTRA_LDFLAGS='-extldflags "-fno-PIC -static"'
-	)
+	make $1
 	cp bin/containerd /usr/local/bin/docker-containerd
 	cp bin/containerd-shim /usr/local/bin/docker-containerd-shim
 	cp bin/ctr /usr/local/bin/docker-containerd-ctr
@@ -64,31 +47,10 @@ install_proxy() {
 }
 
 install_dockercli() {
-	DOCKERCLI_CHANNEL=${DOCKERCLI_CHANNEL:-edge}
-	DOCKERCLI_VERSION=${DOCKERCLI_VERSION:-17.06.0-ce}
-	echo "Install docker/cli version $DOCKERCLI_VERSION from $DOCKERCLI_CHANNEL"
-
-	arch=$(uname -m)
-	# No official release of these platforms
-	if [[ "$arch" != "x86_64" ]] && [[ "$arch" != "s390x" ]]; then
-		build_dockercli
-		return
-	fi
-
-	url=https://download.docker.com/linux/static
-	curl -Ls $url/$DOCKERCLI_CHANNEL/$arch/docker-$DOCKERCLI_VERSION.tgz | \
-	tar -xz docker/docker
-	mv docker/docker /usr/local/bin/
-	rmdir docker
-}
-
-build_dockercli() {
-	DOCKERCLI_VERSION=${DOCKERCLI_VERSION:-17.06.0-ce}
-	git clone https://github.com/docker/docker-ce "$GOPATH/tmp/docker-ce"
-	cd "$GOPATH/tmp/docker-ce"
-	git checkout -q "v$DOCKERCLI_VERSION"
-	mkdir -p "$GOPATH/src/github.com/docker"
-	mv components/cli "$GOPATH/src/github.com/docker/cli"
+	echo "Install docker/cli version $DOCKERCLI_COMMIT"
+	git clone "$DOCKERCLI_REPO" "$GOPATH/src/github.com/docker/cli"
+	cd "$GOPATH/src/github.com/docker/cli"
+	git checkout -q "$DOCKERCLI_COMMIT"
 	go build -o /usr/local/bin/docker github.com/docker/cli/cmd/docker
 }
 
@@ -120,7 +82,7 @@ do
 			;;
 
 		containerd)
-			install_containerd_static
+			install_containerd static
 			;;
 
 		containerd-dynamic)

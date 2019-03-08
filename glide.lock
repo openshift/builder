@@ -1,5 +1,5 @@
-hash: 9d53d895cb4a1c85fac03dce5df24704b165c977f68ec0ff8d1abe6e557da041
-updated: 2019-03-08T14:29:20.530498045-05:00
+hash: c13c8f22a42c8ef82f64c2f5b6b4010cf907ab0a2f30bd4fcd5431a9957696f3
+updated: 2019-03-08T17:09:14.279973929-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -13,10 +13,6 @@ imports:
   version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - name: github.com/certifi/gocertifi
   version: ee1a9a0726d2ae45f54118cac878c990d4016ded
-- name: github.com/containerd/continuity
-  version: 004b46473808b3e7a4a3049c20e4376c91eb966d
-  subpackages:
-  - pathdriver
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
   subpackages:
@@ -77,7 +73,7 @@ imports:
   - pkg/chrootuser
   - pkg/rootless
 - name: github.com/containers/storage
-  version: 0a30cf16081e9a4c4bc0d2571c29c7f5201f06a5
+  version: 3d342550da009a8035d663b7aa38d01b4b2ff8bf
   subpackages:
   - drivers
   - drivers/aufs
@@ -135,8 +131,8 @@ imports:
   - registry/storage/cache/memory
   - uuid
 - name: github.com/docker/docker
-  version: 39377bb96d459d2ef59bd2bad75468638a7f86a3
-  repo: https://github.com/nalind/docker.git
+  version: da810a85109d7bd7ccd8f2d622556cbcfc00386b
+  repo: https://github.com/openshift/moby-moby
   subpackages:
   - api
   - api/types
@@ -163,6 +159,7 @@ imports:
   - pkg/homedir
   - pkg/idtools
   - pkg/ioutils
+  - pkg/jsonlog
   - pkg/jsonmessage
   - pkg/longpath
   - pkg/mount
@@ -172,6 +169,7 @@ imports:
   - pkg/system
   - pkg/term
   - pkg/term/windows
+  - pkg/tlsconfig
 - name: github.com/docker/docker-credential-helpers
   version: 123ba1b7cd646aaee13ba2e028b7c268db72e2b2
   subpackages:
@@ -367,7 +365,7 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: cd1ab7d654bb9df933c7cf7e82847b3d774624d5
+  version: 8284053bdb6b47c4c39f9c4f65aa01191d060d5f
   subpackages:
   - pkg/api/apihelpers
   - pkg/build/apis/build

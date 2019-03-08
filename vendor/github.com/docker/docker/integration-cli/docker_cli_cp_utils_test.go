@@ -193,7 +193,9 @@ func runDockerCp(c *check.C, src, dst string, params []string) (err error) {
 
 	args := []string{"cp"}
 
-	args = append(args, params...)
+	for _, param := range params {
+		args = append(args, param)
+	}
 
 	args = append(args, src, dst)
 

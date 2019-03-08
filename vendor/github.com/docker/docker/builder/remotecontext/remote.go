@@ -10,8 +10,7 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/docker/docker/errdefs"
-	"github.com/docker/docker/pkg/ioutils"
+	"github.com/docker/docker/builder"
 	"github.com/pkg/errors"
 )
 
@@ -23,23 +22,50 @@ const acceptableRemoteMIME = `(?:application/(?:(?:x\-)?tar|octet\-stream|((?:x\
 
 var mimeRe = regexp.MustCompile(acceptableRemoteMIME)
 
-// downloadRemote context from a url and returns it, along with the parsed content type
-func downloadRemote(remoteURL string) (string, io.ReadCloser, error) {
-	response, err := GetWithStatusError(remoteURL)
+// MakeRemoteContext downloads a context from remoteURL and returns it.
+//
+// If contentTypeHandlers is non-nil, then the Content-Type header is read along with a maximum of
+// maxPreambleLength bytes from the body to help detecting the MIME type.
+// Look at acceptableRemoteMIME for more details.
+//
+// If a match is found, then the body is sent to the contentType handler and a (potentially compressed) tar stream is expected
+// to be returned. If no match is found, it is assumed the body is a tar stream (compressed or not).
+// In either case, an (assumed) tar stream is passed to FromArchive whose result is returned.
+func MakeRemoteContext(remoteURL string, contentTypeHandlers map[string]func(io.ReadCloser) (io.ReadCloser, error)) (builder.Source, error) {
+	f, err := GetWithStatusError(remoteURL)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "error downloading remote context %s", remoteURL)
+		return nil, fmt.Errorf("error downloading remote context %s: %v", remoteURL, err)
+	}
+	defer f.Body.Close()
+
+	var contextReader io.ReadCloser
+	if contentTypeHandlers != nil {
+		contentType := f.Header.Get("Content-Type")
+		clen := f.ContentLength
+
+		contentType, contextReader, err = inspectResponse(contentType, f.Body, clen)
+		if err != nil {
+			return nil, fmt.Errorf("error detecting content type for remote %s: %v", remoteURL, err)
+		}
+		defer contextReader.Close()
+
+		// This loop tries to find a content-type handler for the detected content-type.
+		// If it could not find one from the caller-supplied map, it tries the empty content-type `""`
+		// which is interpreted as a fallback handler (usually used for raw tar contexts).
+		for _, ct := range []string{contentType, ""} {
+			if fn, ok := contentTypeHandlers[ct]; ok {
+				defer contextReader.Close()
+				if contextReader, err = fn(contextReader); err != nil {
+					return nil, err
+				}
+				break
+			}
+		}
 	}
 
-	contentType, contextReader, err := inspectResponse(
-		response.Header.Get("Content-Type"),
-		response.Body,
-		response.ContentLength)
-	if err != nil {
-		response.Body.Close()
-		return "", nil, errors.Wrapf(err, "error detecting content type for remote %s", remoteURL)
-	}
-
-	return contentType, ioutils.NewReadCloserWrapper(contextReader, response.Body.Close), nil
+	// Pass through - this is a pre-packaged context, presumably
+	// with a Dockerfile with the right name inside it.
+	return FromArchive(contextReader)
 }
 
 // GetWithStatusError does an http.Get() and returns an error if the
@@ -48,10 +74,10 @@ func GetWithStatusError(address string) (resp *http.Response, err error) {
 	if resp, err = http.Get(address); err != nil {
 		if uerr, ok := err.(*url.Error); ok {
 			if derr, ok := uerr.Err.(*net.DNSError); ok && !derr.IsTimeout {
-				return nil, errdefs.NotFound(err)
+				return nil, dnsError{err}
 			}
 		}
-		return nil, errdefs.System(err)
+		return nil, systemError{err}
 	}
 	if resp.StatusCode < 400 {
 		return resp, nil
@@ -60,21 +86,21 @@ func GetWithStatusError(address string) (resp *http.Response, err error) {
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		return nil, errdefs.System(errors.New(msg + ": error reading body"))
+		return nil, errors.Wrap(systemError{err}, msg+": error reading body")
 	}
 
 	msg += ": " + string(bytes.TrimSpace(body))
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return nil, errdefs.NotFound(errors.New(msg))
+		return nil, notFoundError(msg)
 	case http.StatusBadRequest:
-		return nil, errdefs.InvalidParameter(errors.New(msg))
+		return nil, requestError(msg)
 	case http.StatusUnauthorized:
-		return nil, errdefs.Unauthorized(errors.New(msg))
+		return nil, unauthorizedError(msg)
 	case http.StatusForbidden:
-		return nil, errdefs.Forbidden(errors.New(msg))
+		return nil, forbiddenError(msg)
 	}
-	return nil, errdefs.Unknown(errors.New(msg))
+	return nil, unknownError{errors.New(msg)}
 }
 
 // inspectResponse looks into the http response data at r to determine whether its
@@ -84,13 +110,13 @@ func GetWithStatusError(address string) (resp *http.Response, err error) {
 //    - an io.Reader for the response body
 //    - an error value which will be non-nil either when something goes wrong while
 //      reading bytes from r or when the detected content-type is not acceptable.
-func inspectResponse(ct string, r io.Reader, clen int64) (string, io.Reader, error) {
+func inspectResponse(ct string, r io.ReadCloser, clen int64) (string, io.ReadCloser, error) {
 	plen := clen
 	if plen <= 0 || plen > maxPreambleLength {
 		plen = maxPreambleLength
 	}
 
-	preamble := make([]byte, plen)
+	preamble := make([]byte, plen, plen)
 	rlen, err := r.Read(preamble)
 	if rlen == 0 {
 		return ct, r, errors.New("empty response")
@@ -100,7 +126,7 @@ func inspectResponse(ct string, r io.Reader, clen int64) (string, io.Reader, err
 	}
 
 	preambleR := bytes.NewReader(preamble[:rlen])
-	bodyReader := io.MultiReader(preambleR, r)
+	bodyReader := ioutil.NopCloser(io.MultiReader(preambleR, r))
 	// Some web servers will use application/octet-stream as the default
 	// content type for files without an extension (e.g. 'Dockerfile')
 	// so if we receive this value we better check for text content

@@ -23,6 +23,7 @@ const versionMatcher = "/v{version:[0-9.]+}"
 // Config provides the configuration for the API server
 type Config struct {
 	Logging     bool
+	EnableCors  bool
 	CorsHeaders string
 	Version     string
 	SocketGroup string

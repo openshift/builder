@@ -147,10 +147,7 @@ func (s *DockerSuite) TestAttachDisconnect(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer stdout.Close()
 	c.Assert(cmd.Start(), check.IsNil)
-	defer func() {
-		cmd.Process.Kill()
-		cmd.Wait()
-	}()
+	defer cmd.Process.Kill()
 
 	_, err = stdin.Write([]byte("hello\n"))
 	c.Assert(err, check.IsNil)

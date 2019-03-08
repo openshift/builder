@@ -13,7 +13,6 @@ import (
 	"github.com/docker/distribution/registry/client"
 	"github.com/docker/distribution/registry/client/auth"
 	"github.com/docker/docker/distribution/xfer"
-	"github.com/docker/docker/errdefs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -86,6 +85,20 @@ func (e notFoundError) Cause() error {
 	return e.cause
 }
 
+type unknownError struct {
+	cause error
+}
+
+func (e unknownError) Error() string {
+	return e.cause.Error()
+}
+
+func (e unknownError) Cause() error {
+	return e.cause
+}
+
+func (e unknownError) Unknown() {}
+
 // TranslatePullError is used to convert an error from a registry pull
 // operation to an error representing the entire pull operation. Any error
 // information which is not used by the returned error gets output to
@@ -108,30 +121,26 @@ func TranslatePullError(err error, ref reference.Named) error {
 		return TranslatePullError(v.Err, ref)
 	}
 
-	return errdefs.Unknown(err)
+	return unknownError{err}
 }
 
 // continueOnError returns true if we should fallback to the next endpoint
 // as a result of this error.
-func continueOnError(err error, mirrorEndpoint bool) bool {
+func continueOnError(err error) bool {
 	switch v := err.(type) {
 	case errcode.Errors:
 		if len(v) == 0 {
 			return true
 		}
-		return continueOnError(v[0], mirrorEndpoint)
+		return continueOnError(v[0])
 	case ErrNoSupport:
-		return continueOnError(v.Err, mirrorEndpoint)
+		return continueOnError(v.Err)
 	case errcode.Error:
-		return mirrorEndpoint || shouldV2Fallback(v)
+		return shouldV2Fallback(v)
 	case *client.UnexpectedHTTPResponseError:
 		return true
 	case ImageConfigPullError:
-		// ImageConfigPullError only happens with v2 images, v1 fallback is
-		// unnecessary.
-		// Failures from a mirror endpoint should result in fallback to the
-		// canonical repo.
-		return mirrorEndpoint
+		return false
 	case error:
 		return !strings.Contains(err.Error(), strings.ToLower(syscall.ESRCH.Error()))
 	}

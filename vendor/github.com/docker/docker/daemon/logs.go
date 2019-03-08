@@ -13,7 +13,6 @@ import (
 	timetypes "github.com/docker/docker/api/types/time"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/daemon/logger"
-	"github.com/docker/docker/errdefs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -31,7 +30,7 @@ func (daemon *Daemon) ContainerLogs(ctx context.Context, containerName string, c
 	})
 
 	if !(config.ShowStdout || config.ShowStderr) {
-		return nil, false, errdefs.InvalidParameter(errors.New("You must choose at least one stream"))
+		return nil, false, validationError{errors.New("You must choose at least one stream")}
 	}
 	container, err := daemon.GetContainer(containerName)
 	if err != nil {
@@ -39,7 +38,7 @@ func (daemon *Daemon) ContainerLogs(ctx context.Context, containerName string, c
 	}
 
 	if container.RemovalInProgress || container.Dead {
-		return nil, false, errdefs.Conflict(errors.New("can not get logs from container which is dead or marked for removal"))
+		return nil, false, stateConflictError{errors.New("can not get logs from container which is dead or marked for removal")}
 	}
 
 	if container.HostConfig.LogConfig.Type == "none" {
@@ -78,18 +77,8 @@ func (daemon *Daemon) ContainerLogs(ctx context.Context, containerName string, c
 		since = time.Unix(s, n)
 	}
 
-	var until time.Time
-	if config.Until != "" && config.Until != "0" {
-		s, n, err := timetypes.ParseTimestamps(config.Until, 0)
-		if err != nil {
-			return nil, false, err
-		}
-		until = time.Unix(s, n)
-	}
-
 	readConfig := logger.ReadConfig{
 		Since:  since,
-		Until:  until,
 		Tail:   tailLines,
 		Follow: follow,
 	}
@@ -124,7 +113,7 @@ func (daemon *Daemon) ContainerLogs(ctx context.Context, containerName string, c
 				}
 				return
 			case <-ctx.Done():
-				lg.Debugf("logs: end stream, ctx is done: %v", ctx.Err())
+				lg.Debug("logs: end stream, ctx is done: %v", ctx.Err())
 				return
 			case msg, ok := <-logs.Msg:
 				// there is some kind of pool or ring buffer in the logger that

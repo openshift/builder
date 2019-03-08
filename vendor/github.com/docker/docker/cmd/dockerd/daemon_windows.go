@@ -48,26 +48,32 @@ func notifyShutdown(err error) {
 	}
 }
 
-func (cli *DaemonCli) getPlatformRemoteOptions() ([]libcontainerd.RemoteOption, error) {
-	return nil, nil
-}
-
 // setupConfigReloadTrap configures a Win32 event to reload the configuration.
 func (cli *DaemonCli) setupConfigReloadTrap() {
 	go func() {
 		sa := windows.SecurityAttributes{
 			Length: 0,
 		}
-		event := "Global\\docker-daemon-config-" + fmt.Sprint(os.Getpid())
-		ev, _ := windows.UTF16PtrFromString(event)
+		ev, _ := windows.UTF16PtrFromString("Global\\docker-daemon-config-" + fmt.Sprint(os.Getpid()))
 		if h, _ := windows.CreateEvent(&sa, 0, 0, ev); h != 0 {
-			logrus.Debugf("Config reload - waiting signal at %s", event)
+			logrus.Debugf("Config reload - waiting signal at %s", ev)
 			for {
 				windows.WaitForSingleObject(h, windows.INFINITE)
 				cli.reloadConfig()
 			}
 		}
 	}()
+}
+
+func (cli *DaemonCli) getPlatformRemoteOptions() []libcontainerd.RemoteOption {
+	return nil
+}
+
+// getLibcontainerdRoot gets the root directory for libcontainerd to store its
+// state. The Windows libcontainerd implementation does not need to write a spec
+// or state to disk, so this is a no-op.
+func (cli *DaemonCli) getLibcontainerdRoot() string {
+	return ""
 }
 
 // getSwarmRunRoot gets the root directory for swarm to store runtime state

@@ -13,7 +13,9 @@ import (
 )
 
 func (s *DockerRegistryAuthHtpasswdSuite) TestLogoutWithExternalAuth(c *check.C) {
-	s.d.StartWithBusybox(c)
+
+	// @TODO TestLogoutWithExternalAuth expects docker to fall back to a v1 registry, so has to be updated for v17.12, when v1 registries are no longer supported
+	s.d.StartWithBusybox(c, "--disable-legacy-registry=false")
 
 	osPath := os.Getenv("PATH")
 	defer os.Setenv("PATH", osPath)
@@ -60,7 +62,7 @@ func (s *DockerRegistryAuthHtpasswdSuite) TestLogoutWithExternalAuth(c *check.C)
 	// check I cannot pull anymore
 	out, err := s.d.Cmd("--config", tmp, "pull", repoName)
 	c.Assert(err, check.NotNil, check.Commentf(out))
-	c.Assert(out, checker.Contains, "no basic auth credentials")
+	c.Assert(out, checker.Contains, "Error: image dockercli/busybox:authtest not found")
 }
 
 // #23100
