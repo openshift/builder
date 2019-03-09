@@ -12,8 +12,6 @@ import (
 	"github.com/docker/docker/builder/dockerfile/parser"
 	docker "github.com/fsouza/go-dockerclient"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
-	"github.com/openshift/source-to-image/pkg/tar"
-	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +30,6 @@ const defaultDockerfilePath = "Dockerfile"
 // DockerBuilder builds Docker images given a git repository URL
 type DockerBuilder struct {
 	dockerClient DockerClient
-	tar          tar.Tar
 	build        *buildapiv1.Build
 	client       buildclientv1.BuildInterface
 	cgLimits     *s2iapi.CGroupLimits
@@ -44,7 +41,6 @@ func NewDockerBuilder(dockerClient DockerClient, buildsClient buildclientv1.Buil
 	return &DockerBuilder{
 		dockerClient: dockerClient,
 		build:        build,
-		tar:          tar.New(s2ifs.NewFileSystem()),
 		client:       buildsClient,
 		cgLimits:     cgLimits,
 		inputDir:     InputContentPath,
