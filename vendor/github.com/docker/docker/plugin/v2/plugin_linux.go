@@ -1,3 +1,5 @@
+// +build linux
+
 package v2
 
 import (

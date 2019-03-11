@@ -3,11 +3,14 @@ package daemon
 import (
 	"github.com/Microsoft/opengcs/client"
 	"github.com/docker/docker/container"
+	"github.com/docker/docker/libcontainerd"
 )
 
-func (daemon *Daemon) getLibcontainerdCreateOptions(container *container.Container) (interface{}, error) {
+func (daemon *Daemon) getLibcontainerdCreateOptions(container *container.Container) ([]libcontainerd.CreateOption, error) {
+	createOptions := []libcontainerd.CreateOption{}
+
 	// LCOW options.
-	if container.OS == "linux" {
+	if container.Platform == "linux" {
 		config := &client.Config{}
 		if err := config.GenerateDefault(daemon.configStore.GraphOptions); err != nil {
 			return nil, err
@@ -30,9 +33,11 @@ func (daemon *Daemon) getLibcontainerdCreateOptions(container *container.Contain
 		if err := config.Validate(); err != nil {
 			return nil, err
 		}
-
-		return config, nil
+		lcowOpts := &libcontainerd.LCOWOption{
+			Config: config,
+		}
+		createOptions = append(createOptions, lcowOpts)
 	}
 
-	return nil, nil
+	return createOptions, nil
 }

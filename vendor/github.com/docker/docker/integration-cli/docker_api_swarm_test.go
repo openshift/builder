@@ -370,12 +370,8 @@ func (s *DockerSwarmSuite) TestAPISwarmRaftQuorum(c *check.C) {
 	cli, err := d1.NewClient()
 	c.Assert(err, checker.IsNil)
 	defer cli.Close()
-
-	// d1 will eventually step down from leader because there is no longer an active quorum, wait for that to happen
-	waitAndAssert(c, defaultReconciliationTimeout, func(c *check.C) (interface{}, check.CommentInterface) {
-		_, err = cli.ServiceCreate(context.Background(), service.Spec, types.ServiceCreateOptions{})
-		return err.Error(), nil
-	}, checker.Contains, "Make sure more than half of the managers are online.")
+	_, err = cli.ServiceCreate(context.Background(), service.Spec, types.ServiceCreateOptions{})
+	c.Assert(err.Error(), checker.Contains, "deadline exceeded")
 
 	d2.Start(c)
 
@@ -1031,7 +1027,7 @@ func (s *DockerSwarmSuite) TestAPINetworkInspectWithScope(c *check.C) {
 	v := url.Values{}
 	v.Set("scope", "local")
 
-	status, _, err = d.SockRequest("GET", "/networks/"+name+"?"+v.Encode(), nil)
+	status, body, err = d.SockRequest("GET", "/networks/"+name+"?"+v.Encode(), nil)
 	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
 	c.Assert(status, checker.Equals, http.StatusNotFound, check.Commentf(string(out)))
 }

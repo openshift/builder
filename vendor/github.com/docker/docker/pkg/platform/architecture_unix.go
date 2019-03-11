@@ -1,4 +1,4 @@
-// +build freebsd darwin
+// +build freebsd solaris darwin
 
 // Package platform provides helper function to get the runtime architecture
 // for different platforms.

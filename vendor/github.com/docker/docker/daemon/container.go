@@ -13,14 +13,12 @@ import (
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/daemon/network"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/pkg/truncindex"
 	"github.com/docker/docker/runconfig"
-	"github.com/docker/docker/volume"
 	"github.com/docker/go-connections/nat"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
@@ -55,7 +53,7 @@ func (daemon *Daemon) GetContainer(prefixOrName string) (*container.Container, e
 		if indexError == truncindex.ErrNotExist {
 			return nil, containerNotFound(prefixOrName)
 		}
-		return nil, errdefs.System(indexError)
+		return nil, systemError{indexError}
 	}
 	return daemon.containers.Get(containerID), nil
 }
@@ -125,7 +123,7 @@ func (daemon *Daemon) Register(c *container.Container) error {
 	return c.CheckpointTo(daemon.containersReplica)
 }
 
-func (daemon *Daemon) newContainer(name string, operatingSystem string, config *containertypes.Config, hostConfig *containertypes.HostConfig, imgID image.ID, managed bool) (*container.Container, error) {
+func (daemon *Daemon) newContainer(name string, platform string, config *containertypes.Config, hostConfig *containertypes.HostConfig, imgID image.ID, managed bool) (*container.Container, error) {
 	var (
 		id             string
 		err            error
@@ -140,7 +138,7 @@ func (daemon *Daemon) newContainer(name string, operatingSystem string, config *
 		if config.Hostname == "" {
 			config.Hostname, err = os.Hostname()
 			if err != nil {
-				return nil, errdefs.System(err)
+				return nil, systemError{err}
 			}
 		}
 	} else {
@@ -158,8 +156,8 @@ func (daemon *Daemon) newContainer(name string, operatingSystem string, config *
 	base.ImageID = imgID
 	base.NetworkSettings = &network.Settings{IsAnonymousEndpoint: noExplicitName}
 	base.Name = name
-	base.Driver = daemon.GraphDriverName(operatingSystem)
-	base.OS = operatingSystem
+	base.Driver = daemon.GraphDriverName(platform)
+	base.Platform = platform
 	return base, err
 }
 
@@ -295,14 +293,6 @@ func (daemon *Daemon) verifyContainerSettings(platform string, hostConfig *conta
 		return nil, errors.Errorf("can't create 'AutoRemove' container with restart policy")
 	}
 
-	// Validate mounts; check if host directories still exist
-	parser := volume.NewParser(platform)
-	for _, cfg := range hostConfig.Mounts {
-		if err := parser.ValidateMountConfig(&cfg); err != nil {
-			return nil, err
-		}
-	}
-
 	for _, extraHost := range hostConfig.ExtraHosts {
 		if _, err := opts.ValidateExtraHost(extraHost); err != nil {
 			return nil, err
@@ -337,10 +327,6 @@ func (daemon *Daemon) verifyContainerSettings(platform string, hostConfig *conta
 		// do nothing
 	default:
 		return nil, errors.Errorf("invalid restart policy '%s'", p.Name)
-	}
-
-	if !hostConfig.Isolation.IsValid() {
-		return nil, errors.Errorf("invalid isolation '%s' on %s", hostConfig.Isolation, runtime.GOOS)
 	}
 
 	// Now do platform-specific verification

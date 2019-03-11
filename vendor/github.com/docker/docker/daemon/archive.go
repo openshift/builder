@@ -3,11 +3,11 @@ package daemon
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/container"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/chrootarchive"
 	"github.com/docker/docker/pkg/ioutils"
@@ -20,31 +20,6 @@ import (
 // path does not refer to a directory.
 var ErrExtractPointNotDirectory = errors.New("extraction point is not a directory")
 
-// The daemon will use the following interfaces if the container fs implements
-// these for optimized copies to and from the container.
-type extractor interface {
-	ExtractArchive(src io.Reader, dst string, opts *archive.TarOptions) error
-}
-
-type archiver interface {
-	ArchivePath(src string, opts *archive.TarOptions) (io.ReadCloser, error)
-}
-
-// helper functions to extract or archive
-func extractArchive(i interface{}, src io.Reader, dst string, opts *archive.TarOptions) error {
-	if ea, ok := i.(extractor); ok {
-		return ea.ExtractArchive(src, dst, opts)
-	}
-	return chrootarchive.Untar(src, dst, opts)
-}
-
-func archivePath(i interface{}, src string, opts *archive.TarOptions) (io.ReadCloser, error) {
-	if ap, ok := i.(archiver); ok {
-		return ap.ArchivePath(src, opts)
-	}
-	return archive.TarWithOptions(src, opts)
-}
-
 // ContainerCopy performs a deprecated operation of archiving the resource at
 // the specified path in the container identified by the given name.
 func (daemon *Daemon) ContainerCopy(name string, res string) (io.ReadCloser, error) {
@@ -55,7 +30,7 @@ func (daemon *Daemon) ContainerCopy(name string, res string) (io.ReadCloser, err
 
 	// Make sure an online file-system operation is permitted.
 	if err := daemon.isOnlineFSOperationPermitted(container); err != nil {
-		return nil, errdefs.System(err)
+		return nil, systemError{err}
 	}
 
 	data, err := daemon.containerCopy(container, res)
@@ -66,7 +41,7 @@ func (daemon *Daemon) ContainerCopy(name string, res string) (io.ReadCloser, err
 	if os.IsNotExist(err) {
 		return nil, containerFileNotFound{res, name}
 	}
-	return nil, errdefs.System(err)
+	return nil, systemError{err}
 }
 
 // ContainerStatPath stats the filesystem resource at the specified path in the
@@ -79,7 +54,7 @@ func (daemon *Daemon) ContainerStatPath(name string, path string) (stat *types.C
 
 	// Make sure an online file-system operation is permitted.
 	if err := daemon.isOnlineFSOperationPermitted(container); err != nil {
-		return nil, errdefs.System(err)
+		return nil, systemError{err}
 	}
 
 	stat, err = daemon.containerStatPath(container, path)
@@ -90,7 +65,7 @@ func (daemon *Daemon) ContainerStatPath(name string, path string) (stat *types.C
 	if os.IsNotExist(err) {
 		return nil, containerFileNotFound{path, name}
 	}
-	return nil, errdefs.System(err)
+	return nil, systemError{err}
 }
 
 // ContainerArchivePath creates an archive of the filesystem resource at the
@@ -104,7 +79,7 @@ func (daemon *Daemon) ContainerArchivePath(name string, path string) (content io
 
 	// Make sure an online file-system operation is permitted.
 	if err := daemon.isOnlineFSOperationPermitted(container); err != nil {
-		return nil, nil, errdefs.System(err)
+		return nil, nil, systemError{err}
 	}
 
 	content, stat, err = daemon.containerArchivePath(container, path)
@@ -115,7 +90,7 @@ func (daemon *Daemon) ContainerArchivePath(name string, path string) (content io
 	if os.IsNotExist(err) {
 		return nil, nil, containerFileNotFound{path, name}
 	}
-	return nil, nil, errdefs.System(err)
+	return nil, nil, systemError{err}
 }
 
 // ContainerExtractToDir extracts the given archive to the specified location
@@ -132,7 +107,7 @@ func (daemon *Daemon) ContainerExtractToDir(name, path string, copyUIDGID, noOve
 
 	// Make sure an online file-system operation is permitted.
 	if err := daemon.isOnlineFSOperationPermitted(container); err != nil {
-		return errdefs.System(err)
+		return systemError{err}
 	}
 
 	err = daemon.containerExtractToDir(container, path, copyUIDGID, noOverwriteDirNonDir, content)
@@ -143,7 +118,7 @@ func (daemon *Daemon) ContainerExtractToDir(name, path string, copyUIDGID, noOve
 	if os.IsNotExist(err) {
 		return containerFileNotFound{path, name}
 	}
-	return errdefs.System(err)
+	return systemError{err}
 }
 
 // containerStatPath stats the filesystem resource at the specified path in this
@@ -162,9 +137,6 @@ func (daemon *Daemon) containerStatPath(container *container.Container, path str
 	if err != nil {
 		return nil, err
 	}
-
-	// Normalize path before sending to rootfs
-	path = container.BaseFS.FromSlash(path)
 
 	resolvedPath, absPath, err := container.ResolvePath(path)
 	if err != nil {
@@ -206,9 +178,6 @@ func (daemon *Daemon) containerArchivePath(container *container.Container, path 
 		return nil, nil, err
 	}
 
-	// Normalize path before sending to rootfs
-	path = container.BaseFS.FromSlash(path)
-
 	resolvedPath, absPath, err := container.ResolvePath(path)
 	if err != nil {
 		return nil, nil, err
@@ -227,18 +196,7 @@ func (daemon *Daemon) containerArchivePath(container *container.Container, path 
 	// also catches the case when the root directory of the container is
 	// requested: we want the archive entries to start with "/" and not the
 	// container ID.
-	driver := container.BaseFS
-
-	// Get the source and the base paths of the container resolved path in order
-	// to get the proper tar options for the rebase tar.
-	resolvedPath = driver.Clean(resolvedPath)
-	if driver.Base(resolvedPath) == "." {
-		resolvedPath += string(driver.Separator()) + "."
-	}
-	sourceDir, sourceBase := driver.Dir(resolvedPath), driver.Base(resolvedPath)
-	opts := archive.TarResourceRebaseOpts(sourceBase, driver.Base(absPath))
-
-	data, err := archivePath(driver, sourceDir, opts)
+	data, err := archive.TarResourceRebase(resolvedPath, filepath.Base(absPath))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -277,12 +235,8 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 		return err
 	}
 
-	// Normalize path before sending to rootfs'
-	path = container.BaseFS.FromSlash(path)
-	driver := container.BaseFS
-
 	// Check if a drive letter supplied, it must be the system drive. No-op except on Windows
-	path, err = system.CheckSystemDriveAndRemoveDriveLetter(path, driver)
+	path, err = system.CheckSystemDriveAndRemoveDriveLetter(path)
 	if err != nil {
 		return err
 	}
@@ -294,10 +248,7 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 	// that you can extract an archive to a symlink that points to a directory.
 
 	// Consider the given path as an absolute path in the container.
-	absPath := archive.PreserveTrailingDotOrSeparator(
-		driver.Join(string(driver.Separator()), path),
-		path,
-		driver.Separator())
+	absPath := archive.PreserveTrailingDotOrSeparator(filepath.Join(string(filepath.Separator), path), path)
 
 	// This will evaluate the last path element if it is a symlink.
 	resolvedPath, err := container.GetResourcePath(absPath)
@@ -305,7 +256,7 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 		return err
 	}
 
-	stat, err := driver.Lstat(resolvedPath)
+	stat, err := os.Lstat(resolvedPath)
 	if err != nil {
 		return err
 	}
@@ -328,24 +279,21 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 	// a volume file path.
 	var baseRel string
 	if strings.HasPrefix(resolvedPath, `\\?\Volume{`) {
-		if strings.HasPrefix(resolvedPath, driver.Path()) {
-			baseRel = resolvedPath[len(driver.Path()):]
+		if strings.HasPrefix(resolvedPath, container.BaseFS) {
+			baseRel = resolvedPath[len(container.BaseFS):]
 			if baseRel[:1] == `\` {
 				baseRel = baseRel[1:]
 			}
 		}
 	} else {
-		baseRel, err = driver.Rel(driver.Path(), resolvedPath)
+		baseRel, err = filepath.Rel(container.BaseFS, resolvedPath)
 	}
 	if err != nil {
 		return err
 	}
 	// Make it an absolute path.
-	absPath = driver.Join(string(driver.Separator()), baseRel)
+	absPath = filepath.Join(string(filepath.Separator), baseRel)
 
-	// @ TODO: gupta-ak: Technically, this works since it no-ops
-	// on Windows and the file system is local anyway on linux.
-	// But eventually, it should be made driver aware.
 	toVolume, err := checkIfPathIsInAVolume(container, absPath)
 	if err != nil {
 		return err
@@ -367,7 +315,7 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 		}
 	}
 
-	if err := extractArchive(driver, content, resolvedPath, options); err != nil {
+	if err := chrootarchive.Untar(content, resolvedPath, options); err != nil {
 		return err
 	}
 
@@ -408,28 +356,24 @@ func (daemon *Daemon) containerCopy(container *container.Container, resource str
 		return nil, err
 	}
 
-	// Normalize path before sending to rootfs
-	resource = container.BaseFS.FromSlash(resource)
-	driver := container.BaseFS
-
 	basePath, err := container.GetResourcePath(resource)
 	if err != nil {
 		return nil, err
 	}
-	stat, err := driver.Stat(basePath)
+	stat, err := os.Stat(basePath)
 	if err != nil {
 		return nil, err
 	}
 	var filter []string
 	if !stat.IsDir() {
-		d, f := driver.Split(basePath)
+		d, f := filepath.Split(basePath)
 		basePath = d
 		filter = []string{f}
 	} else {
-		filter = []string{driver.Base(basePath)}
-		basePath = driver.Dir(basePath)
+		filter = []string{filepath.Base(basePath)}
+		basePath = filepath.Dir(basePath)
 	}
-	archive, err := archivePath(driver, basePath, &archive.TarOptions{
+	archive, err := archive.TarWithOptions(basePath, &archive.TarOptions{
 		Compression:  archive.Uncompressed,
 		IncludeFiles: filter,
 	})

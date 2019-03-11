@@ -21,15 +21,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/client"
 	"github.com/docker/docker/integration-cli/checker"
 	"github.com/docker/docker/integration-cli/cli"
 	"github.com/docker/docker/integration-cli/cli/build"
 	"github.com/docker/docker/integration-cli/cli/build/fakecontext"
-	"github.com/docker/docker/internal/testutil"
 	"github.com/docker/docker/pkg/mount"
-	"github.com/docker/docker/pkg/parsers/kernel"
 	"github.com/docker/docker/pkg/stringid"
+	"github.com/docker/docker/pkg/stringutils"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/go-connections/nat"
 	"github.com/docker/libnetwork/resolvconf"
@@ -37,7 +35,6 @@ import (
 	"github.com/go-check/check"
 	"github.com/gotestyourself/gotestyourself/icmd"
 	libcontainerUser "github.com/opencontainers/runc/libcontainer/user"
-	"golang.org/x/net/context"
 )
 
 // "test123" should be printed by docker run
@@ -72,10 +69,10 @@ func (s *DockerSuite) TestRunLeakyFileDescriptors(c *check.C) {
 // this will fail when Internet access is unavailable
 func (s *DockerSuite) TestRunLookupGoogleDNS(c *check.C) {
 	testRequires(c, Network, NotArm)
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		// nslookup isn't present in Windows busybox. Is built-in. Further,
 		// nslookup isn't present in nanoserver. Hence just use PowerShell...
-		dockerCmd(c, "run", testEnv.PlatformDefaults.BaseImage, "powershell", "Resolve-DNSName", "google.com")
+		dockerCmd(c, "run", testEnv.MinimalBaseImage(), "powershell", "Resolve-DNSName", "google.com")
 	} else {
 		dockerCmd(c, "run", "busybox", "nslookup", "google.com")
 	}
@@ -137,7 +134,7 @@ func (s *DockerSuite) TestRunDetachedContainerIDPrinting(c *check.C) {
 func (s *DockerSuite) TestRunWorkingDirectory(c *check.C) {
 	dir := "/root"
 	image := "busybox"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		dir = `C:/Windows`
 	}
 
@@ -160,9 +157,9 @@ func (s *DockerSuite) TestRunWorkingDirectory(c *check.C) {
 func (s *DockerSuite) TestRunWithoutNetworking(c *check.C) {
 	count := "-c"
 	image := "busybox"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		count = "-n"
-		image = testEnv.PlatformDefaults.BaseImage
+		image = testEnv.MinimalBaseImage()
 	}
 
 	// First using the long form --net
@@ -354,8 +351,8 @@ func (s *DockerSuite) TestRunWithVolumesFromExited(c *check.C) {
 	)
 
 	// Create a file in a volume
-	if testEnv.OSType == "windows" {
-		out, exitCode = dockerCmd(c, "run", "--name", "test-data", "--volume", `c:\some\dir`, testEnv.PlatformDefaults.BaseImage, "cmd", "/c", `echo hello > c:\some\dir\file`)
+	if testEnv.DaemonPlatform() == "windows" {
+		out, exitCode = dockerCmd(c, "run", "--name", "test-data", "--volume", `c:\some\dir`, testEnv.MinimalBaseImage(), "cmd", "/c", `echo hello > c:\some\dir\file`)
 	} else {
 		out, exitCode = dockerCmd(c, "run", "--name", "test-data", "--volume", "/some/dir", "busybox", "touch", "/some/dir/file")
 	}
@@ -364,8 +361,8 @@ func (s *DockerSuite) TestRunWithVolumesFromExited(c *check.C) {
 	}
 
 	// Read the file from another container using --volumes-from to access the volume in the second container
-	if testEnv.OSType == "windows" {
-		out, exitCode = dockerCmd(c, "run", "--volumes-from", "test-data", testEnv.PlatformDefaults.BaseImage, "cmd", "/c", `type c:\some\dir\file`)
+	if testEnv.DaemonPlatform() == "windows" {
+		out, exitCode = dockerCmd(c, "run", "--volumes-from", "test-data", testEnv.MinimalBaseImage(), "cmd", "/c", `type c:\some\dir\file`)
 	} else {
 		out, exitCode = dockerCmd(c, "run", "--volumes-from", "test-data", "busybox", "cat", "/some/dir/file")
 	}
@@ -396,7 +393,7 @@ func (s *DockerSuite) TestRunCreateVolumesInSymlinkDir(c *check.C) {
 	// In the case of Windows to Windows CI, if the machine is setup so that
 	// the temp directory is not the C: drive, this test is invalid and will
 	// not work.
-	if testEnv.OSType == "windows" && strings.ToLower(dir[:1]) != "c" {
+	if testEnv.DaemonPlatform() == "windows" && strings.ToLower(dir[:1]) != "c" {
 		c.Skip("Requires TEMP to point to C: drive")
 	}
 
@@ -406,8 +403,8 @@ func (s *DockerSuite) TestRunCreateVolumesInSymlinkDir(c *check.C) {
 	}
 	f.Close()
 
-	if testEnv.OSType == "windows" {
-		dockerFile = fmt.Sprintf("FROM %s\nRUN mkdir %s\nRUN mklink /D c:\\test %s", testEnv.PlatformDefaults.BaseImage, dir, dir)
+	if testEnv.DaemonPlatform() == "windows" {
+		dockerFile = fmt.Sprintf("FROM %s\nRUN mkdir %s\nRUN mklink /D c:\\test %s", testEnv.MinimalBaseImage(), dir, dir)
 		containerPath = `c:\test\test`
 		cmd = "tasklist"
 	} else {
@@ -431,8 +428,8 @@ func (s *DockerSuite) TestRunCreateVolumesInSymlinkDir2(c *check.C) {
 	testRequires(c, SameHostDaemon, DaemonIsLinux)
 	name := "test-volume-symlink2"
 
-	if testEnv.OSType == "windows" {
-		dockerFile = fmt.Sprintf("FROM %s\nRUN mkdir c:\\%s\nRUN mklink /D c:\\test c:\\%s", testEnv.PlatformDefaults.BaseImage, name, name)
+	if testEnv.DaemonPlatform() == "windows" {
+		dockerFile = fmt.Sprintf("FROM %s\nRUN mkdir c:\\%s\nRUN mklink /D c:\\test c:\\%s", testEnv.MinimalBaseImage(), name, name)
 		containerPath = `c:\test\test`
 		cmd = "tasklist"
 	} else {
@@ -455,7 +452,7 @@ func (s *DockerSuite) TestRunVolumesFromInReadonlyModeFails(c *check.C) {
 		volumeDir string
 		fileInVol string
 	)
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		volumeDir = `c:/test` // Forward-slash as using busybox
 		fileInVol = `c:/test/file`
 	} else {
@@ -476,7 +473,7 @@ func (s *DockerSuite) TestRunVolumesFromInReadWriteMode(c *check.C) {
 		volumeDir string
 		fileInVol string
 	)
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		volumeDir = `c:/test` // Forward-slash as using busybox
 		fileInVol = `c:/test/file`
 	} else {
@@ -497,7 +494,7 @@ func (s *DockerSuite) TestRunVolumesFromInReadWriteMode(c *check.C) {
 func (s *DockerSuite) TestVolumesFromGetsProperMode(c *check.C) {
 	testRequires(c, SameHostDaemon)
 	prefix, slash := getPrefixAndSlashFromDaemonPlatform()
-	hostpath := RandomTmpDirPath("test", testEnv.OSType)
+	hostpath := RandomTmpDirPath("test", testEnv.DaemonPlatform())
 	if err := os.MkdirAll(hostpath, 0755); err != nil {
 		c.Fatalf("Failed to create %s: %q", hostpath, err)
 	}
@@ -520,11 +517,11 @@ func (s *DockerSuite) TestVolumesFromGetsProperMode(c *check.C) {
 
 // Test for GH#10618
 func (s *DockerSuite) TestRunNoDupVolumes(c *check.C) {
-	path1 := RandomTmpDirPath("test1", testEnv.OSType)
-	path2 := RandomTmpDirPath("test2", testEnv.OSType)
+	path1 := RandomTmpDirPath("test1", testEnv.DaemonPlatform())
+	path2 := RandomTmpDirPath("test2", testEnv.DaemonPlatform())
 
 	someplace := ":/someplace"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		// Windows requires that the source directory exists before calling HCS
 		testRequires(c, SameHostDaemon)
 		someplace = `:c:\someplace`
@@ -573,7 +570,7 @@ func (s *DockerSuite) TestRunNoDupVolumes(c *check.C) {
 // Test for #1351
 func (s *DockerSuite) TestRunApplyVolumesFromBeforeVolumes(c *check.C) {
 	prefix := ""
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		prefix = `c:`
 	}
 	dockerCmd(c, "run", "--name", "parent", "-v", prefix+"/test", "busybox", "touch", prefix+"/test/foo")
@@ -582,7 +579,7 @@ func (s *DockerSuite) TestRunApplyVolumesFromBeforeVolumes(c *check.C) {
 
 func (s *DockerSuite) TestRunMultipleVolumesFrom(c *check.C) {
 	prefix := ""
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		prefix = `c:`
 	}
 	dockerCmd(c, "run", "--name", "parent1", "-v", prefix+"/test", "busybox", "touch", prefix+"/test/foo")
@@ -612,7 +609,7 @@ func (s *DockerSuite) TestRunVerifyContainerID(c *check.C) {
 // Test that creating a container with a volume doesn't crash. Regression test for #995.
 func (s *DockerSuite) TestRunCreateVolume(c *check.C) {
 	prefix := ""
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		prefix = `c:`
 	}
 	dockerCmd(c, "run", "-v", prefix+"/var/lib/data", "busybox", "true")
@@ -668,9 +665,9 @@ func (s *DockerSuite) TestRunVolumesFromSymlinkPath(c *check.C) {
 		RUN ln -s home /foo
 		VOLUME ["/foo/bar"]`
 
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		prefix = `c:`
-		dfContents = `FROM ` + testEnv.PlatformDefaults.BaseImage + `
+		dfContents = `FROM ` + testEnv.MinimalBaseImage() + `
 	    RUN mkdir c:\home
 		RUN mklink /D c:\foo c:\home
 		VOLUME ["c:/foo/bar"]
@@ -714,7 +711,7 @@ func (s *DockerSuite) TestRunExitCode(c *check.C) {
 
 func (s *DockerSuite) TestRunUserDefaults(c *check.C) {
 	expected := "uid=0(root) gid=0(root)"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		expected = "uid=1000(ContainerAdministrator) gid=1000(ContainerAdministrator)"
 	}
 	out, _ := dockerCmd(c, "run", "busybox", "id")
@@ -827,7 +824,7 @@ func (s *DockerSuite) TestRunEnvironment(c *check.C) {
 	})
 	result.Assert(c, icmd.Success)
 
-	actualEnv := strings.Split(strings.TrimSuffix(result.Stdout(), "\n"), "\n")
+	actualEnv := strings.Split(strings.TrimSpace(result.Combined()), "\n")
 	sort.Strings(actualEnv)
 
 	goodEnv := []string{
@@ -920,9 +917,9 @@ func (s *DockerSuite) TestRunEnvironmentOverride(c *check.C) {
 }
 
 func (s *DockerSuite) TestRunContainerNetwork(c *check.C) {
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		// Windows busybox does not have ping. Use built in ping instead.
-		dockerCmd(c, "run", testEnv.PlatformDefaults.BaseImage, "ping", "-n", "1", "127.0.0.1")
+		dockerCmd(c, "run", testEnv.MinimalBaseImage(), "ping", "-n", "1", "127.0.0.1")
 	} else {
 		dockerCmd(c, "run", "busybox", "ping", "-c", "1", "127.0.0.1")
 	}
@@ -1220,7 +1217,7 @@ func (s *DockerSuite) TestRunModeHostname(c *check.C) {
 func (s *DockerSuite) TestRunRootWorkdir(c *check.C) {
 	out, _ := dockerCmd(c, "run", "--workdir", "/", "busybox", "pwd")
 	expected := "/\n"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		expected = "C:" + expected
 	}
 	if out != expected {
@@ -1229,9 +1226,9 @@ func (s *DockerSuite) TestRunRootWorkdir(c *check.C) {
 }
 
 func (s *DockerSuite) TestRunAllowBindMountingRoot(c *check.C) {
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		// Windows busybox will fail with Permission Denied on items such as pagefile.sys
-		dockerCmd(c, "run", "-v", `c:\:c:\host`, testEnv.PlatformDefaults.BaseImage, "cmd", "-c", "dir", `c:\host`)
+		dockerCmd(c, "run", "-v", `c:\:c:\host`, testEnv.MinimalBaseImage(), "cmd", "-c", "dir", `c:\host`)
 	} else {
 		dockerCmd(c, "run", "-v", "/:/host", "busybox", "ls", "/host")
 	}
@@ -1240,7 +1237,7 @@ func (s *DockerSuite) TestRunAllowBindMountingRoot(c *check.C) {
 func (s *DockerSuite) TestRunDisallowBindMountingRootToRoot(c *check.C) {
 	mount := "/:/"
 	targetDir := "/host"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		mount = `c:\:c\`
 		targetDir = "c:/host" // Forward slash as using busybox
 	}
@@ -1704,15 +1701,15 @@ func (s *DockerSuite) TestRunCleanupCmdOnEntrypoint(c *check.C) {
 	}
 	out = strings.TrimSpace(out)
 	expected := "root"
-	if testEnv.OSType == "windows" {
-		if strings.Contains(testEnv.PlatformDefaults.BaseImage, "windowsservercore") {
+	if testEnv.DaemonPlatform() == "windows" {
+		if strings.Contains(testEnv.MinimalBaseImage(), "windowsservercore") {
 			expected = `user manager\containeradministrator`
 		} else {
 			expected = `ContainerAdministrator` // nanoserver
 		}
 	}
 	if out != expected {
-		c.Fatalf("Expected output %s, got %q. %s", expected, out, testEnv.PlatformDefaults.BaseImage)
+		c.Fatalf("Expected output %s, got %q. %s", expected, out, testEnv.MinimalBaseImage())
 	}
 }
 
@@ -1720,7 +1717,7 @@ func (s *DockerSuite) TestRunCleanupCmdOnEntrypoint(c *check.C) {
 func (s *DockerSuite) TestRunWorkdirExistsAndIsFile(c *check.C) {
 	existingFile := "/bin/cat"
 	expected := "not a directory"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		existingFile = `\windows\system32\ntdll.dll`
 		expected = `The directory name is invalid.`
 	}
@@ -1736,7 +1733,7 @@ func (s *DockerSuite) TestRunExitOnStdinClose(c *check.C) {
 
 	meow := "/bin/cat"
 	delay := 60
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		meow = "cat"
 	}
 	runCmd := exec.Command(dockerBinary, "run", "--name", name, "-i", "busybox", meow)
@@ -1828,7 +1825,7 @@ func testRunWriteSpecialFilesAndNotCommit(c *check.C, name, path string) {
 }
 
 func eqToBaseDiff(out string, c *check.C) bool {
-	name := "eqToBaseDiff" + testutil.GenerateRandomAlphaOnlyString(32)
+	name := "eqToBaseDiff" + stringutils.GenerateRandomAlphaOnlyString(32)
 	dockerCmd(c, "run", "--name", name, "busybox", "echo", "hello")
 	cID := getIDByName(c, name)
 	baseDiff, _ := dockerCmd(c, "diff", cID)
@@ -1881,7 +1878,7 @@ func (s *DockerSuite) TestRunEntrypoint(c *check.C) {
 
 func (s *DockerSuite) TestRunBindMounts(c *check.C) {
 	testRequires(c, SameHostDaemon)
-	if testEnv.OSType == "linux" {
+	if testEnv.DaemonPlatform() == "linux" {
 		testRequires(c, DaemonIsLinux, NotUserNamespace)
 	}
 
@@ -1902,7 +1899,7 @@ func (s *DockerSuite) TestRunBindMounts(c *check.C) {
 	}
 
 	// test writing to bind mount
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		dockerCmd(c, "run", "-v", fmt.Sprintf(`%s:c:\tmp:rw`, tmpDir), "busybox", "touch", "c:/tmp/holla")
 	} else {
 		dockerCmd(c, "run", "-v", fmt.Sprintf("%s:/tmp:rw", tmpDir), "busybox", "touch", "/tmp/holla")
@@ -1917,7 +1914,7 @@ func (s *DockerSuite) TestRunBindMounts(c *check.C) {
 	}
 
 	// Windows does not (and likely never will) support mounting a single file
-	if testEnv.OSType != "windows" {
+	if testEnv.DaemonPlatform() != "windows" {
 		// test mount a file
 		dockerCmd(c, "run", "-v", fmt.Sprintf("%s/holla:/tmp/holla:rw", tmpDir), "busybox", "sh", "-c", "echo -n 'yotta' > /tmp/holla")
 		content := readFile(path.Join(tmpDir, "holla"), c) // Will fail if the file doesn't exist
@@ -1942,9 +1939,9 @@ func (s *DockerSuite) TestRunCidFileCleanupIfEmpty(c *check.C) {
 	tmpCidFile := path.Join(tmpDir, "cid")
 
 	image := "emptyfs"
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		// Windows can't support an emptyfs image. Just use the regular Windows image
-		image = testEnv.PlatformDefaults.BaseImage
+		image = testEnv.MinimalBaseImage()
 	}
 	out, _, err := dockerCmdWithError("run", "--cidfile", tmpCidFile, image)
 	if err == nil {
@@ -1988,7 +1985,7 @@ func (s *DockerSuite) TestRunCidFileCheckIDLength(c *check.C) {
 func (s *DockerSuite) TestRunSetMacAddress(c *check.C) {
 	mac := "12:34:56:78:9a:bc"
 	var out string
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		out, _ = dockerCmd(c, "run", "-i", "--rm", fmt.Sprintf("--mac-address=%s", mac), "busybox", "sh", "-c", "ipconfig /all | grep 'Physical Address' | awk '{print $12}'")
 		mac = strings.Replace(strings.ToUpper(mac), ":", "-", -1) // To Windows-style MACs
 	} else {
@@ -2185,7 +2182,7 @@ func (s *DockerSuite) TestVolumesNoCopyData(c *check.C) {
 		c.Fatalf("Data was copied on volumes-from but shouldn't be:\n%q", out)
 	}
 
-	tmpDir := RandomTmpDirPath("docker_test_bind_mount_copy_data", testEnv.OSType)
+	tmpDir := RandomTmpDirPath("docker_test_bind_mount_copy_data", testEnv.DaemonPlatform())
 	if out, _, err := dockerCmdWithError("run", "-v", tmpDir+":/foo", "dataimage", "ls", "-lh", "/foo/bar"); err == nil || !strings.Contains(out, "No such file or directory") {
 		c.Fatalf("Data was copied on bind mount but shouldn't be:\n%q", out)
 	}
@@ -2218,7 +2215,7 @@ func (s *DockerSuite) TestRunVolumesCleanPaths(c *check.C) {
 
 	out, err = inspectMountSourceField("dark_helmet", prefix+slash+`foo`)
 	c.Assert(err, check.IsNil)
-	if !strings.Contains(strings.ToLower(out), strings.ToLower(testEnv.PlatformDefaults.VolumesConfigPath)) {
+	if !strings.Contains(strings.ToLower(out), strings.ToLower(testEnv.VolumesConfigPath())) {
 		c.Fatalf("Volume was not defined for %s/foo\n%q", prefix, out)
 	}
 
@@ -2229,7 +2226,7 @@ func (s *DockerSuite) TestRunVolumesCleanPaths(c *check.C) {
 
 	out, err = inspectMountSourceField("dark_helmet", prefix+slash+"bar")
 	c.Assert(err, check.IsNil)
-	if !strings.Contains(strings.ToLower(out), strings.ToLower(testEnv.PlatformDefaults.VolumesConfigPath)) {
+	if !strings.Contains(strings.ToLower(out), strings.ToLower(testEnv.VolumesConfigPath())) {
 		c.Fatalf("Volume was not defined for %s/bar\n%q", prefix, out)
 	}
 }
@@ -2239,16 +2236,7 @@ func (s *DockerSuite) TestRunSlowStdoutConsumer(c *check.C) {
 	// TODO Windows: This should be able to run on Windows if can find an
 	// alternate to /dev/zero and /dev/stdout.
 	testRequires(c, DaemonIsLinux)
-
-	// TODO will remove this if issue #35963 fixed
-	var args []string
-	if runtime.GOARCH == "amd64" {
-		args = []string{"run", "--rm", "busybox", "/bin/sh", "-c", "dd if=/dev/zero of=/dev/stdout bs=1024 count=2000 | catv"}
-	} else {
-		args = []string{"run", "--rm", "busybox", "/bin/sh", "-c", "dd if=/dev/zero of=/dev/stdout bs=1024 count=2000 | cat -v"}
-	}
-
-	cont := exec.Command(dockerBinary, args...)
+	cont := exec.Command(dockerBinary, "run", "--rm", "busybox", "/bin/sh", "-c", "dd if=/dev/zero of=/dev/stdout bs=1024 count=2000 | catv")
 
 	stdout, err := cont.StdoutPipe()
 	if err != nil {
@@ -2258,7 +2246,6 @@ func (s *DockerSuite) TestRunSlowStdoutConsumer(c *check.C) {
 	if err := cont.Start(); err != nil {
 		c.Fatal(err)
 	}
-	defer func() { go cont.Wait() }()
 	n, err := ConsumeWithSpeed(stdout, 10000, 5*time.Millisecond, nil)
 	if err != nil {
 		c.Fatal(err)
@@ -2318,6 +2305,48 @@ func (s *DockerSuite) TestRunModeIpcHost(c *check.C) {
 	out = strings.Trim(out, "\n")
 	if hostIpc == out {
 		c.Fatalf("IPC should be different without --ipc=host %s == %s\n", hostIpc, out)
+	}
+}
+
+func (s *DockerSuite) TestRunModeIpcContainer(c *check.C) {
+	// Not applicable on Windows as uses Unix-specific capabilities
+	testRequires(c, SameHostDaemon, DaemonIsLinux)
+
+	out, _ := dockerCmd(c, "run", "-d", "busybox", "sh", "-c", "echo -n test > /dev/shm/test && touch /dev/mqueue/toto && top")
+
+	id := strings.TrimSpace(out)
+	state := inspectField(c, id, "State.Running")
+	if state != "true" {
+		c.Fatal("Container state is 'not running'")
+	}
+	pid1 := inspectField(c, id, "State.Pid")
+
+	parentContainerIpc, err := os.Readlink(fmt.Sprintf("/proc/%s/ns/ipc", pid1))
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	out, _ = dockerCmd(c, "run", fmt.Sprintf("--ipc=container:%s", id), "busybox", "readlink", "/proc/self/ns/ipc")
+	out = strings.Trim(out, "\n")
+	if parentContainerIpc != out {
+		c.Fatalf("IPC different with --ipc=container:%s %s != %s\n", id, parentContainerIpc, out)
+	}
+
+	catOutput, _ := dockerCmd(c, "run", fmt.Sprintf("--ipc=container:%s", id), "busybox", "cat", "/dev/shm/test")
+	if catOutput != "test" {
+		c.Fatalf("Output of /dev/shm/test expected test but found: %s", catOutput)
+	}
+
+	// check that /dev/mqueue is actually of mqueue type
+	grepOutput, _ := dockerCmd(c, "run", fmt.Sprintf("--ipc=container:%s", id), "busybox", "grep", "/dev/mqueue", "/proc/mounts")
+	if !strings.HasPrefix(grepOutput, "mqueue /dev/mqueue mqueue rw") {
+		c.Fatalf("Output of 'grep /proc/mounts' expected 'mqueue /dev/mqueue mqueue rw' but found: %s", grepOutput)
+	}
+
+	lsOutput, _ := dockerCmd(c, "run", fmt.Sprintf("--ipc=container:%s", id), "busybox", "ls", "/dev/mqueue")
+	lsOutput = strings.Trim(lsOutput, "\n")
+	if lsOutput != "toto" {
+		c.Fatalf("Output of 'ls /dev/mqueue' expected 'toto' but found: %s", lsOutput)
 	}
 }
 
@@ -2567,10 +2596,10 @@ func (s *DockerSuite) TestRunNonLocalMacAddress(c *check.C) {
 	args := []string{"run", "--mac-address", addr}
 	expected := addr
 
-	if testEnv.OSType != "windows" {
+	if testEnv.DaemonPlatform() != "windows" {
 		args = append(args, "busybox", "ifconfig")
 	} else {
-		args = append(args, testEnv.PlatformDefaults.BaseImage, "ipconfig", "/all")
+		args = append(args, testEnv.MinimalBaseImage(), "ipconfig", "/all")
 		expected = strings.Replace(strings.ToUpper(addr), ":", "-", -1)
 	}
 
@@ -2663,7 +2692,7 @@ func (s *DockerSuite) TestRunSetDefaultRestartPolicy(c *check.C) {
 func (s *DockerSuite) TestRunRestartMaxRetries(c *check.C) {
 	out, _ := dockerCmd(c, "run", "-d", "--restart=on-failure:3", "busybox", "false")
 	timeout := 10 * time.Second
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		timeout = 120 * time.Second
 	}
 
@@ -2696,7 +2725,7 @@ func (s *DockerSuite) TestRunContainerWithReadonlyRootfs(c *check.C) {
 	if root := os.Getenv("DOCKER_REMAP_ROOT"); root != "" {
 		testPriv = false
 	}
-	testReadOnlyFile(c, testPriv, "/file", "/etc/hosts", "/etc/resolv.conf", "/etc/hostname", "/sys/kernel")
+	testReadOnlyFile(c, testPriv, "/file", "/etc/hosts", "/etc/resolv.conf", "/etc/hostname", "/sys/kernel", "/dev/.dont.touch.me")
 }
 
 func (s *DockerSuite) TestPermissionsPtsReadonlyRootfs(c *check.C) {
@@ -2784,27 +2813,23 @@ func (s *DockerSuite) TestRunVolumesFromRestartAfterRemoved(c *check.C) {
 
 // run container with --rm should remove container if exit code != 0
 func (s *DockerSuite) TestRunContainerWithRmFlagExitCodeNotEqualToZero(c *check.C) {
-	existingContainers := ExistingContainerIDs(c)
 	name := "flowers"
 	cli.Docker(cli.Args("run", "--name", name, "--rm", "busybox", "ls", "/notexists")).Assert(c, icmd.Expected{
 		ExitCode: 1,
 	})
 
 	out := cli.DockerCmd(c, "ps", "-q", "-a").Combined()
-	out = RemoveOutputForExistingElements(out, existingContainers)
 	if out != "" {
 		c.Fatal("Expected not to have containers", out)
 	}
 }
 
 func (s *DockerSuite) TestRunContainerWithRmFlagCannotStartContainer(c *check.C) {
-	existingContainers := ExistingContainerIDs(c)
 	name := "sparkles"
 	cli.Docker(cli.Args("run", "--name", name, "--rm", "busybox", "commandNotFound")).Assert(c, icmd.Expected{
 		ExitCode: 127,
 	})
 	out := cli.DockerCmd(c, "ps", "-q", "-a").Combined()
-	out = RemoveOutputForExistingElements(out, existingContainers)
 	if out != "" {
 		c.Fatal("Expected not to have containers", out)
 	}
@@ -3031,7 +3056,7 @@ func (s *DockerSuite) TestVolumeFromMixedRWOptions(c *check.C) {
 	dockerCmd(c, "run", "--volumes-from", "parent:ro", "--name", "test-volumes-1", "busybox", "true")
 	dockerCmd(c, "run", "--volumes-from", "parent:rw", "--name", "test-volumes-2", "busybox", "true")
 
-	if testEnv.OSType != "windows" {
+	if testEnv.DaemonPlatform() != "windows" {
 		mRO, err := inspectMountPoint("test-volumes-1", prefix+slash+"test")
 		c.Assert(err, checker.IsNil, check.Commentf("failed to inspect mount point"))
 		if mRO.RW {
@@ -3082,11 +3107,6 @@ func (s *DockerSuite) TestRunNetworkFilesBindMount(c *check.C) {
 	filename := createTmpFile(c, expected)
 	defer os.Remove(filename)
 
-	// for user namespaced test runs, the temp file must be accessible to unprivileged root
-	if err := os.Chmod(filename, 0646); err != nil {
-		c.Fatalf("error modifying permissions of %s: %v", filename, err)
-	}
-
 	nwfiles := []string{"/etc/resolv.conf", "/etc/hosts", "/etc/hostname"}
 
 	for i := range nwfiles {
@@ -3104,11 +3124,6 @@ func (s *DockerSuite) TestRunNetworkFilesBindMountRO(c *check.C) {
 	filename := createTmpFile(c, "test123")
 	defer os.Remove(filename)
 
-	// for user namespaced test runs, the temp file must be accessible to unprivileged root
-	if err := os.Chmod(filename, 0646); err != nil {
-		c.Fatalf("error modifying permissions of %s: %v", filename, err)
-	}
-
 	nwfiles := []string{"/etc/resolv.conf", "/etc/hosts", "/etc/hostname"}
 
 	for i := range nwfiles {
@@ -3125,11 +3140,6 @@ func (s *DockerSuite) TestRunNetworkFilesBindMountROFilesystem(c *check.C) {
 
 	filename := createTmpFile(c, "test123")
 	defer os.Remove(filename)
-
-	// for user namespaced test runs, the temp file must be accessible to unprivileged root
-	if err := os.Chmod(filename, 0646); err != nil {
-		c.Fatalf("error modifying permissions of %s: %v", filename, err)
-	}
 
 	nwfiles := []string{"/etc/resolv.conf", "/etc/hosts", "/etc/hostname"}
 
@@ -3491,8 +3501,8 @@ func (s *DockerSuite) TestRunLoopbackOnlyExistsWhenNetworkingDisabled(c *check.C
 
 // Issue #4681
 func (s *DockerSuite) TestRunLoopbackWhenNetworkDisabled(c *check.C) {
-	if testEnv.OSType == "windows" {
-		dockerCmd(c, "run", "--net=none", testEnv.PlatformDefaults.BaseImage, "ping", "-n", "1", "127.0.0.1")
+	if testEnv.DaemonPlatform() == "windows" {
+		dockerCmd(c, "run", "--net=none", testEnv.MinimalBaseImage(), "ping", "-n", "1", "127.0.0.1")
 	} else {
 		dockerCmd(c, "run", "--net=none", "busybox", "ping", "-c", "1", "127.0.0.1")
 	}
@@ -3758,7 +3768,7 @@ func (s *DockerSuite) TestRunNonExistingCmd(c *check.C) {
 // as that's when the check is made (and yes, by its design...)
 func (s *DockerSuite) TestCmdCannotBeInvoked(c *check.C) {
 	expected := 126
-	if testEnv.OSType == "windows" {
+	if testEnv.DaemonPlatform() == "windows" {
 		expected = 127
 	}
 	name := "testCmdCannotBeInvoked"
@@ -3953,35 +3963,21 @@ func (s *DockerSuite) TestRunNamedVolumeNotRemoved(c *check.C) {
 	dockerCmd(c, "run", "--rm", "-v", "test:"+prefix+"/foo", "-v", prefix+"/bar", "busybox", "true")
 	dockerCmd(c, "volume", "inspect", "test")
 	out, _ := dockerCmd(c, "volume", "ls", "-q")
-	c.Assert(strings.TrimSpace(out), checker.Contains, "test")
+	c.Assert(strings.TrimSpace(out), checker.Equals, "test")
 
 	dockerCmd(c, "run", "--name=test", "-v", "test:"+prefix+"/foo", "-v", prefix+"/bar", "busybox", "true")
 	dockerCmd(c, "rm", "-fv", "test")
 	dockerCmd(c, "volume", "inspect", "test")
 	out, _ = dockerCmd(c, "volume", "ls", "-q")
-	c.Assert(strings.TrimSpace(out), checker.Contains, "test")
+	c.Assert(strings.TrimSpace(out), checker.Equals, "test")
 }
 
 func (s *DockerSuite) TestRunNamedVolumesFromNotRemoved(c *check.C) {
 	prefix, _ := getPrefixAndSlashFromDaemonPlatform()
 
 	dockerCmd(c, "volume", "create", "test")
-	cid, _ := dockerCmd(c, "run", "-d", "--name=parent", "-v", "test:"+prefix+"/foo", "-v", prefix+"/bar", "busybox", "true")
+	dockerCmd(c, "run", "--name=parent", "-v", "test:"+prefix+"/foo", "-v", prefix+"/bar", "busybox", "true")
 	dockerCmd(c, "run", "--name=child", "--volumes-from=parent", "busybox", "true")
-
-	cli, err := client.NewEnvClient()
-	c.Assert(err, checker.IsNil)
-	defer cli.Close()
-
-	container, err := cli.ContainerInspect(context.Background(), strings.TrimSpace(cid))
-	c.Assert(err, checker.IsNil)
-	var vname string
-	for _, v := range container.Mounts {
-		if v.Name != "test" {
-			vname = v.Name
-		}
-	}
-	c.Assert(vname, checker.Not(checker.Equals), "")
 
 	// Remove the parent so there are not other references to the volumes
 	dockerCmd(c, "rm", "-f", "parent")
@@ -3989,25 +3985,10 @@ func (s *DockerSuite) TestRunNamedVolumesFromNotRemoved(c *check.C) {
 	dockerCmd(c, "rm", "-fv", "child")
 	dockerCmd(c, "volume", "inspect", "test")
 	out, _ := dockerCmd(c, "volume", "ls", "-q")
-	c.Assert(strings.TrimSpace(out), checker.Contains, "test")
-	c.Assert(strings.TrimSpace(out), checker.Not(checker.Contains), vname)
+	c.Assert(strings.TrimSpace(out), checker.Equals, "test")
 }
 
 func (s *DockerSuite) TestRunAttachFailedNoLeak(c *check.C) {
-	// TODO @msabansal - https://github.com/moby/moby/issues/35023. Duplicate
-	// port mappings are not errored out on RS3 builds. Temporarily disabling
-	// this test pending further investigation. Note we parse kernel.GetKernelVersion
-	// rather than system.GetOSVersion as test binaries aren't manifested, so would
-	// otherwise report build 9200.
-	if runtime.GOOS == "windows" {
-		v, err := kernel.GetKernelVersion()
-		c.Assert(err, checker.IsNil)
-		build, _ := strconv.Atoi(strings.Split(strings.SplitN(v.String(), " ", 3)[2][1:], ".")[0])
-		if build >= 16292 { // @jhowardmsft TODO - replace with final RS3 build and ==
-			c.Skip("Temporarily disabled on RS3 builds")
-		}
-	}
-
 	nroutines, err := getGoroutineNumber()
 	c.Assert(err, checker.IsNil)
 
@@ -4142,7 +4123,7 @@ func (s *DockerSuite) TestRunRm(c *check.C) {
 // Test that auto-remove is performed by the client on API versions that do not support daemon-side api-remove (API < 1.25)
 func (s *DockerSuite) TestRunRmPre125Api(c *check.C) {
 	name := "miss-me-when-im-gone"
-	envs := appendBaseEnv(os.Getenv("DOCKER_TLS_VERIFY") != "", "DOCKER_API_VERSION=1.24")
+	envs := appendBaseEnv(false, "DOCKER_API_VERSION=1.24")
 	cli.Docker(cli.Args("run", "--name="+name, "--rm", "busybox"), cli.WithEnvironmentVariables(envs...)).Assert(c, icmd.Success)
 
 	cli.Docker(cli.Inspect(name), cli.Format(".name")).Assert(c, icmd.Expected{
@@ -4241,7 +4222,7 @@ func (s *DockerSuite) TestRunCredentialSpecFailures(c *check.C) {
 func (s *DockerSuite) TestRunCredentialSpecWellFormed(c *check.C) {
 	testRequires(c, DaemonIsWindows, SameHostDaemon)
 	validCS := readFile(`fixtures\credentialspecs\valid.json`, c)
-	writeFile(filepath.Join(testEnv.DaemonInfo.DockerRootDir, `credentialspecs\valid.json`), validCS, c)
+	writeFile(filepath.Join(testEnv.DockerBasePath(), `credentialspecs\valid.json`), validCS, c)
 	dockerCmd(c, "run", `--security-opt=credentialspec=file://valid.json`, "busybox", "true")
 }
 
@@ -4251,18 +4232,7 @@ func (s *DockerSuite) TestRunCredentialSpecWellFormed(c *check.C) {
 func (s *DockerSuite) TestRunServicingContainer(c *check.C) {
 	testRequires(c, DaemonIsWindows, SameHostDaemon)
 
-	// This functionality does not exist in post-RS3 builds.
-	// Note we get the version number from the full build string, as Windows
-	// reports Windows 8 version 6.2 build 9200 from non-manifested binaries.
-	// Ref: https://msdn.microsoft.com/en-us/library/windows/desktop/ms724451(v=vs.85).aspx
-	v, err := kernel.GetKernelVersion()
-	c.Assert(err, checker.IsNil)
-	build, _ := strconv.Atoi(strings.Split(strings.SplitN(v.String(), " ", 3)[2][1:], ".")[0])
-	if build > 16299 {
-		c.Skip("Disabled on post-RS3 builds")
-	}
-
-	out := cli.DockerCmd(c, "run", "-d", testEnv.PlatformDefaults.BaseImage, "cmd", "/c", "mkdir c:\\programdata\\Microsoft\\Windows\\ContainerUpdates\\000_000_d99f45d0-ffc8-4af7-bd9c-ea6a62e035c9_200 && sc control cexecsvc 255").Combined()
+	out := cli.DockerCmd(c, "run", "-d", testEnv.MinimalBaseImage(), "cmd", "/c", "mkdir c:\\programdata\\Microsoft\\Windows\\ContainerUpdates\\000_000_d99f45d0-ffc8-4af7-bd9c-ea6a62e035c9_200 && sc control cexecsvc 255").Combined()
 	containerID := strings.TrimSpace(out)
 	cli.WaitExited(c, containerID, 60*time.Second)
 

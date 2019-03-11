@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/url"
 
 	"github.com/docker/docker/api/types"
@@ -19,12 +20,15 @@ func (cli *Client) ImageRemove(ctx context.Context, imageID string, options type
 		query.Set("noprune", "1")
 	}
 
-	var dels []types.ImageDeleteResponseItem
 	resp, err := cli.delete(ctx, "/images/"+imageID, query, nil)
 	if err != nil {
-		return dels, wrapResponseError(err, resp, "image", imageID)
+		if resp.statusCode == http.StatusNotFound {
+			return nil, imageNotFoundError{imageID}
+		}
+		return nil, err
 	}
 
+	var dels []types.ImageDeleteResponseItem
 	err = json.NewDecoder(resp.body).Decode(&dels)
 	ensureReaderClosed(resp)
 	return dels, err

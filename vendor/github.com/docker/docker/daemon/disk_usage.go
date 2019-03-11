@@ -99,6 +99,7 @@ func (daemon *Daemon) SystemDiskUsage(ctx context.Context) (*types.DiskUsage, er
 	for platform := range daemon.stores {
 		layerRefs := daemon.getLayerRefs(platform)
 		allLayers := daemon.stores[platform].layerStore.Map()
+		var allLayersSize int64
 		for _, l := range allLayers {
 			select {
 			case <-ctx.Done():

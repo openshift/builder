@@ -133,7 +133,10 @@ func (s *fs) Delete(dgst digest.Digest) error {
 	if err := os.RemoveAll(s.metadataDir(dgst)); err != nil {
 		return err
 	}
-	return os.Remove(s.contentFile(dgst))
+	if err := os.Remove(s.contentFile(dgst)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // SetMetadata sets metadata for a given ID. It fails if there's no base file.

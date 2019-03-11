@@ -16,7 +16,6 @@ import (
 	types "github.com/docker/docker/api/types/swarm"
 	timetypes "github.com/docker/docker/api/types/time"
 	"github.com/docker/docker/daemon/cluster/convert"
-	"github.com/docker/docker/errdefs"
 	runconfigopts "github.com/docker/docker/runconfig/opts"
 	swarmapi "github.com/docker/swarmkit/api"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -75,7 +74,7 @@ func (c *Cluster) GetServices(options apitypes.ServiceListOptions) ([]types.Serv
 	services := make([]types.Service, 0, len(r.Services))
 
 	for _, service := range r.Services {
-		if options.Filters.Contains("mode") {
+		if options.Filters.Include("mode") {
 			var mode string
 			switch service.Spec.GetMode().(type) {
 			case *swarmapi.ServiceSpec_Global:
@@ -129,7 +128,7 @@ func (c *Cluster) CreateService(s types.ServiceSpec, encodedAuth string, queryRe
 
 		serviceSpec, err := convert.ServiceSpecToGRPC(s)
 		if err != nil {
-			return errdefs.InvalidParameter(err)
+			return convertError{err}
 		}
 
 		resp = &apitypes.ServiceCreateResponse{}
@@ -233,7 +232,7 @@ func (c *Cluster) UpdateService(serviceIDOrName string, version uint64, spec typ
 
 		serviceSpec, err := convert.ServiceSpecToGRPC(spec)
 		if err != nil {
-			return errdefs.InvalidParameter(err)
+			return convertError{err}
 		}
 
 		currentService, err := getService(ctx, state.controlClient, serviceIDOrName, false)

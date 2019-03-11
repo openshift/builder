@@ -1,22 +1,21 @@
 package zfs
 
 import (
+	"fmt"
+
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
-func checkRootdirFs(rootDir string) error {
-	fsMagic, err := graphdriver.GetFSMagic(rootDir)
-	if err != nil {
-		return err
-	}
-	backingFS := "unknown"
-	if fsName, ok := graphdriver.FsNames[fsMagic]; ok {
-		backingFS = fsName
+func checkRootdirFs(rootdir string) error {
+	var buf unix.Statfs_t
+	if err := unix.Statfs(rootdir, &buf); err != nil {
+		return fmt.Errorf("Failed to access '%s': %s", rootdir, err)
 	}
 
-	if fsMagic != graphdriver.FsMagicZfs {
-		logrus.WithField("root", rootDir).WithField("backingFS", backingFS).WithField("driver", "zfs").Error("No zfs dataset found for root")
+	if graphdriver.FsMagic(buf.Type) != graphdriver.FsMagicZfs {
+		logrus.Debugf("[zfs] no zfs dataset found for rootdir '%s'", rootdir)
 		return graphdriver.ErrPrerequisites
 	}
 

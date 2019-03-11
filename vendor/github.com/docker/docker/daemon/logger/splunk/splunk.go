@@ -5,7 +5,6 @@ package splunk
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -16,13 +15,11 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/docker/docker/daemon/logger"
 	"github.com/docker/docker/daemon/logger/loggerutils"
-	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/urlutil"
 	"github.com/sirupsen/logrus"
 )
@@ -56,8 +53,6 @@ const (
 	defaultBufferMaximum = 10 * defaultPostMessagesBatchSize
 	// Number of messages allowed to be queued in the channel
 	defaultStreamChannelSize = 4 * defaultPostMessagesBatchSize
-	// maxResponseSize is the max amount that will be read from an http response
-	maxResponseSize = 1024
 )
 
 const (
@@ -66,8 +61,6 @@ const (
 	envVarBufferMaximum         = "SPLUNK_LOGGING_DRIVER_BUFFER_MAX"
 	envVarStreamChannelSize     = "SPLUNK_LOGGING_DRIVER_CHANNEL_SIZE"
 )
-
-var batchSendTimeout = 30 * time.Second
 
 type splunkLoggerInterface interface {
 	logger.Logger
@@ -370,11 +363,6 @@ func (l *splunkLoggerJSON) Log(msg *logger.Message) error {
 }
 
 func (l *splunkLoggerRaw) Log(msg *logger.Message) error {
-	// empty or whitespace-only messages are not accepted by HEC
-	if strings.TrimSpace(string(msg.Line)) == "" {
-		return nil
-	}
-
 	message := l.createSplunkMessage(msg)
 
 	message.Event = string(append(l.prefix, msg.Line...))
@@ -422,18 +410,13 @@ func (l *splunkLogger) worker() {
 
 func (l *splunkLogger) postMessages(messages []*splunkMessage, lastChance bool) []*splunkMessage {
 	messagesLen := len(messages)
-
-	ctx, cancel := context.WithTimeout(context.Background(), batchSendTimeout)
-	defer cancel()
-
 	for i := 0; i < messagesLen; i += l.postMessagesBatchSize {
 		upperBound := i + l.postMessagesBatchSize
 		if upperBound > messagesLen {
 			upperBound = messagesLen
 		}
-
-		if err := l.tryPostMessages(ctx, messages[i:upperBound]); err != nil {
-			logrus.WithError(err).WithField("module", "logger/splunk").Warn("Error while sending logs")
+		if err := l.tryPostMessages(messages[i:upperBound]); err != nil {
+			logrus.Error(err)
 			if messagesLen-i >= l.bufferMaximum || lastChance {
 				// If this is last chance - print them all to the daemon log
 				if lastChance {
@@ -458,7 +441,7 @@ func (l *splunkLogger) postMessages(messages []*splunkMessage, lastChance bool) 
 	return messages[:0]
 }
 
-func (l *splunkLogger) tryPostMessages(ctx context.Context, messages []*splunkMessage) error {
+func (l *splunkLogger) tryPostMessages(messages []*splunkMessage) error {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -497,28 +480,25 @@ func (l *splunkLogger) tryPostMessages(ctx context.Context, messages []*splunkMe
 	if err != nil {
 		return err
 	}
-	req = req.WithContext(ctx)
 	req.Header.Set("Authorization", l.auth)
 	// Tell if we are sending gzip compressed body
 	if l.gzipCompression {
 		req.Header.Set("Content-Encoding", "gzip")
 	}
-	resp, err := l.client.Do(req)
+	res, err := l.client.Do(req)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		pools.Copy(ioutil.Discard, resp.Body)
-		resp.Body.Close()
-	}()
-	if resp.StatusCode != http.StatusOK {
-		rdr := io.LimitReader(resp.Body, maxResponseSize)
-		body, err := ioutil.ReadAll(rdr)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var body []byte
+		body, err = ioutil.ReadAll(res.Body)
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("%s: failed to send event - %s - %s", driverName, resp.Status, string(body))
+		return fmt.Errorf("%s: failed to send event - %s - %s", driverName, res.Status, body)
 	}
+	io.Copy(ioutil.Discard, res.Body)
 	return nil
 }
 
@@ -601,22 +581,20 @@ func verifySplunkConnection(l *splunkLogger) error {
 	if err != nil {
 		return err
 	}
-	resp, err := l.client.Do(req)
+	res, err := l.client.Do(req)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		pools.Copy(ioutil.Discard, resp.Body)
-		resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		rdr := io.LimitReader(resp.Body, maxResponseSize)
-		body, err := ioutil.ReadAll(rdr)
+	if res.Body != nil {
+		defer res.Body.Close()
+	}
+	if res.StatusCode != http.StatusOK {
+		var body []byte
+		body, err = ioutil.ReadAll(res.Body)
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("%s: failed to verify connection - %s - %s", driverName, resp.Status, string(body))
+		return fmt.Errorf("%s: failed to verify connection - %s - %s", driverName, res.Status, body)
 	}
 	return nil
 }

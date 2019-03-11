@@ -22,7 +22,15 @@ func max(x, y int) int {
 }
 
 func copyDir(src, dst string) error {
-	return exec.Command("cp", "-a", src, dst).Run()
+	cmd := exec.Command("cp", "-a", src, dst)
+	if runtime.GOOS == "solaris" {
+		cmd = exec.Command("gcp", "-a", src, dst)
+	}
+
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return nil
 }
 
 type FileType uint32
@@ -42,35 +50,32 @@ type FileData struct {
 
 func createSampleDir(t *testing.T, root string) {
 	files := []FileData{
-		{filetype: Regular, path: "file1", contents: "file1\n", permissions: 0600},
-		{filetype: Regular, path: "file2", contents: "file2\n", permissions: 0666},
-		{filetype: Regular, path: "file3", contents: "file3\n", permissions: 0404},
-		{filetype: Regular, path: "file4", contents: "file4\n", permissions: 0600},
-		{filetype: Regular, path: "file5", contents: "file5\n", permissions: 0600},
-		{filetype: Regular, path: "file6", contents: "file6\n", permissions: 0600},
-		{filetype: Regular, path: "file7", contents: "file7\n", permissions: 0600},
-		{filetype: Dir, path: "dir1", contents: "", permissions: 0740},
-		{filetype: Regular, path: "dir1/file1-1", contents: "file1-1\n", permissions: 01444},
-		{filetype: Regular, path: "dir1/file1-2", contents: "file1-2\n", permissions: 0666},
-		{filetype: Dir, path: "dir2", contents: "", permissions: 0700},
-		{filetype: Regular, path: "dir2/file2-1", contents: "file2-1\n", permissions: 0666},
-		{filetype: Regular, path: "dir2/file2-2", contents: "file2-2\n", permissions: 0666},
-		{filetype: Dir, path: "dir3", contents: "", permissions: 0700},
-		{filetype: Regular, path: "dir3/file3-1", contents: "file3-1\n", permissions: 0666},
-		{filetype: Regular, path: "dir3/file3-2", contents: "file3-2\n", permissions: 0666},
-		{filetype: Dir, path: "dir4", contents: "", permissions: 0700},
-		{filetype: Regular, path: "dir4/file3-1", contents: "file4-1\n", permissions: 0666},
-		{filetype: Regular, path: "dir4/file3-2", contents: "file4-2\n", permissions: 0666},
-		{filetype: Symlink, path: "symlink1", contents: "target1", permissions: 0666},
-		{filetype: Symlink, path: "symlink2", contents: "target2", permissions: 0666},
-		{filetype: Symlink, path: "symlink3", contents: root + "/file1", permissions: 0666},
-		{filetype: Symlink, path: "symlink4", contents: root + "/symlink3", permissions: 0666},
-		{filetype: Symlink, path: "dirSymlink", contents: root + "/dir1", permissions: 0740},
+		{Regular, "file1", "file1\n", 0600},
+		{Regular, "file2", "file2\n", 0666},
+		{Regular, "file3", "file3\n", 0404},
+		{Regular, "file4", "file4\n", 0600},
+		{Regular, "file5", "file5\n", 0600},
+		{Regular, "file6", "file6\n", 0600},
+		{Regular, "file7", "file7\n", 0600},
+		{Dir, "dir1", "", 0740},
+		{Regular, "dir1/file1-1", "file1-1\n", 01444},
+		{Regular, "dir1/file1-2", "file1-2\n", 0666},
+		{Dir, "dir2", "", 0700},
+		{Regular, "dir2/file2-1", "file2-1\n", 0666},
+		{Regular, "dir2/file2-2", "file2-2\n", 0666},
+		{Dir, "dir3", "", 0700},
+		{Regular, "dir3/file3-1", "file3-1\n", 0666},
+		{Regular, "dir3/file3-2", "file3-2\n", 0666},
+		{Dir, "dir4", "", 0700},
+		{Regular, "dir4/file3-1", "file4-1\n", 0666},
+		{Regular, "dir4/file3-2", "file4-2\n", 0666},
+		{Symlink, "symlink1", "target1", 0666},
+		{Symlink, "symlink2", "target2", 0666},
+		{Symlink, "symlink3", root + "/file1", 0666},
+		{Symlink, "symlink4", root + "/symlink3", 0666},
+		{Symlink, "dirSymlink", root + "/dir1", 0740},
 	}
-	provisionSampleDir(t, root, files)
-}
 
-func provisionSampleDir(t *testing.T, root string, files []FileData) {
 	now := time.Now()
 	for _, info := range files {
 		p := path.Join(root, info.path)
@@ -183,7 +188,6 @@ func TestChangesWithChangesGH13590(t *testing.T) {
 		t.Skip("symlinks on Windows")
 	}
 	baseLayer, err := ioutil.TempDir("", "docker-changes-test.")
-	require.NoError(t, err)
 	defer os.RemoveAll(baseLayer)
 
 	dir3 := path.Join(baseLayer, "dir1/dir2/dir3")
@@ -193,7 +197,6 @@ func TestChangesWithChangesGH13590(t *testing.T) {
 	ioutil.WriteFile(file, []byte("hello"), 0666)
 
 	layer, err := ioutil.TempDir("", "docker-changes-test2.")
-	require.NoError(t, err)
 	defer os.RemoveAll(layer)
 
 	// Test creating a new file
@@ -216,7 +219,6 @@ func TestChangesWithChangesGH13590(t *testing.T) {
 
 	// Now test changing a file
 	layer, err = ioutil.TempDir("", "docker-changes-test3.")
-	require.NoError(t, err)
 	defer os.RemoveAll(layer)
 
 	if err := copyDir(baseLayer+"/dir1", layer+"/"); err != nil {
@@ -239,8 +241,9 @@ func TestChangesWithChangesGH13590(t *testing.T) {
 func TestChangesDirsEmpty(t *testing.T) {
 	// TODO Windows. There may be a way of running this, but turning off for now
 	// as createSampleDir uses symlinks.
-	if runtime.GOOS == "windows" {
-		t.Skip("symlinks on Windows")
+	// TODO Should work for Solaris
+	if runtime.GOOS == "windows" || runtime.GOOS == "solaris" {
+		t.Skip("symlinks on Windows; gcp failure on Solaris")
 	}
 	src, err := ioutil.TempDir("", "docker-changes-test")
 	require.NoError(t, err)
@@ -326,8 +329,9 @@ func mutateSampleDir(t *testing.T, root string) {
 func TestChangesDirsMutated(t *testing.T) {
 	// TODO Windows. There may be a way of running this, but turning off for now
 	// as createSampleDir uses symlinks.
-	if runtime.GOOS == "windows" {
-		t.Skip("symlinks on Windows")
+	// TODO Should work for Solaris
+	if runtime.GOOS == "windows" || runtime.GOOS == "solaris" {
+		t.Skip("symlinks on Windows; gcp failures on Solaris")
 	}
 	src, err := ioutil.TempDir("", "docker-changes-test")
 	require.NoError(t, err)
@@ -382,8 +386,9 @@ func TestChangesDirsMutated(t *testing.T) {
 func TestApplyLayer(t *testing.T) {
 	// TODO Windows. There may be a way of running this, but turning off for now
 	// as createSampleDir uses symlinks.
-	if runtime.GOOS == "windows" {
-		t.Skip("symlinks on Windows")
+	// TODO Should work for Solaris
+	if runtime.GOOS == "windows" || runtime.GOOS == "solaris" {
+		t.Skip("symlinks on Windows; gcp failures on Solaris")
 	}
 	src, err := ioutil.TempDir("", "docker-changes-test")
 	require.NoError(t, err)
@@ -460,7 +465,6 @@ func TestChangesSizeWithOnlyDeleteChanges(t *testing.T) {
 
 func TestChangesSize(t *testing.T) {
 	parentPath, err := ioutil.TempDir("", "docker-changes-test")
-	require.NoError(t, err)
 	defer os.RemoveAll(parentPath)
 	addition := path.Join(parentPath, "addition")
 	err = ioutil.WriteFile(addition, []byte{0x01, 0x01, 0x01}, 0744)

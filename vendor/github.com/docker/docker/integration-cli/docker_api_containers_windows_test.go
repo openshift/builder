@@ -47,7 +47,7 @@ func (s *DockerSuite) TestContainersAPICreateMountsBindNamedPipe(c *check.C) {
 
 	name := "test-bind-npipe"
 	data := map[string]interface{}{
-		"Image":      testEnv.PlatformDefaults.BaseImage,
+		"Image":      testEnv.MinimalBaseImage(),
 		"Cmd":        []string{"cmd", "/c", cmd},
 		"HostConfig": map[string]interface{}{"Mounts": []map[string]interface{}{{"Type": "npipe", "Source": hostPipeName, "Target": containerPipeName}}},
 	}

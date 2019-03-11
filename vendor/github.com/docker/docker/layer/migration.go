@@ -68,7 +68,11 @@ func (ls *layerStore) CreateRWLayerByGraphID(name string, graphID string, parent
 		m.initID = initID
 	}
 
-	return ls.saveMount(m)
+	if err = ls.saveMount(m); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (ls *layerStore) ChecksumForGraphID(id, parent, oldTarDataPath, newTarDataPath string) (diffID DiffID, size int64, err error) {

@@ -9,7 +9,6 @@ import (
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/container/stream"
 	"github.com/docker/docker/daemon/logger"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/docker/pkg/term"
 	"github.com/pkg/errors"
@@ -23,7 +22,7 @@ func (daemon *Daemon) ContainerAttach(prefixOrName string, c *backend.ContainerA
 	if c.DetachKeys != "" {
 		keys, err = term.ToBytes(c.DetachKeys)
 		if err != nil {
-			return errdefs.InvalidParameter(errors.Errorf("Invalid detach keys (%s) provided", c.DetachKeys))
+			return validationError{errors.Errorf("Invalid detach keys (%s) provided", c.DetachKeys)}
 		}
 	}
 
@@ -33,11 +32,11 @@ func (daemon *Daemon) ContainerAttach(prefixOrName string, c *backend.ContainerA
 	}
 	if container.IsPaused() {
 		err := fmt.Errorf("container %s is paused, unpause the container before attach", prefixOrName)
-		return errdefs.Conflict(err)
+		return stateConflictError{err}
 	}
 	if container.IsRestarting() {
 		err := fmt.Errorf("container %s is restarting, wait until the container is running", prefixOrName)
-		return errdefs.Conflict(err)
+		return stateConflictError{err}
 	}
 
 	cfg := stream.AttachConfig{
@@ -169,7 +168,7 @@ func (daemon *Daemon) containerAttach(c *container.Container, cfg *stream.Attach
 		// Wait for the container to stop before returning.
 		waitChan := c.Wait(context.Background(), container.WaitConditionNotRunning)
 		defer func() {
-			<-waitChan // Ignore returned exit code.
+			_ = <-waitChan // Ignore returned exit code.
 		}()
 	}
 

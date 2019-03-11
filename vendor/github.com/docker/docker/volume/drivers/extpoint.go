@@ -11,7 +11,6 @@ import (
 	getter "github.com/docker/docker/pkg/plugingetter"
 	"github.com/docker/docker/volume"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // currently created by hand. generation tool would generate this like:
@@ -131,12 +130,6 @@ func lookup(name string, mode int) (volume.Driver, error) {
 
 		d := NewVolumeDriver(p.Name(), p.BasePath(), p.Client())
 		if err := validateDriver(d); err != nil {
-			if mode > 0 {
-				// Undo any reference count changes from the initial `Get`
-				if _, err := drivers.plugingetter.Get(name, extName, mode*-1); err != nil {
-					logrus.WithError(err).WithField("action", "validate-driver").WithField("plugin", name).Error("error releasing reference to plugin")
-				}
-			}
 			return nil, err
 		}
 
@@ -176,9 +169,9 @@ func CreateDriver(name string) (volume.Driver, error) {
 	return lookup(name, getter.Acquire)
 }
 
-// ReleaseDriver returns a volume driver by its name and decrements RefCount..
+// RemoveDriver returns a volume driver by its name and decrements RefCount..
 // If the driver is empty, it looks for the local driver.
-func ReleaseDriver(name string) (volume.Driver, error) {
+func RemoveDriver(name string) (volume.Driver, error) {
 	if name == "" {
 		name = volume.DefaultDriverName
 	}

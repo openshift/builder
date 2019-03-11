@@ -1,4 +1,4 @@
-// +build linux freebsd
+// +build linux freebsd solaris
 
 package directory
 
@@ -34,11 +34,11 @@ func Size(dir string) (size int64, err error) {
 		// Check inode to handle hard links correctly
 		inode := fileInfo.Sys().(*syscall.Stat_t).Ino
 		// inode is not a uint64 on all platforms. Cast it to avoid issues.
-		if _, exists := data[inode]; exists {
+		if _, exists := data[uint64(inode)]; exists {
 			return nil
 		}
 		// inode is not a uint64 on all platforms. Cast it to avoid issues.
-		data[inode] = struct{}{}
+		data[uint64(inode)] = struct{}{}
 
 		size += s
 

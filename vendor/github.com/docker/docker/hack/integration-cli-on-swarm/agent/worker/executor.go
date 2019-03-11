@@ -43,7 +43,7 @@ func privilegedTestChunkExecutor(autoRemove bool) testChunkExecutor {
 			}
 			graphdriver = info.Driver
 		}
-		// `daemon_dest` is similar to `$DEST` (e.g. `bundles/VERSION/test-integration`)
+		// `daemon_dest` is similar to `$DEST` (e.g. `bundles/VERSION/test-integration-cli`)
 		// but it exists outside of `bundles` so as to make `$DOCKER_GRAPHDRIVER` work.
 		//
 		// Without this hack, `$DOCKER_GRAPHDRIVER` fails because of (e.g.) `overlay2 is not supported over overlayfs`
@@ -65,7 +65,7 @@ func privilegedTestChunkExecutor(autoRemove bool) testChunkExecutor {
 				"org.dockerproject.integration-cli-on-swarm.comment": "this non-service container is created for running privileged programs on Swarm. you can remove this container manually if the corresponding service is already stopped.",
 			},
 			Entrypoint: []string{"hack/dind"},
-			Cmd:        []string{"hack/make.sh", "test-integration"},
+			Cmd:        []string{"hack/make.sh", "test-integration-cli"},
 		}
 		hostConfig := container.HostConfig{
 			AutoRemove: autoRemove,

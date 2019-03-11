@@ -44,7 +44,11 @@ func testIpcCheckDevExists(mm string) (bool, error) {
 		}
 	}
 
-	return false, s.Err()
+	if err := s.Err(); err != nil {
+		return false, err
+	}
+
+	return false, nil
 }
 
 // testIpcNonePrivateShareable is a helper function to test "none",

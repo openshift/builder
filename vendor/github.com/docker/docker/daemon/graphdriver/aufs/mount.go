@@ -14,5 +14,8 @@ func Unmount(target string) error {
 	if err := exec.Command("auplink", target, "flush").Run(); err != nil {
 		logrus.Warnf("Couldn't run auplink before unmount %s: %s", target, err)
 	}
-	return unix.Unmount(target, 0)
+	if err := unix.Unmount(target, 0); err != nil {
+		return err
+	}
+	return nil
 }

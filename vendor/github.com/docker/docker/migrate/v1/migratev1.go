@@ -89,7 +89,11 @@ func Migrate(root, driverName string, ls layer.Store, is image.Store, rs refstor
 		return err
 	}
 
-	return migrateRefs(root, driverName, rs, mappings)
+	if err := migrateRefs(root, driverName, rs, mappings); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // CalculateLayerChecksums walks an old graph directory and calculates checksums

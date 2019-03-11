@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	containerpkg "github.com/docker/docker/container"
-	"github.com/docker/docker/errdefs"
-	"github.com/docker/docker/libcontainerd"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -64,8 +63,6 @@ func (daemon *Daemon) killWithSignal(container *containerpkg.Container, sig int)
 	container.Lock()
 	defer container.Unlock()
 
-	daemon.stopHealthchecks(container)
-
 	if !container.Running {
 		return errNotRunning(container.ID)
 	}
@@ -97,17 +94,21 @@ func (daemon *Daemon) killWithSignal(container *containerpkg.Container, sig int)
 	}
 
 	if err := daemon.kill(container, sig); err != nil {
-		if errdefs.IsNotFound(err) {
+		err = errors.Wrapf(err, "Cannot kill container %s", container.ID)
+		// if container or process not exists, ignore the error
+		// TODO: we shouldn't have to parse error strings from containerd
+		if strings.Contains(err.Error(), "container not found") ||
+			strings.Contains(err.Error(), "no such process") {
+			logrus.Warnf("container kill failed because of 'container not found' or 'no such process': %s", err.Error())
 			unpause = false
-			logrus.WithError(err).WithField("container", container.ID).WithField("action", "kill").Debug("container kill failed because of 'container not found' or 'no such process'")
 		} else {
-			return errors.Wrapf(err, "Cannot kill container %s", container.ID)
+			return err
 		}
 	}
 
 	if unpause {
 		// above kill signal will be sent once resume is finished
-		if err := daemon.containerd.Resume(context.Background(), container.ID); err != nil {
+		if err := daemon.containerd.Resume(container.ID); err != nil {
 			logrus.Warn("Cannot unpause container %s: %s", container.ID, err)
 		}
 	}
@@ -159,7 +160,7 @@ func (daemon *Daemon) Kill(container *containerpkg.Container) error {
 
 	// Wait for exit with no timeout.
 	// Ignore returned status.
-	<-container.Wait(context.Background(), containerpkg.WaitConditionNotRunning)
+	_ = <-container.Wait(context.Background(), containerpkg.WaitConditionNotRunning)
 
 	return nil
 }
@@ -167,7 +168,7 @@ func (daemon *Daemon) Kill(container *containerpkg.Container) error {
 // killPossibleDeadProcess is a wrapper around killSig() suppressing "no such process" error.
 func (daemon *Daemon) killPossiblyDeadProcess(container *containerpkg.Container, sig int) error {
 	err := daemon.killWithSignal(container, sig)
-	if errdefs.IsNotFound(err) {
+	if err == syscall.ESRCH {
 		e := errNoSuchProcess{container.GetPID(), sig}
 		logrus.Debug(e)
 		return e
@@ -176,5 +177,5 @@ func (daemon *Daemon) killPossiblyDeadProcess(container *containerpkg.Container,
 }
 
 func (daemon *Daemon) kill(c *containerpkg.Container, sig int) error {
-	return daemon.containerd.SignalProcess(context.Background(), c.ID, libcontainerd.InitProcessName, sig)
+	return daemon.containerd.Signal(c.ID, sig)
 }

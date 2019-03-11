@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"github.com/docker/docker/container"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/ioutils"
 )
@@ -19,18 +18,8 @@ func (daemon *Daemon) ContainerExport(name string, out io.Writer) error {
 		return err
 	}
 
-	if runtime.GOOS == "windows" && container.OS == "windows" {
-		return fmt.Errorf("the daemon on this operating system does not support exporting Windows containers")
-	}
-
-	if container.IsDead() {
-		err := fmt.Errorf("You cannot export container %s which is Dead", container.ID)
-		return errdefs.Conflict(err)
-	}
-
-	if container.IsRemovalInProgress() {
-		err := fmt.Errorf("You cannot export container %s which is being removed", container.ID)
-		return errdefs.Conflict(err)
+	if runtime.GOOS == "windows" && container.Platform == "windows" {
+		return fmt.Errorf("the daemon on this platform does not support exporting Windows containers")
 	}
 
 	data, err := daemon.containerExport(container)
@@ -46,35 +35,23 @@ func (daemon *Daemon) ContainerExport(name string, out io.Writer) error {
 	return nil
 }
 
-func (daemon *Daemon) containerExport(container *container.Container) (arch io.ReadCloser, err error) {
-	rwlayer, err := daemon.stores[container.OS].layerStore.GetRWLayer(container.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			daemon.stores[container.OS].layerStore.ReleaseRWLayer(rwlayer)
-		}
-	}()
-
-	_, err = rwlayer.Mount(container.GetMountLabel())
-	if err != nil {
+func (daemon *Daemon) containerExport(container *container.Container) (io.ReadCloser, error) {
+	if err := daemon.Mount(container); err != nil {
 		return nil, err
 	}
 
-	archive, err := archivePath(container.BaseFS, container.BaseFS.Path(), &archive.TarOptions{
+	archive, err := archive.TarWithOptions(container.BaseFS, &archive.TarOptions{
 		Compression: archive.Uncompressed,
 		UIDMaps:     daemon.idMappings.UIDs(),
 		GIDMaps:     daemon.idMappings.GIDs(),
 	})
 	if err != nil {
-		rwlayer.Unmount()
+		daemon.Unmount(container)
 		return nil, err
 	}
-	arch = ioutils.NewReadCloserWrapper(archive, func() error {
+	arch := ioutils.NewReadCloserWrapper(archive, func() error {
 		err := archive.Close()
-		rwlayer.Unmount()
-		daemon.stores[container.OS].layerStore.ReleaseRWLayer(rwlayer)
+		daemon.Unmount(container)
 		return err
 	})
 	daemon.LogContainerEvent(container, "export")

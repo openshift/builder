@@ -118,8 +118,7 @@ func (d *Daemon) cleanupMetricsPlugins() {
 	var wg sync.WaitGroup
 	wg.Add(len(ls))
 
-	for _, plugin := range ls {
-		p := plugin
+	for _, p := range ls {
 		go func() {
 			defer wg.Done()
 			pluginStopMetricsCollection(p)
@@ -170,4 +169,5 @@ func pluginStopMetricsCollection(p plugingetter.CompatPlugin) {
 			logrus.WithError(err).WithField("name", p.Name()).WithField("socket", sockPath).Error("error unmounting metrics socket for plugin")
 		}
 	}
+	return
 }

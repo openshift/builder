@@ -17,8 +17,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // nodeRunner implements a manager for continuously running swarmkit node, restarting them with backoff delays if needed.
@@ -219,10 +217,7 @@ func (n *nodeRunner) watchClusterEvents(ctx context.Context, conn *grpc.ClientCo
 		msg, err := watch.Recv()
 		if err != nil {
 			// store watch is broken
-			errStatus, ok := status.FromError(err)
-			if !ok || errStatus.Code() != codes.Canceled {
-				logrus.WithError(err).Error("failed to receive changes from store watch API")
-			}
+			logrus.WithError(err).Error("failed to receive changes from store watch API")
 			return
 		}
 		select {

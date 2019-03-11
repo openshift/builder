@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	memdbContainersTable  = "containers"
-	memdbNamesTable       = "names"
+	memdbContainersTable = "containers"
+	memdbNamesTable      = "names"
+
 	memdbIDIndex          = "id"
 	memdbContainerIDIndex = "containerid"
 )
@@ -190,7 +191,11 @@ func (db *memDB) ReserveName(name, containerID string) error {
 			}
 			return nil
 		}
-		return txn.Insert(memdbNamesTable, nameAssociation{name: name, containerID: containerID})
+
+		if err := txn.Insert(memdbNamesTable, nameAssociation{name: name, containerID: containerID}); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
@@ -198,7 +203,10 @@ func (db *memDB) ReserveName(name, containerID string) error {
 // Once released, a name can be reserved again
 func (db *memDB) ReleaseName(name string) error {
 	return db.withTxn(func(txn *memdb.Txn) error {
-		return txn.Delete(memdbNamesTable, nameAssociation{name: name})
+		if err := txn.Delete(memdbNamesTable, nameAssociation{name: name}); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
@@ -290,10 +298,6 @@ func (v *memdbView) GetAllNames() map[string][]string {
 // transform maps a (deep) copied Container object to what queries need.
 // A lock on the Container is not held because these are immutable deep copies.
 func (v *memdbView) transform(container *Container) *Snapshot {
-	health := types.NoHealthcheck
-	if container.Health != nil {
-		health = container.Health.Status()
-	}
 	snapshot := &Snapshot{
 		Container: types.Container{
 			ID:      container.ID,
@@ -312,7 +316,7 @@ func (v *memdbView) transform(container *Container) *Snapshot {
 		Managed:      container.Managed,
 		ExposedPorts: make(nat.PortSet),
 		PortBindings: make(nat.PortSet),
-		Health:       health,
+		Health:       container.HealthString(),
 		Running:      container.Running,
 		Paused:       container.Paused,
 		ExitCode:     container.ExitCode(),

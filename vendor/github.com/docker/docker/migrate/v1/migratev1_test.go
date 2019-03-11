@@ -323,7 +323,10 @@ func addContainer(dest, jsonConfig string) error {
 	if err := os.MkdirAll(contDir, 0700); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filepath.Join(contDir, "config.json"), []byte(jsonConfig), 0600)
+	if err := ioutil.WriteFile(filepath.Join(contDir, "config.json"), []byte(jsonConfig), 0600); err != nil {
+		return err
+	}
+	return nil
 }
 
 type mockTagAdder struct {
@@ -430,7 +433,7 @@ func (l *mockLayer) DiffSize() (int64, error) {
 	return 0, nil
 }
 
-func (l *mockLayer) OS() layer.OS {
+func (l *mockLayer) Platform() layer.Platform {
 	return ""
 }
 

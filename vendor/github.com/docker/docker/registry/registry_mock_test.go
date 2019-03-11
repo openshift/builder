@@ -1,3 +1,5 @@
+// +build !solaris
+
 package registry
 
 import (
@@ -173,7 +175,7 @@ func makePublicIndex() *registrytypes.IndexInfo {
 	return index
 }
 
-func makeServiceConfig(mirrors []string, insecureRegistries []string) (*serviceConfig, error) {
+func makeServiceConfig(mirrors []string, insecureRegistries []string) *serviceConfig {
 	options := ServiceOptions{
 		Mirrors:            mirrors,
 		InsecureRegistries: insecureRegistries,

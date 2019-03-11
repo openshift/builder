@@ -32,10 +32,6 @@ func TestVfsCreateSnap(t *testing.T) {
 	graphtest.DriverTestCreateSnap(t, "vfs")
 }
 
-func TestVfsSetQuota(t *testing.T) {
-	graphtest.DriverTestSetQuota(t, "vfs", false)
-}
-
 func TestVfsTeardown(t *testing.T) {
 	graphtest.PutDriver(t)
 }

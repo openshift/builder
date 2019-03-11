@@ -1,4 +1,7 @@
-// +build !windows
+// +build !windows,!solaris
+
+// TODO: Create new file for Solaris which tests config parameters
+// as described in daemon/config_solaris.go
 
 package main
 
@@ -96,4 +99,16 @@ func TestLoadDaemonConfigWithTrueDefaultValuesLeaveDefaults(t *testing.T) {
 	require.NotNil(t, loadedConfig)
 
 	assert.True(t, loadedConfig.EnableUserlandProxy)
+}
+
+func TestLoadDaemonConfigWithLegacyRegistryOptions(t *testing.T) {
+	content := `{"disable-legacy-registry": false}`
+	tempFile := fs.NewFile(t, "config", fs.WithContent(content))
+	defer tempFile.Remove()
+
+	opts := defaultOptions(tempFile.Path())
+	loadedConfig, err := loadDaemonCliConfig(opts)
+	require.NoError(t, err)
+	require.NotNil(t, loadedConfig)
+	assert.False(t, loadedConfig.V2Only)
 }

@@ -4,6 +4,7 @@ package dockerfile
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -20,6 +21,10 @@ func normalizeWorkdir(_ string, current string, requested string) (string, error
 		return filepath.Join(string(os.PathSeparator), current, requested), nil
 	}
 	return requested, nil
+}
+
+func errNotJSON(command, _ string) error {
+	return fmt.Errorf("%s requires the arguments to be in JSON form", command)
 }
 
 // equalEnvKeys compare two strings and returns true if they are equal. On

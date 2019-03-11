@@ -50,9 +50,8 @@ type DockerExternalVolumeSuite struct {
 }
 
 func (s *DockerExternalVolumeSuite) SetUpTest(c *check.C) {
-	testRequires(c, SameHostDaemon)
 	s.d = daemon.New(c, dockerBinary, dockerdBinary, daemon.Config{
-		Experimental: testEnv.DaemonInfo.ExperimentalBuild,
+		Experimental: testEnv.ExperimentalDaemon(),
 	})
 	s.ec = &eventCounter{}
 }

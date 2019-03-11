@@ -1,4 +1,4 @@
-// +build !windows
+// +build !windows,!solaris
 
 package daemon
 
@@ -17,7 +17,6 @@ import (
 	"github.com/docker/docker/volume/drivers"
 	"github.com/docker/docker/volume/local"
 	"github.com/docker/docker/volume/store"
-	"github.com/stretchr/testify/require"
 )
 
 type fakeContainerGetter struct {
@@ -290,12 +289,13 @@ func TestMigratePre17Volumes(t *testing.T) {
 	containerRoot := filepath.Join(rootDir, "containers")
 	cid := "1234"
 	err = os.MkdirAll(filepath.Join(containerRoot, cid), 0755)
-	require.NoError(t, err)
 
 	vid := "5678"
 	vfsPath := filepath.Join(rootDir, "vfs", "dir", vid)
 	err = os.MkdirAll(vfsPath, 0755)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	config := []byte(`
 		{

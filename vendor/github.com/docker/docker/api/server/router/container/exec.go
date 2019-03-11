@@ -10,7 +10,6 @@ import (
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/versions"
-	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -127,7 +126,7 @@ func (s *containerRouter) postContainerExecStart(ctx context.Context, w http.Res
 			return err
 		}
 		stdout.Write([]byte(err.Error() + "\r\n"))
-		logrus.Errorf("Error running exec %s in container: %v", execName, err)
+		logrus.Errorf("Error running exec in container: %v", err)
 	}
 	return nil
 }
@@ -138,11 +137,11 @@ func (s *containerRouter) postContainerExecResize(ctx context.Context, w http.Re
 	}
 	height, err := strconv.Atoi(r.Form.Get("h"))
 	if err != nil {
-		return errdefs.InvalidParameter(err)
+		return validationError{err}
 	}
 	width, err := strconv.Atoi(r.Form.Get("w"))
 	if err != nil {
-		return errdefs.InvalidParameter(err)
+		return validationError{err}
 	}
 
 	return s.backend.ContainerExecResize(vars["name"], height, width)

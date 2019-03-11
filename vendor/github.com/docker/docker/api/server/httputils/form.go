@@ -2,6 +2,7 @@ package httputils
 
 import (
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -68,7 +69,8 @@ func ArchiveFormValues(r *http.Request, vars map[string]string) (ArchiveOptions,
 	if name == "" {
 		return ArchiveOptions{}, badParameterError{"name"}
 	}
-	path := r.Form.Get("path")
+
+	path := filepath.FromSlash(r.Form.Get("path"))
 	if path == "" {
 		return ArchiveOptions{}, badParameterError{"path"}
 	}

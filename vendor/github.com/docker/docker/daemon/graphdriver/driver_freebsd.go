@@ -7,8 +7,10 @@ import (
 )
 
 var (
-	// List of drivers that should be used in an order
-	priority = "zfs"
+	// Slice of drivers that should be used in an order
+	priority = []string{
+		"zfs",
+	}
 )
 
 // Mounted checks if the given path is mounted as the fs type

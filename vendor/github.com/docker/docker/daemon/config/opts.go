@@ -7,8 +7,8 @@ import (
 )
 
 // ParseGenericResources parses and validates the specified string as a list of GenericResource
-func ParseGenericResources(value []string) ([]swarm.GenericResource, error) {
-	if len(value) == 0 {
+func ParseGenericResources(value string) ([]swarm.GenericResource, error) {
+	if value == "" {
 		return nil, nil
 	}
 

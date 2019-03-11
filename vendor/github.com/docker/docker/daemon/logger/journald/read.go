@@ -171,15 +171,13 @@ func (s *journald) Close() error {
 	return nil
 }
 
-func (s *journald) drainJournal(logWatcher *logger.LogWatcher, j *C.sd_journal, oldCursor *C.char, untilUnixMicro uint64) (*C.char, bool) {
+func (s *journald) drainJournal(logWatcher *logger.LogWatcher, config logger.ReadConfig, j *C.sd_journal, oldCursor *C.char) *C.char {
 	var msg, data, cursor *C.char
 	var length C.size_t
 	var stamp C.uint64_t
 	var priority, partial C.int
-	var done bool
 
-	// Walk the journal from here forward until we run out of new entries
-	// or we reach the until value (if provided).
+	// Walk the journal from here forward until we run out of new entries.
 drain:
 	for {
 		// Try not to send a given entry twice.
@@ -197,12 +195,6 @@ drain:
 			if C.sd_journal_get_realtime_usec(j, &stamp) != 0 {
 				break
 			}
-			// Break if the timestamp exceeds any provided until flag.
-			if untilUnixMicro != 0 && untilUnixMicro < uint64(stamp) {
-				done = true
-				break
-			}
-
 			// Set up the time and text of the entry.
 			timestamp := time.Unix(int64(stamp)/1000000, (int64(stamp)%1000000)*1000)
 			line := C.GoBytes(unsafe.Pointer(msg), C.int(length))
@@ -248,10 +240,10 @@ drain:
 		// ensure that we won't be freeing an address that's invalid
 		cursor = nil
 	}
-	return cursor, done
+	return cursor
 }
 
-func (s *journald) followJournal(logWatcher *logger.LogWatcher, j *C.sd_journal, pfd [2]C.int, cursor *C.char, untilUnixMicro uint64) *C.char {
+func (s *journald) followJournal(logWatcher *logger.LogWatcher, config logger.ReadConfig, j *C.sd_journal, pfd [2]C.int, cursor *C.char) *C.char {
 	s.mu.Lock()
 	s.readers.readers[logWatcher] = logWatcher
 	if s.closed {
@@ -278,10 +270,9 @@ func (s *journald) followJournal(logWatcher *logger.LogWatcher, j *C.sd_journal,
 				break
 			}
 
-			var done bool
-			cursor, done = s.drainJournal(logWatcher, j, cursor, untilUnixMicro)
+			cursor = s.drainJournal(logWatcher, config, j, cursor)
 
-			if status != 1 || done {
+			if status != 1 {
 				// We were notified to stop
 				break
 			}
@@ -313,7 +304,6 @@ func (s *journald) readLogs(logWatcher *logger.LogWatcher, config logger.ReadCon
 	var cmatch, cursor *C.char
 	var stamp C.uint64_t
 	var sinceUnixMicro uint64
-	var untilUnixMicro uint64
 	var pipes [2]C.int
 
 	// Get a handle to the journal.
@@ -353,19 +343,10 @@ func (s *journald) readLogs(logWatcher *logger.LogWatcher, config logger.ReadCon
 		nano := config.Since.UnixNano()
 		sinceUnixMicro = uint64(nano / 1000)
 	}
-	// If we have an until value, convert it too
-	if !config.Until.IsZero() {
-		nano := config.Until.UnixNano()
-		untilUnixMicro = uint64(nano / 1000)
-	}
 	if config.Tail > 0 {
 		lines := config.Tail
-		// If until time provided, start from there.
-		// Otherwise start at the end of the journal.
-		if untilUnixMicro != 0 && C.sd_journal_seek_realtime_usec(j, C.uint64_t(untilUnixMicro)) < 0 {
-			logWatcher.Err <- fmt.Errorf("error seeking provided until value")
-			return
-		} else if C.sd_journal_seek_tail(j) < 0 {
+		// Start at the end of the journal.
+		if C.sd_journal_seek_tail(j) < 0 {
 			logWatcher.Err <- fmt.Errorf("error seeking to end of journal")
 			return
 		}
@@ -381,7 +362,8 @@ func (s *journald) readLogs(logWatcher *logger.LogWatcher, config logger.ReadCon
 			if C.sd_journal_get_realtime_usec(j, &stamp) != 0 {
 				break
 			} else {
-				// Compare the timestamp on the entry to our threshold value.
+				// Compare the timestamp on the entry
+				// to our threshold value.
 				if sinceUnixMicro != 0 && sinceUnixMicro > uint64(stamp) {
 					break
 				}
@@ -410,7 +392,7 @@ func (s *journald) readLogs(logWatcher *logger.LogWatcher, config logger.ReadCon
 			return
 		}
 	}
-	cursor, _ = s.drainJournal(logWatcher, j, nil, untilUnixMicro)
+	cursor = s.drainJournal(logWatcher, config, j, nil)
 	if config.Follow {
 		// Allocate a descriptor for following the journal, if we'll
 		// need one.  Do it here so that we can report if it fails.
@@ -422,7 +404,7 @@ func (s *journald) readLogs(logWatcher *logger.LogWatcher, config logger.ReadCon
 			if C.pipe(&pipes[0]) == C.int(-1) {
 				logWatcher.Err <- fmt.Errorf("error opening journald close notification pipe")
 			} else {
-				cursor = s.followJournal(logWatcher, j, pipes, cursor, untilUnixMicro)
+				cursor = s.followJournal(logWatcher, config, j, pipes, cursor)
 				// Let followJournal handle freeing the journal context
 				// object and closing the channel.
 				following = true

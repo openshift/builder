@@ -27,7 +27,7 @@ func TestZfsCreateSnap(t *testing.T) {
 }
 
 func TestZfsSetQuota(t *testing.T) {
-	graphtest.DriverTestSetQuota(t, "zfs", true)
+	graphtest.DriverTestSetQuota(t, "zfs")
 }
 
 func TestZfsTeardown(t *testing.T) {
