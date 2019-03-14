@@ -2,12 +2,18 @@ package builder
 
 import (
 	"errors"
+	"flag"
+	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	docker "github.com/fsouza/go-dockerclient"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
 	buildfake "github.com/openshift/client-go/build/clientset/versioned/fake"
@@ -45,9 +51,11 @@ func (builder testBuilder) Build(config *s2iapi.Config) (*s2iapi.Result, error) 
 }
 
 type testS2IBuilderConfig struct {
-	errPushImage   error
-	getStrategyErr error
-	buildError     error
+	pullImageFunc    func(opts docker.PullImageOptions, auth docker.AuthConfiguration) error
+	inspectImageFunc func(name string) (*docker.Image, error)
+	errPushImage     error
+	getStrategyErr   error
+	buildError       error
 }
 
 // newTestS2IBuilder creates a mock implementation of S2IBuilder, instrumenting
@@ -56,7 +64,9 @@ func newTestS2IBuilder(config testS2IBuilderConfig) *S2IBuilder {
 	client := &buildfake.Clientset{}
 	return newS2IBuilder(
 		&FakeDocker{
-			errPushImage: config.errPushImage,
+			pullImageFunc:    config.pullImageFunc,
+			inspectImageFunc: config.inspectImageFunc,
+			errPushImage:     config.errPushImage,
 		},
 		"unix:///var/run/docker2.sock",
 		client.Build().Builds(""),
@@ -108,6 +118,13 @@ func makeBuild() *buildapiv1.Build {
 			OutputDockerImageReference: "test/test-result:latest",
 		},
 	}
+}
+
+func TestMain(m *testing.M) {
+	DefaultPushOrPullRetryCount = 1
+	DefaultPushOrPullRetryDelay = 5 * time.Millisecond
+	flag.Parse()
+	os.Exit(m.Run())
 }
 
 func TestDockerBuildError(t *testing.T) {
@@ -292,5 +309,28 @@ func TestScriptProxyConfig(t *testing.T) {
 	}
 	if resultedProxyConf.HTTPSProxy.Path != "/secure" {
 		t.Errorf("Expected HTTPS Proxy path to be /secure, got: %v", resultedProxyConf.HTTPSProxy.Path)
+	}
+}
+
+func TestIncrementalPullError(t *testing.T) {
+	inspectFunc := func(name string) (*docker.Image, error) {
+		if name == "test/test-result:latest" {
+			return nil, fmt.Errorf("no such image %s", name)
+		}
+		return &docker.Image{}, nil
+	}
+	pullFunc := func(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
+		if strings.Contains(opts.Repository, "test/test-result") {
+			return fmt.Errorf("image %s:%s does not exist", opts.Repository, opts.Tag)
+		}
+		return nil
+	}
+	s2ibuilder := newTestS2IBuilder(testS2IBuilderConfig{
+		inspectImageFunc: inspectFunc,
+		pullImageFunc:    pullFunc,
+	})
+
+	if err := s2ibuilder.Build(); err != nil {
+		t.Errorf("unexpected build error: %v", err)
 	}
 }

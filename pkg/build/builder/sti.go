@@ -239,6 +239,21 @@ func (s *S2IBuilder) Build() error {
 		}
 	}
 
+	if config.Incremental {
+		if s.build.Spec.Strategy.SourceStrategy.ForcePull || !isImagePresent(s.dockerClient, config.IncrementalFromTag) {
+			startTime := metav1.Now()
+			err = s.pullImage(config.IncrementalFromTag, t)
+			timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullInputImage, startTime, metav1.Now())
+			// If there was an error, the incremental image may not exist. Treat the build as a normal s2i build.
+			if err != nil {
+				glog.V(2).Infof("Failed to pull incremental builder image %s - executing normal s2i build instead.", config.IncrementalFromTag)
+				glog.V(5).Infof("Incremental image pull failure: %v", err)
+				config.Incremental = false
+				config.IncrementalFromTag = ""
+			}
+		}
+	}
+
 	// Use builder image labels to override defaults if present
 	labels, err := getImageLabels(s.dockerClient, config.BuilderImage)
 	if err != nil {
