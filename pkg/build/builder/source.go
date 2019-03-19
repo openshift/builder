@@ -19,6 +19,7 @@ import (
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
+
 	//"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/containers/buildah"
 
@@ -240,7 +241,12 @@ func ExtractInputBinary(in io.Reader, source *buildapiv1.BinaryBuildSource, dir 
 
 	glog.V(0).Infof("Receiving source from STDIN as archive ...")
 
-	cmd := exec.Command("bsdtar", "-x", "-o", "-m", "-f", "-", "-C", dir)
+	args := []string{"-x", "-o", "-m", "-f", "-", "-C", dir}
+	if glog.Is(6) {
+		args = append(args, "-v")
+	}
+
+	cmd := exec.Command("bsdtar", args...)
 	cmd.Stdin = in
 	out, err := cmd.CombinedOutput()
 	glog.V(4).Infof("Extracting...\n%s", string(out))
