@@ -252,6 +252,12 @@ func HandleBuildStatusUpdate(build *buildapiv1.Build, client buildclientv1.Build
 		if latestBuild == nil {
 			latestBuild, err = client.Get(build.Name, metav1.GetOptions{})
 			if err != nil {
+				latestBuild = nil
+				return false, nil
+			}
+			if latestBuild.Name == "" {
+				latestBuild = nil
+				err = fmt.Errorf("latest version of build %s is empty", build.Name)
 				return false, nil
 			}
 		}
