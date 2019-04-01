@@ -413,7 +413,9 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 	mountPath, err := builder.Mount("")
 	defer func() {
 		err := builder.Unmount()
-		realglog.Errorf("failed to unmount: %v", err)
+		if err != nil {
+			realglog.Errorf("failed to unmount: %v", err)
+		}
 	}()
 	if err != nil {
 		return fmt.Errorf("error mounting image content from image %s: %v", image, err)
