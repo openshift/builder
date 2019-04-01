@@ -1,5 +1,5 @@
-hash: eea852160ba0c46d092d99456cb22ba520fa9788c4ef95e3627a429c0ae0d248
-updated: 2019-03-07T22:43:56.000514891+01:00
+hash: 94079fe6736c7a94a3207f72ec8ef3cd4f1795106879643a573d45a96bf62bf5
+updated: 2019-03-23T22:12:37.394458876-04:00
 imports:
 - name: bitbucket.org/ww/goautoneg
   version: 75cd24fc2f2c2a2088577d12123ddee5f54e0675
@@ -556,7 +556,7 @@ imports:
   subpackages:
   - mat64
 - name: github.com/google/btree
-  version: 4030bb1f1f0c35b30ca7009e9ebd06849dd45306
+  version: bfb38958ad2298964492841280eea188b9c23e7b
 - name: github.com/google/cadvisor
   version: fc17731afdcf184832482e324913c8f1a91b54ee
   subpackages:
@@ -884,7 +884,7 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: 600a5519d1ec56e02c20f42b43888db560bdcb7e
+  version: 71fdeba186565ceda2c6bde4aac9ea50c42b1c63
   subpackages:
   - apps
   - apps/v1
@@ -930,7 +930,7 @@ imports:
   - webconsole
   - webconsole/v1
 - name: github.com/openshift/client-go
-  version: 2d89985ca24a8307e4b5db2574a62d3e6c2444b4
+  version: 8ae2a9c33ba2a3d2ed5dc13d536ca935fc9625b9
   subpackages:
   - apps/clientset/versioned
   - apps/clientset/versioned/fake
@@ -1054,12 +1054,11 @@ imports:
   - user/informers/externalversions/user/v1
   - user/listers/user/v1
 - name: github.com/openshift/library-go
-  version: 10585fdc9322d30d622279729036a07f1ff7bbe1
+  version: c808b4f42728549453f702c5bdc21413f02f09d4
   subpackages:
   - pkg/config/configdefaults
   - pkg/config/helpers
   - pkg/config/leaderelection
-  - pkg/controller
   - pkg/crypto
   - pkg/git
   - pkg/image/internal/digest
@@ -1070,15 +1069,8 @@ imports:
   - pkg/operator/resource/resourceapply
   - pkg/operator/resource/resourcemerge
   - pkg/serviceability
-- name: github.com/openshift/service-serving-cert-signer
-  version: 365659e2c02dccfc8eec541d9aff6927193e508f
-  subpackages:
-  - pkg/boilerplate/controller
-  - pkg/controller/api
-  - pkg/controller/servingcert/controller
-  - pkg/controller/servingcert/cryptoextensions
 - name: github.com/openshift/source-to-image
-  version: ff97a646334bca626f7950dce881acd7c27f2702
+  version: 2ba8a349386aff03c26729096b0225a691355fe9
   subpackages:
   - pkg/api
   - pkg/api/constants
@@ -1101,7 +1093,7 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/pkg/profile
-  version: 22592cc4bae3572d59be8852c6980023e4c9dec5
+  version: f6fe06335df110bcf1ed6d4e852b760bfc15beee
 - name: github.com/pkg/sftp
   version: 4d0e916071f68db74f8a73926335f809396d6b42
 - name: github.com/pmezard/go-difflib
@@ -1176,15 +1168,6 @@ imports:
   version: 10ef21a441db47d8b13ebcc5fd2310f636973c77
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
-- name: github.com/skynetservices/skydns
-  version: 775ef406696380ce92b76e72421e86b6868905d8
-  repo: https://github.com/openshift/skynetservices-skydns
-  subpackages:
-  - cache
-  - metrics
-  - msg
-  - server
-  - singleflight
 - name: github.com/spf13/afero
   version: b28a7effac979219c2a2ed6205a4d70e4b1bcd02
   subpackages:
@@ -1523,7 +1506,7 @@ imports:
   - storage/v1alpha1
   - storage/v1beta1
 - name: k8s.io/apiextensions-apiserver
-  version: 63bd5e1c39483f0ef7fd275794d19a7cba19b764
+  version: 36be1826c980fa7ca82d91645e06e3157f159322
   repo: https://github.com/openshift/kubernetes-apiextensions-apiserver.git
   subpackages:
   - pkg/apis/apiextensions
@@ -1563,7 +1546,7 @@ imports:
   - pkg/registry/customresourcedefinition
   - test/integration/fixtures
 - name: k8s.io/apimachinery
-  version: a86a798d1cebbc89d0ab74c63ad7dee3191e5251
+  version: 9fdc0b79e8fc9fa93648c5d98b49089026122bb6
   repo: https://github.com/openshift/kubernetes-apimachinery.git
   subpackages:
   - pkg/api/apitesting
@@ -1633,7 +1616,7 @@ imports:
   - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/apiserver
-  version: e287325a591914d2df40201799b2ac5867076196
+  version: d9b38d4509a220ee0bde78b1cbeb00ae7a101d6e
   repo: https://github.com/openshift/kubernetes-apiserver.git
   subpackages:
   - pkg/admission
@@ -1762,7 +1745,7 @@ imports:
   - pkg/genericclioptions/printers
   - pkg/genericclioptions/resource
 - name: k8s.io/client-go
-  version: 287ba817609cfd4079cdbb7fb36c4659c2c74341
+  version: a6658b4c2ca255291938f67d3f7f17019d30a79c
   repo: https://github.com/openshift/kubernetes-client-go.git
   subpackages:
   - discovery
@@ -1964,7 +1947,7 @@ imports:
   - util/testing
   - util/workqueue
 - name: k8s.io/code-generator
-  version: 1bdf8e8a8fde675de375d9d0a8fa77c4034be0a0
+  version: 13d81ee386d3d039027dd42e7b3d1d30d8d788f2
   repo: https://github.com/openshift/kubernetes-code-generator.git
 - name: k8s.io/csi-api
   version: 3690dd22ed3c34a731f5c46fb295ddd368c9c1a4
@@ -2047,7 +2030,7 @@ imports:
   subpackages:
   - config/v1beta1
 - name: k8s.io/kubernetes
-  version: 80f2017b3c759c5625bda97644a524300fb1f9a3
+  version: ff7db0a0982c25bb2e5567c513c01eaabbebf805
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - cmd/cloud-controller-manager/app/apis/config
@@ -2540,6 +2523,7 @@ imports:
   - pkg/quota/evaluator/core
   - pkg/quota/generic
   - pkg/quota/install
+  - pkg/quota/v1
   - pkg/registry/admissionregistration/initializerconfiguration
   - pkg/registry/admissionregistration/initializerconfiguration/storage
   - pkg/registry/admissionregistration/mutatingwebhookconfiguration

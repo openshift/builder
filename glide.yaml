@@ -13,7 +13,10 @@ import:
 - package: github.com/fsouza/go-dockerclient
   repo:    https://github.com/openshift/go-dockerclient.git
   version: openshift-4.0
+# Pinned to avoid ERROR: logging before flag.Parse
+# same level origin uses currently.
 - package: github.com/golang/glog
+  version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - package: github.com/opencontainers/runc
   subpackages:
   - libcontainer/cgroups
@@ -108,3 +111,6 @@ import:
 # mpb needs pin to fix resolution errors
 - package: github.com/vbauerster/mpb
   version: v3.3.4
+# pinned to fix sirupsen issues
+- package: github.com/klauspost/cpuid
+  version: 0da02118eaa37aa89aea6776b464a4ad00990af1

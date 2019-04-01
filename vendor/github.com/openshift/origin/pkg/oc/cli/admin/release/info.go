@@ -756,6 +756,7 @@ func codeChanged(from, to *imageapi.TagReference) bool {
 func describeReleaseInfo(out io.Writer, release *ReleaseInfo, showCommit, pullSpec, showSize bool) error {
 	w := tabwriter.NewWriter(out, 0, 4, 1, ' ', 0)
 	defer w.Flush()
+	now := time.Now()
 	fmt.Fprintf(w, "Name:\t%s\n", release.PreferredName())
 	fmt.Fprintf(w, "Digest:\t%s\n", release.Digest)
 	fmt.Fprintf(w, "Created:\t%s\n", release.Config.Created.Local().Truncate(time.Second))
@@ -819,7 +820,7 @@ func describeReleaseInfo(out io.Writer, release *ReleaseInfo, showCommit, pullSp
 			if len(baseLayer) > 1 {
 				baseHeader = "BASE"
 			}
-			fmt.Fprintf(w, "  NAME\t LAYERS\t SIZE MB\t UNIQUE MB\t %s\n", baseHeader)
+			fmt.Fprintf(w, "  NAME\t AGE\t LAYERS\t SIZE MB\t UNIQUE MB\t %s\n", baseHeader)
 			coveredLayer := make(map[string]struct{})
 			currentBase := 1
 			for _, tag := range release.References.Spec.Tags {
@@ -829,7 +830,7 @@ func describeReleaseInfo(out io.Writer, release *ReleaseInfo, showCommit, pullSp
 
 				image, ok := release.Images[tag.Name]
 				if !ok {
-					fmt.Fprintf(w, "  %s\t\t\t\t\n", tag.Name)
+					fmt.Fprintf(w, "  %s\t\t\t\t\t\n", tag.Name)
 				}
 
 				// create a column for a small number of unique base layers that visually indicates
@@ -871,8 +872,11 @@ func describeReleaseInfo(out io.Writer, release *ReleaseInfo, showCommit, pullSp
 						coveredLayer[top.Digest.String()] = struct{}{}
 					}
 				}
-
-				fmt.Fprintf(w, "  %s\t%7d\t%8.1f\t%10.1f\t %s\n", tag.Name, len(image.Layers), float64(size)/1024/1024, float64(unshared)/1024/1024, base)
+				age := ""
+				if image.Config != nil && !image.Config.Created.IsZero() {
+					age = duration.ShortHumanDuration(now.Sub(image.Config.Created))
+				}
+				fmt.Fprintf(w, "  %s\t%4s\t%7d\t%8.1f\t%10.1f\t %s\n", tag.Name, age, len(image.Layers), float64(size)/1024/1024, float64(unshared)/1024/1024, base)
 			}
 			fmt.Fprintln(w)
 			if len(baseLayer) > 1 {
@@ -1234,6 +1238,8 @@ type CodeChange struct {
 	Repo     string
 	From, To string
 
+	AlternateRepos []string
+
 	ImagesAffected []string
 }
 
@@ -1256,11 +1262,11 @@ func commitsForRepo(dir string, change CodeChange, out, errOut io.Writer) (*url.
 	if err != nil {
 		return nil, nil, fmt.Errorf("The source repository cannot be parsed %s: %v", change.Repo, err)
 	}
-	g, err := ensureCloneForRepo(dir, change.Repo, errOut, errOut)
+	g, err := ensureCloneForRepo(dir, change.Repo, change.AlternateRepos, errOut, errOut)
 	if err != nil {
 		return nil, nil, err
 	}
-	commits, err := mergeLogForRepo(g, change.From, change.To)
+	commits, err := mergeLogForRepo(g, change.Repo, change.From, change.To)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Could not load commits for %s: %v", change.Repo, err)
 	}
@@ -1319,8 +1325,13 @@ func releaseDiffContentChanges(diff *ReleaseDiff) ([]CodeChange, []ImageChange, 
 	for _, key := range keys {
 		imageDiff := diff.ChangedImages[key]
 		from, to := imageDiff.From, imageDiff.To
-		_, newRepo := from.Annotations[annotationBuildSourceLocation], to.Annotations[annotationBuildSourceLocation]
+		oldRepo, newRepo := from.Annotations[annotationBuildSourceLocation], to.Annotations[annotationBuildSourceLocation]
 		oldCommit, newCommit := from.Annotations[annotationBuildSourceCommit], to.Annotations[annotationBuildSourceCommit]
+
+		var alternateRepos []string
+		if len(oldRepo) > 0 && oldRepo != newRepo {
+			alternateRepos = append(alternateRepos, oldRepo)
+		}
 
 		// only display a given chunk of changes once
 		commitRange := fmt.Sprintf("%s..%s", oldCommit, newCommit)
@@ -1335,6 +1346,7 @@ func releaseDiffContentChanges(diff *ReleaseDiff) ([]CodeChange, []ImageChange, 
 			Repo:           newRepo,
 			From:           oldCommit,
 			To:             newCommit,
+			AlternateRepos: alternateRepos,
 			ImagesAffected: allKeys,
 		})
 	}
