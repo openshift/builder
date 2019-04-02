@@ -341,11 +341,16 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 		}
 	}
 
-	out, err := exec.Command("cp", "-vr", sourceDir, destDir).CombinedOutput()
+	args := []string{"-r"}
+	if glog.Is(5) {
+		args = append(args, "-v")
+	}
+	args = append(args, sourceDir, destDir)
+	out, err := exec.Command("cp", args...).CombinedOutput()
+	glog.V(4).Infof("copying image content: %s", string(out))
 	if err != nil {
 		return err
 	}
-	glog.V(4).Infof("copied input image content: %s", string(out))
 	return nil
 }
 
@@ -422,8 +427,16 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 	}
 
 	for _, path := range paths {
-		glog.V(4).Infof("Extracting path %s from image %s to %s", filepath.Join(mountPath, path.SourcePath), image, path.DestinationDir)
-		err := copyImageSourceFromFilesytem(filepath.Join(mountPath, path.SourcePath), filepath.Join(buildDir, path.DestinationDir))
+		destPath := filepath.Join(buildDir, path.DestinationDir)
+		// Paths ending with "/." are truncated by filepath.Join
+		// Add it back to preserve copy behavior per docs:
+		// https://docs.okd.io/latest/dev_guide/builds/build_inputs.html#image-source
+		sourcePath := filepath.Join(mountPath, path.SourcePath)
+		if strings.HasSuffix(path.SourcePath, "/.") {
+			sourcePath = sourcePath + "/."
+		}
+		glog.V(4).Infof("Extracting path %s from image %s to %s", path.SourcePath, image, path.DestinationDir)
+		err := copyImageSourceFromFilesytem(sourcePath, destPath)
 		if err != nil {
 			return fmt.Errorf("error copying source path %s to %s: %v", path.SourcePath, path.DestinationDir, err)
 		}
