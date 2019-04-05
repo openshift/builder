@@ -53,7 +53,7 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	}
 
 	if authConfig.Username != "" && authConfig.Password != "" {
-		glog.V(2).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
+		glog.V(5).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
 		if err := config.SetAuthentication(&systemContext, ref.Registry, authConfig.Username, authConfig.Password); err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 	systemContext.AuthFilePath = "/tmp/config.json"
 
 	for registry, ac := range opts.AuthConfigs.Configs {
-		glog.V(2).Infof("Setting authentication for registry %q at %q.", registry, ac.ServerAddress)
+		glog.V(5).Infof("Setting authentication for registry %q at %q.", registry, ac.ServerAddress)
 		if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
 			return err
 		}

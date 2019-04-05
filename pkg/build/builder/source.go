@@ -387,7 +387,7 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 
 	if auths != nil {
 		for registry, ac := range auths.Configs {
-			glog.Infof("Setting authentication for registry %q using %#v", registry, ac)
+			glog.V(5).Infof("Setting authentication for registry %q using %q.", registry, ac.ServerAddress)
 			if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
 				return err
 			}
