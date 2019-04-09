@@ -19,6 +19,7 @@ import (
 	buildfake "github.com/openshift/client-go/build/clientset/versioned/fake"
 	"github.com/openshift/library-go/pkg/git"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
+	s2iconstants "github.com/openshift/source-to-image/pkg/api/constants"
 	s2ibuild "github.com/openshift/source-to-image/pkg/build"
 )
 
@@ -332,5 +333,60 @@ func TestIncrementalPullError(t *testing.T) {
 
 	if err := s2ibuilder.Build(); err != nil {
 		t.Errorf("unexpected build error: %v", err)
+	}
+}
+
+func TestGetAssembleUser(t *testing.T) {
+	testCases := []struct {
+		name              string
+		containerUser     string
+		assembleUserLabel string
+		expectedResult    string
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name:           "container user set",
+			containerUser:  "1002",
+			expectedResult: "1002",
+		},
+		{
+			name:              "assemble user label set",
+			assembleUserLabel: "1003",
+			expectedResult:    "1003",
+		},
+		{
+			name:              "assemble user override",
+			containerUser:     "1002",
+			assembleUserLabel: "1003",
+			expectedResult:    "1003",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeDocker := &FakeDocker{
+				inspectImageFunc: func(name string) (*docker.Image, error) {
+					image := &docker.Image{
+						ContainerConfig: docker.Config{
+							User:   tc.containerUser,
+							Image:  name,
+							Labels: make(map[string]string),
+						},
+					}
+					if len(tc.assembleUserLabel) > 0 {
+						image.ContainerConfig.Labels[s2iconstants.AssembleUserLabel] = tc.assembleUserLabel
+					}
+					return image, nil
+				},
+			}
+			assembleUser, err := getAssembleUser(fakeDocker, "dummy-image:latest")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if assembleUser != tc.expectedResult {
+				t.Errorf("expected assemble user %s, got %s", tc.expectedResult, assembleUser)
+			}
+		})
 	}
 }

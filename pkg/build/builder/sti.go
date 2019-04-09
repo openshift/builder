@@ -254,15 +254,18 @@ func (s *S2IBuilder) Build() error {
 		}
 	}
 
-	// Use builder image labels to override defaults if present
-	labels, err := getImageLabels(s.dockerClient, config.BuilderImage)
+	assembleUser, err := getAssembleUser(s.dockerClient, config.BuilderImage)
 	if err != nil {
 		return err
 	}
-	assembleUser := labels[s2iconstants.AssembleUserLabel]
 	if len(assembleUser) > 0 {
 		glog.V(4).Infof("Using builder image assemble user %s", assembleUser)
 		config.AssembleUser = assembleUser
+	}
+
+	labels, err := getImageLabels(s.dockerClient, config.BuilderImage)
+	if err != nil {
+		return err
 	}
 	destination := labels[s2iconstants.DestinationLabel]
 	if len(destination) > 0 {
@@ -598,4 +601,18 @@ func getImageLabels(docker DockerClient, imageTag string) (map[string]string, er
 		return nil, err
 	}
 	return image.ContainerConfig.Labels, nil
+}
+
+func getAssembleUser(docker DockerClient, imageTag string) (string, error) {
+	image, err := docker.InspectImage(imageTag)
+	if err != nil {
+		return "", err
+	}
+	// Default the AssembleUser to the most recent User in the builder image
+	assembleUser := image.ContainerConfig.User
+	if labelAssembleUser, ok := image.ContainerConfig.Labels[s2iconstants.AssembleUserLabel]; ok {
+		// If the builder image has the assemble-user label, override with the provided value
+		assembleUser = labelAssembleUser
+	}
+	return assembleUser, nil
 }
