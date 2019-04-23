@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/RangelReale/osincli"
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,16 +79,21 @@ func RequestToken(clientCfg *restclient.Config, reader io.Reader, defaultUsernam
 }
 
 func NewRequestTokenOptions(clientCfg *restclient.Config, reader io.Reader, defaultUsername string, defaultPassword string, tokenFlow bool) *RequestTokenOptions {
-	handlers := []ChallengeHandler{}
+	// priority ordered list of challenge handlers
+	// the SPNEGO ones must come before basic auth
+	var handlers []ChallengeHandler
+
 	if GSSAPIEnabled() {
+		klog.V(6).Info("GSSAPI Enabled")
 		handlers = append(handlers, NewNegotiateChallengeHandler(NewGSSAPINegotiator(defaultUsername)))
 	}
+
 	if SSPIEnabled() {
+		klog.V(6).Info("SSPI Enabled")
 		handlers = append(handlers, NewNegotiateChallengeHandler(NewSSPINegotiator(defaultUsername, defaultPassword, clientCfg.Host, reader)))
 	}
-	if BasicEnabled() {
-		handlers = append(handlers, &BasicChallengeHandler{Host: clientCfg.Host, Reader: reader, Username: defaultUsername, Password: defaultPassword})
-	}
+
+	handlers = append(handlers, &BasicChallengeHandler{Host: clientCfg.Host, Reader: reader, Username: defaultUsername, Password: defaultPassword})
 
 	var handler ChallengeHandler
 	if len(handlers) == 1 {
@@ -163,7 +168,7 @@ func (o *RequestTokenOptions) RequestToken() (string, error) {
 		// Always release the handler
 		if err := o.Handler.Release(); err != nil {
 			// Release errors shouldn't fail the token request, just log
-			glog.V(4).Infof("error releasing handler: %v", err)
+			klog.V(4).Infof("error releasing handler: %v", err)
 		}
 	}()
 
@@ -425,23 +430,23 @@ func transportWithSystemRoots(issuer string, clientConfig *restclient.Config) (h
 	switch err.(type) {
 	case nil:
 		// no error meaning the system roots work with the OAuth server
-		glog.V(4).Info("using system roots as no error was encountered")
+		klog.V(4).Info("using system roots as no error was encountered")
 		return systemRootsRT, nil
 	case x509.UnknownAuthorityError, x509.HostnameError, x509.CertificateInvalidError, x509.SystemRootsError,
 		tls.RecordHeaderError, *net.OpError:
 		// fallback to the CA in the kubeconfig since the system roots did not work
 		// we are very broad on the errors here to avoid failing when we should fallback
-		glog.V(4).Infof("falling back to kubeconfig CA due to possible x509 error: %v", err)
+		klog.V(4).Infof("falling back to kubeconfig CA due to possible x509 error: %v", err)
 		return restclient.TransportFor(clientConfig)
 	default:
 		switch err {
 		case io.EOF, io.ErrUnexpectedEOF, io.ErrNoProgress:
 			// also fallback on various io errors
-			glog.V(4).Infof("falling back to kubeconfig CA due to possible IO error: %v", err)
+			klog.V(4).Infof("falling back to kubeconfig CA due to possible IO error: %v", err)
 			return restclient.TransportFor(clientConfig)
 		}
 		// unknown error, fail (ideally should never occur)
-		glog.V(4).Infof("unexpected error during system roots probe: %v", err)
+		klog.V(4).Infof("unexpected error during system roots probe: %v", err)
 		return nil, err
 	}
 }

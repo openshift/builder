@@ -9,10 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/kubernetes/pkg/kubectl/cmd/logs"
+
 	"github.com/MakeNowJust/heredoc"
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,11 +32,10 @@ import (
 	corev1typedclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	ctl "k8s.io/kubernetes/pkg/kubectl"
-	kcmd "k8s.io/kubernetes/pkg/kubectl/cmd"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/generate"
 	"k8s.io/kubernetes/pkg/kubectl/polymorphichelpers"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	"github.com/openshift/api/build"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -50,7 +51,7 @@ import (
 	imageapi "github.com/openshift/origin/pkg/image/apis/image"
 	imageutil "github.com/openshift/origin/pkg/image/util"
 	"github.com/openshift/origin/pkg/oc/lib/newapp"
-	newapp "github.com/openshift/origin/pkg/oc/lib/newapp/app"
+	newappapp "github.com/openshift/origin/pkg/oc/lib/newapp/app"
 	newcmd "github.com/openshift/origin/pkg/oc/lib/newapp/cmd"
 	dockerutil "github.com/openshift/origin/pkg/oc/lib/newapp/docker"
 	routeapi "github.com/openshift/origin/pkg/route/apis/route"
@@ -482,7 +483,7 @@ func (o *AppOptions) RunNewApp() error {
 					return false, nil
 				})
 				if err != nil {
-					glog.V(4).Infof("Failed to poll route %s host field: %s", t.Name, err)
+					klog.V(4).Infof("Failed to poll route %s host field: %s", t.Name, err)
 				} else {
 					fmt.Fprintf(out, "%sAccess your application via route '%s' \n", indent, route.Spec.Host)
 				}
@@ -520,11 +521,11 @@ func getServices(items []runtime.Object) []*corev1.Service {
 		unstructuredObj := i.(*unstructured.Unstructured)
 		obj, err := legacyscheme.Scheme.New(unstructuredObj.GroupVersionKind())
 		if err != nil {
-			glog.V(1).Info(err)
+			klog.V(1).Info(err)
 			continue
 		}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.Object, obj); err != nil {
-			glog.V(1).Info(err)
+			klog.V(1).Info(err)
 			continue
 		}
 
@@ -546,7 +547,7 @@ func followInstallation(config *newcmd.AppConfig, clientGetter genericclioptions
 		return err
 	}
 
-	opts := &kcmd.LogsOptions{
+	opts := &logs.LogsOptions{
 		Namespace:   pod.Namespace,
 		ResourceArg: pod.Name,
 		Options: &corev1.PodLogOptions{
@@ -554,7 +555,7 @@ func followInstallation(config *newcmd.AppConfig, clientGetter genericclioptions
 			Container: pod.Spec.Containers[0].Name,
 		},
 		RESTClientGetter: clientGetter,
-		ConsumeRequestFn: kcmd.DefaultConsumeRequest,
+		ConsumeRequestFn: logs.DefaultConsumeRequest,
 		LogsForObject:    logsForObjectFn,
 		IOStreams:        genericclioptions.IOStreams{Out: config.Out},
 	}
@@ -590,7 +591,7 @@ func installationStarted(c corev1typedclient.PodInterface, name string, s corev1
 			if secret.Annotations[newcmd.GeneratedForJob] == "true" &&
 				secret.Annotations[newcmd.GeneratedForJobFor] == pod.Annotations[newcmd.GeneratedForJobFor] {
 				if err := s.Delete(name, nil); err != nil {
-					glog.V(4).Infof("Failed to delete install secret %s: %v", name, err)
+					klog.V(4).Infof("Failed to delete install secret %s: %v", name, err)
 				}
 			}
 		}
@@ -611,7 +612,7 @@ func installationComplete(c corev1typedclient.PodInterface, name string, out io.
 		case corev1.PodSucceeded:
 			fmt.Fprintf(out, "--> Success\n")
 			if err := c.Delete(name, nil); err != nil {
-				glog.V(4).Infof("Failed to delete install pod %s: %v", name, err)
+				klog.V(4).Infof("Failed to delete install pod %s: %v", name, err)
 			}
 			return true, nil
 		case corev1.PodFailed:
@@ -626,7 +627,7 @@ func setAppConfigLabels(c *cobra.Command, config *newcmd.AppConfig) error {
 	labelStr := kcmdutil.GetFlagString(c, "labels")
 	if len(labelStr) != 0 {
 		var err error
-		config.Labels, err = ctl.ParseLabels(labelStr)
+		config.Labels, err = generate.ParseLabels(labelStr)
 		if err != nil {
 			return err
 		}
@@ -641,12 +642,12 @@ func getDockerClient() (*docker.Client, error) {
 	dockerClient, _, err := dockerutil.NewHelper().GetClient()
 	if err == nil {
 		if err = dockerClient.Ping(); err != nil {
-			glog.V(4).Infof("Docker client did not respond to a ping: %v", err)
+			klog.V(4).Infof("Docker client did not respond to a ping: %v", err)
 			return nil, err
 		}
 		return dockerClient, nil
 	}
-	glog.V(2).Infof("No local Docker daemon detected: %v", err)
+	klog.V(2).Infof("No local Docker daemon detected: %v", err)
 	return nil, err
 }
 
@@ -739,11 +740,11 @@ func CompleteAppConfig(config *newcmd.AppConfig, f kcmdutil.Factory, c *cobra.Co
 		return kcmdutil.UsageErrorf(c, "--source-image must be specified when --source-image-path is specified.")
 	}
 
-	if config.BinaryBuild && config.Strategy == generate.StrategyPipeline {
+	if config.BinaryBuild && config.Strategy == newapp.StrategyPipeline {
 		return kcmdutil.UsageErrorf(c, "specifying binary builds and the pipeline strategy at the same time is not allowed.")
 	}
 
-	if len(config.BuildArgs) > 0 && config.Strategy != generate.StrategyUnspecified && config.Strategy != generate.StrategyDocker {
+	if len(config.BuildArgs) > 0 && config.Strategy != newapp.StrategyUnspecified && config.Strategy != newapp.StrategyDocker {
 		return kcmdutil.UsageErrorf(c, "Cannot use '--build-arg' without a Docker build")
 	}
 	return nil
@@ -908,7 +909,7 @@ func TransformRunError(err error, baseName, commandName, commandPath string, gro
 			)
 		}
 		return
-	case newapp.ErrNoMatch:
+	case newappapp.ErrNoMatch:
 		classification, _ := config.ClassificationWinners[t.Value]
 		if classification.IncludeGitErrors {
 			notGitRepo, ok := config.SourceClassificationErrors[t.Value]
@@ -936,7 +937,7 @@ func TransformRunError(err error, baseName, commandName, commandPath string, gro
 			t.Errs...,
 		)
 		return
-	case newapp.ErrMultipleMatches:
+	case newappapp.ErrMultipleMatches:
 		classification, _ := config.ClassificationWinners[t.Value]
 		buf := &bytes.Buffer{}
 		for i, match := range t.Matches {
@@ -975,7 +976,7 @@ func TransformRunError(err error, baseName, commandName, commandPath string, gro
 			t.Errs...,
 		)
 		return
-	case newapp.ErrPartialMatch:
+	case newappapp.ErrPartialMatch:
 		classification, _ := config.ClassificationWinners[t.Value]
 		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, "* %s\n", t.Match.Description)
@@ -993,7 +994,7 @@ func TransformRunError(err error, baseName, commandName, commandPath string, gro
 			t.Errs...,
 		)
 		return
-	case newapp.ErrNoTagsFound:
+	case newappapp.ErrNoTagsFound:
 		classification, _ := config.ClassificationWinners[t.Value]
 		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, "  Use --allow-missing-imagestream-tags to use this image stream\n\n")
@@ -1018,7 +1019,15 @@ func TransformRunError(err error, baseName, commandName, commandPath string, gro
 		// TODO: suggest things to the user
 		groups.Add("", "", "", UsageError(commandPath, newAppNoInput, baseName, commandName))
 	default:
-		groups.Add("", "", "", err)
+		if runtime.IsNotRegisteredError(err) {
+			useProcessMsg := fmt.Sprintf("The template contained an object type unknown to `oc new-app`.  Use `oc process | oc create` instead.  Error details: %v", err)
+			if len(config.ComponentInputs.TemplateFiles) > 0 {
+				useProcessMsg = fmt.Sprintf("The template contained an object type unknown to `oc new-app`.  Use `oc process -f %s | oc create -f -` instead.  Error details: %v", config.ComponentInputs.TemplateFiles[0], err)
+			}
+			groups.Add("", "", "", fmt.Errorf(useProcessMsg))
+		} else {
+			groups.Add("", "", "", err)
+		}
 	}
 	return
 }
@@ -1033,9 +1042,9 @@ func printHumanReadableQueryResult(r *newcmd.QueryResult, out io.Writer, baseNam
 		return fmt.Errorf("no matches found")
 	}
 
-	templates := newapp.ComponentMatches{}
-	imageStreams := newapp.ComponentMatches{}
-	dockerImages := newapp.ComponentMatches{}
+	templates := newappapp.ComponentMatches{}
+	imageStreams := newappapp.ComponentMatches{}
+	dockerImages := newappapp.ComponentMatches{}
 
 	for _, match := range r.Matches {
 		switch {
@@ -1048,9 +1057,9 @@ func printHumanReadableQueryResult(r *newcmd.QueryResult, out io.Writer, baseNam
 		}
 	}
 
-	sort.Sort(newapp.ScoredComponentMatches(templates))
-	sort.Sort(newapp.ScoredComponentMatches(imageStreams))
-	sort.Sort(newapp.ScoredComponentMatches(dockerImages))
+	sort.Sort(newappapp.ScoredComponentMatches(templates))
+	sort.Sort(newappapp.ScoredComponentMatches(imageStreams))
+	sort.Sort(newappapp.ScoredComponentMatches(dockerImages))
 
 	if len(templates) > 0 {
 		fmt.Fprintf(out, "Templates (%s %s --template=<template>)\n", baseName, commandName)
@@ -1132,7 +1141,7 @@ type configSecretRetriever struct {
 	config *restclient.Config
 }
 
-func newConfigSecretRetriever(config *restclient.Config) newapp.SecretAccessor {
+func newConfigSecretRetriever(config *restclient.Config) newappapp.SecretAccessor {
 	return &configSecretRetriever{config}
 }
 

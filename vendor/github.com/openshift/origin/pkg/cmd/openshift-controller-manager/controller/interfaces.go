@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,6 +29,8 @@ import (
 	imageinformer "github.com/openshift/client-go/image/informers/externalversions"
 	networkclient "github.com/openshift/client-go/network/clientset/versioned"
 	networkinformer "github.com/openshift/client-go/network/informers/externalversions"
+	quotaclient "github.com/openshift/client-go/quota/clientset/versioned"
+	quotainformer "github.com/openshift/client-go/quota/informers/externalversions"
 	routeclient "github.com/openshift/client-go/route/clientset/versioned"
 	routeinformer "github.com/openshift/client-go/route/informers/externalversions"
 	securityclient "github.com/openshift/client-go/security/clientset/versioned"
@@ -36,8 +38,6 @@ import (
 	templateinformer "github.com/openshift/client-go/template/informers/externalversions"
 	"github.com/openshift/origin/pkg/client/genericinformers"
 	"github.com/openshift/origin/pkg/cmd/server/bootstrappolicy"
-	quotainformer "github.com/openshift/origin/pkg/quota/generated/informers/internalversion"
-	quotaclient "github.com/openshift/origin/pkg/quota/generated/internalclientset"
 )
 
 func NewControllerContext(
@@ -88,7 +88,7 @@ func NewControllerContext(
 	if err != nil {
 		return nil, err
 	}
-	quotaClient, err := quotaclient.NewForConfig(clientConfig)
+	quotaClient, err := quotaclient.NewForConfig(nonProtobufConfig(clientConfig))
 	if err != nil {
 		return nil, err
 	}
@@ -119,12 +119,12 @@ func NewControllerContext(
 		ConfigInformers:                    configinformer.NewSharedInformerFactory(configClient, defaultInformerResyncPeriod),
 		ImageInformers:                     imageinformer.NewSharedInformerFactory(imageClient, defaultInformerResyncPeriod),
 		NetworkInformers:                   networkinformer.NewSharedInformerFactory(networkClient, defaultInformerResyncPeriod),
-		InternalQuotaInformers:             quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
-		InternalRouteInformers:             routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
-		InternalTemplateInformers:          templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
-		Stop:             stopCh,
-		InformersStarted: make(chan struct{}),
-		RestMapper:       dynamicRestMapper,
+		QuotaInformers:                     quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
+		RouteInformers:                     routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
+		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
+		Stop:                               stopCh,
+		InformersStarted:                   make(chan struct{}),
+		RestMapper:                         dynamicRestMapper,
 	}
 	openshiftControllerContext.GenericResourceInformer = openshiftControllerContext.ToGenericInformer()
 
@@ -151,13 +151,13 @@ func (c *ControllerContext) ToGenericInformer() genericinformers.GenericResource
 			return c.NetworkInformers.ForResource(resource)
 		}),
 		genericinformers.GenericInternalResourceInformerFunc(func(resource schema.GroupVersionResource) (informers.GenericInformer, error) {
-			return c.InternalQuotaInformers.ForResource(resource)
+			return c.QuotaInformers.ForResource(resource)
 		}),
 		genericinformers.GenericResourceInformerFunc(func(resource schema.GroupVersionResource) (informers.GenericInformer, error) {
-			return c.InternalRouteInformers.ForResource(resource)
+			return c.RouteInformers.ForResource(resource)
 		}),
 		genericinformers.GenericInternalResourceInformerFunc(func(resource schema.GroupVersionResource) (informers.GenericInformer, error) {
-			return c.InternalTemplateInformers.ForResource(resource)
+			return c.TemplateInformers.ForResource(resource)
 		}),
 	)
 }
@@ -171,9 +171,9 @@ type ControllerContext struct {
 	KubernetesInformers                informers.SharedInformerFactory
 	OpenshiftConfigKubernetesInformers informers.SharedInformerFactory
 
-	InternalTemplateInformers templateinformer.SharedInformerFactory
-	InternalQuotaInformers    quotainformer.SharedInformerFactory
-	InternalRouteInformers    routeinformer.SharedInformerFactory
+	TemplateInformers templateinformer.SharedInformerFactory
+	QuotaInformers    quotainformer.SharedInformerFactory
+	RouteInformers    routeinformer.SharedInformerFactory
 
 	AppsInformers    appsinformer.SharedInformerFactory
 	BuildInformers   buildinformer.SharedInformerFactory
@@ -204,9 +204,9 @@ func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.ImageInformers.Start(stopCh)
 	c.NetworkInformers.Start(stopCh)
 
-	c.InternalTemplateInformers.Start(stopCh)
-	c.InternalQuotaInformers.Start(stopCh)
-	c.InternalRouteInformers.Start(stopCh)
+	c.TemplateInformers.Start(stopCh)
+	c.QuotaInformers.Start(stopCh)
+	c.RouteInformers.Start(stopCh)
 
 	c.informersStartedLock.Lock()
 	defer c.informersStartedLock.Unlock()
@@ -242,8 +242,8 @@ type ControllerClientBuilder interface {
 	OpenshiftImageClient(name string) (imageclient.Interface, error)
 	OpenshiftImageClientOrDie(name string) imageclient.Interface
 
-	OpenshiftInternalQuotaClient(name string) (quotaclient.Interface, error)
-	OpenshiftInternalQuotaClientOrDie(name string) quotaclient.Interface
+	OpenshiftQuotaClient(name string) (quotaclient.Interface, error)
+	OpenshiftQuotaClientOrDie(name string) quotaclient.Interface
 
 	OpenshiftNetworkClient(name string) (networkclient.Interface, error)
 	OpenshiftNetworkClientOrDie(name string) networkclient.Interface
@@ -275,7 +275,7 @@ func (b OpenshiftControllerClientBuilder) OpenshiftTemplateClient(name string) (
 func (b OpenshiftControllerClientBuilder) OpenshiftTemplateClientOrDie(name string) templateclient.Interface {
 	client, err := b.OpenshiftTemplateClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }
@@ -297,7 +297,7 @@ func (b OpenshiftControllerClientBuilder) OpenshiftImageClient(name string) (ima
 func (b OpenshiftControllerClientBuilder) OpenshiftImageClientOrDie(name string) imageclient.Interface {
 	client, err := b.OpenshiftImageClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }
@@ -319,7 +319,7 @@ func (b OpenshiftControllerClientBuilder) OpenshiftAppsClient(name string) (apps
 func (b OpenshiftControllerClientBuilder) OpenshiftAppsClientOrDie(name string) appsclient.Interface {
 	client, err := b.OpenshiftAppsClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }
@@ -341,7 +341,7 @@ func (b OpenshiftControllerClientBuilder) OpenshiftBuildClient(name string) (bui
 func (b OpenshiftControllerClientBuilder) OpenshiftBuildClientOrDie(name string) buildclient.Interface {
 	client, err := b.OpenshiftBuildClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }
@@ -363,26 +363,26 @@ func (b OpenshiftControllerClientBuilder) OpenshiftConfigClient(name string) (co
 func (b OpenshiftControllerClientBuilder) OpenshiftConfigClientOrDie(name string) configclient.Interface {
 	client, err := b.OpenshiftConfigClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }
 
-func (b OpenshiftControllerClientBuilder) OpenshiftInternalQuotaClient(name string) (quotaclient.Interface, error) {
+func (b OpenshiftControllerClientBuilder) OpenshiftQuotaClient(name string) (quotaclient.Interface, error) {
 	clientConfig, err := b.Config(name)
 	if err != nil {
 		return nil, err
 	}
-	return quotaclient.NewForConfig(clientConfig)
+	return quotaclient.NewForConfig(nonProtobufConfig(clientConfig))
 }
 
 // OpenshiftInternalBuildClientOrDie provides a REST client for the build API.
 // If the client cannot be created because of configuration error, this function
 // will panic.
-func (b OpenshiftControllerClientBuilder) OpenshiftInternalQuotaClientOrDie(name string) quotaclient.Interface {
-	client, err := b.OpenshiftInternalQuotaClient(name)
+func (b OpenshiftControllerClientBuilder) OpenshiftQuotaClientOrDie(name string) quotaclient.Interface {
+	client, err := b.OpenshiftQuotaClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }
@@ -404,7 +404,7 @@ func (b OpenshiftControllerClientBuilder) OpenshiftNetworkClient(name string) (n
 func (b OpenshiftControllerClientBuilder) OpenshiftNetworkClientOrDie(name string) networkclient.Interface {
 	client, err := b.OpenshiftNetworkClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }
@@ -420,7 +420,7 @@ func (b OpenshiftControllerClientBuilder) OpenshiftSecurityClient(name string) (
 func (b OpenshiftControllerClientBuilder) OpenshiftSecurityClientOrDie(name string) securityclient.Interface {
 	client, err := b.OpenshiftSecurityClient(name)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 	return client
 }

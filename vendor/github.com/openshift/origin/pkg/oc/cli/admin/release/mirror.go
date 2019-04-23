@@ -10,23 +10,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	imagev1 "github.com/openshift/api/image/v1"
 	imageclient "github.com/openshift/client-go/image/clientset/versioned"
 	"github.com/openshift/origin/pkg/image/apis/image/docker10"
 	imagereference "github.com/openshift/origin/pkg/image/apis/image/reference"
 	"github.com/openshift/origin/pkg/oc/cli/image/extract"
+	imagemanifest "github.com/openshift/origin/pkg/oc/cli/image/manifest"
 	"github.com/openshift/origin/pkg/oc/cli/image/mirror"
 )
 
@@ -64,8 +65,6 @@ func NewMirror(f kcmdutil.Factory, parentName string, streams genericclioptions.
 			correct information to give to OpenShift to use that content offline. An alternate mode
 			is to specify --to-image-stream, which imports the images directly into an OpenShift
 			image stream.
-
-			Experimental: This command is under active development and may change without notice.
 		`),
 		Run: func(cmd *cobra.Command, args []string) {
 			kcmdutil.CheckErr(o.Complete(cmd, f, args))
@@ -73,7 +72,9 @@ func NewMirror(f kcmdutil.Factory, parentName string, streams genericclioptions.
 		},
 	}
 	flags := cmd.Flags()
-	flags.StringVarP(&o.RegistryConfig, "registry-config", "a", o.RegistryConfig, "Path to your registry credentials (defaults to ~/.docker/config.json)")
+	o.SecurityOptions.Bind(flags)
+	o.ParallelOptions.Bind(flags)
+
 	flags.StringVar(&o.From, "from", o.From, "Image containing the release payload.")
 	flags.StringVar(&o.To, "to", o.To, "An image repository to push to.")
 	flags.StringVar(&o.ToImageStream, "to-image-stream", o.ToImageStream, "An image stream to tag images into.")
@@ -87,6 +88,9 @@ func NewMirror(f kcmdutil.Factory, parentName string, streams genericclioptions.
 type MirrorOptions struct {
 	genericclioptions.IOStreams
 
+	SecurityOptions imagemanifest.SecurityOptions
+	ParallelOptions imagemanifest.ParallelOptions
+
 	From string
 
 	To            string
@@ -95,8 +99,7 @@ type MirrorOptions struct {
 	ToRelease   string
 	SkipRelease bool
 
-	RegistryConfig string
-	DryRun         bool
+	DryRun bool
 
 	ClientFn func() (imageclient.Interface, string, error)
 
@@ -172,7 +175,7 @@ func (o *MirrorOptions) Run() error {
 			value := strings.Replace(dst, "${component}", name, -1)
 			ref, err := imagereference.Parse(value)
 			if err != nil {
-				glog.Fatalf("requested component %q could not be injected into %s: %v", name, dst, err)
+				klog.Fatalf("requested component %q could not be injected into %s: %v", name, dst, err)
 			}
 			return ref
 		}
@@ -201,6 +204,7 @@ func (o *MirrorOptions) Run() error {
 		return fmt.Errorf("when mirroring to multiple repositories, use the new release command with --from-release and --mirror")
 	}
 
+	verifier := imagemanifest.NewVerifier()
 	is := o.ImageStream
 	if is == nil {
 		o.ImageStream = &imagev1.ImageStream{}
@@ -208,8 +212,10 @@ func (o *MirrorOptions) Run() error {
 		// load image references
 		buf := &bytes.Buffer{}
 		extractOpts := NewExtractOptions(genericclioptions.IOStreams{Out: buf, ErrOut: o.ErrOut})
-		extractOpts.RegistryConfig = o.RegistryConfig
-		extractOpts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {}
+		extractOpts.SecurityOptions = o.SecurityOptions
+		extractOpts.ImageMetadataCallback = func(m *extract.Mapping, dgst, contentDigest digest.Digest, config *docker10.DockerImageConfig) {
+			verifier.Verify(dgst, contentDigest)
+		}
 		extractOpts.From = o.From
 		extractOpts.File = "image-references"
 		if err := extractOpts.Run(); err != nil {
@@ -220,6 +226,13 @@ func (o *MirrorOptions) Run() error {
 		}
 		if is.Kind != "ImageStream" || is.APIVersion != "image.openshift.io/v1" {
 			return fmt.Errorf("unrecognized image-references in release payload")
+		}
+		if !verifier.Verified() {
+			err := fmt.Errorf("the release image failed content verification and may have been tampered with")
+			if !o.SecurityOptions.SkipVerification {
+				return err
+			}
+			fmt.Fprintf(o.ErrOut, "warning: %v\n", err)
 		}
 	}
 
@@ -271,7 +284,7 @@ func (o *MirrorOptions) Run() error {
 			Destination: targetFn(tag.Name),
 			Name:        tag.Name,
 		})
-		glog.V(2).Infof("Mapping %#v", mappings[len(mappings)-1])
+		klog.V(2).Infof("Mapping %#v", mappings[len(mappings)-1])
 
 		dstRef := targetFn(tag.Name)
 		dstRef.Tag = ""
@@ -344,7 +357,7 @@ func (o *MirrorOptions) Run() error {
 
 				for i, image := range result.Status.Images {
 					name := result.Spec.Images[i].To.Name
-					glog.V(4).Infof("Import result for %s: %#v", name, image.Status)
+					klog.V(4).Infof("Import result for %s: %#v", name, image.Status)
 					if image.Status.Status == metav1.StatusSuccess {
 						delete(remaining, name)
 						delete(hasErrors, name)
@@ -352,7 +365,7 @@ func (o *MirrorOptions) Run() error {
 						delete(remaining, name)
 						err := errors.FromObject(&image.Status)
 						hasErrors[name] = err
-						glog.V(2).Infof("Failed to import %s as tag %s: %v", remaining[name].Source, name, err)
+						klog.V(2).Infof("Failed to import %s as tag %s: %v", remaining[name].Source, name, err)
 					}
 				}
 				return nil
@@ -381,7 +394,8 @@ func (o *MirrorOptions) Run() error {
 	fmt.Fprintf(os.Stderr, "info: Mirroring %d images to %s ...\n", len(mappings), dst)
 	var lock sync.Mutex
 	opts := mirror.NewMirrorImageOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
-	opts.RegistryConfig = o.RegistryConfig
+	opts.SecurityOptions = o.SecurityOptions
+	opts.ParallelOptions = o.ParallelOptions
 	opts.Mappings = mappings
 	opts.DryRun = o.DryRun
 	opts.ManifestUpdateCallback = func(registry string, manifests map[digest.Digest]digest.Digest) error {
@@ -403,7 +417,7 @@ func (o *MirrorOptions) Run() error {
 			}
 			if changed, ok := manifests[digest.Digest(ref.ID)]; ok {
 				ref.ID = changed.String()
-				glog.V(4).Infof("During mirroring, image %s was updated to digest %s", tag.From.Name, changed)
+				klog.V(4).Infof("During mirroring, image %s was updated to digest %s", tag.From.Name, changed)
 				tag.From.Name = ref.Exact()
 			}
 		}

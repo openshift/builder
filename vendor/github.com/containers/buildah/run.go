@@ -1,8 +1,8 @@
 package buildah
 
 import (
-	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,12 +22,15 @@ import (
 	"github.com/containers/buildah/bind"
 	"github.com/containers/buildah/chroot"
 	"github.com/containers/buildah/pkg/secrets"
+	"github.com/containers/buildah/pkg/unshare"
 	"github.com/containers/buildah/util"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/ioutils"
 	"github.com/containers/storage/pkg/reexec"
 	"github.com/containers/storage/pkg/stringid"
 	units "github.com/docker/go-units"
+	"github.com/docker/libnetwork/resolvconf"
+	"github.com/docker/libnetwork/types"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
@@ -272,36 +275,6 @@ func addRlimits(ulimit []string, g *generate.Generator) error {
 	return nil
 }
 
-func addHosts(hosts []string, w io.Writer) error {
-	buf := bufio.NewWriter(w)
-	for _, host := range hosts {
-		values := strings.SplitN(host, ":", 2)
-		if len(values) != 2 {
-			return errors.Errorf("unable to parse host entry %q: incorrect format", host)
-		}
-		if values[0] == "" {
-			return errors.Errorf("hostname in host entry %q is empty", host)
-		}
-		if values[1] == "" {
-			return errors.Errorf("IP address in host entry %q is empty", host)
-		}
-		fmt.Fprintf(buf, "%s\t%s\n", values[1], values[0])
-	}
-	return buf.Flush()
-}
-
-func addHostsToFile(hosts []string, filename string) error {
-	if len(hosts) == 0 {
-		return nil
-	}
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
-	if err != nil {
-		return errors.Wrapf(err, "error creating hosts file %q", filename)
-	}
-	defer file.Close()
-	return addHosts(hosts, file)
-}
-
 func addCommonOptsToSpec(commonOpts *CommonBuildOptions, g *generate.Generator) error {
 	// Resources - CPU
 	if commonOpts.CPUPeriod != 0 {
@@ -447,7 +420,7 @@ func (b *Builder) setupMounts(mountPoint string, spec *specs.Spec, bundlePath st
 	}
 
 	// Get the list of secrets mounts.
-	secretMounts := secrets.SecretMountsWithUIDGID(b.MountLabel, cdir, b.DefaultMountsFilePath, cdir, int(rootUID), int(rootGID))
+	secretMounts := secrets.SecretMountsWithUIDGID(b.MountLabel, cdir, b.DefaultMountsFilePath, cdir, int(rootUID), int(rootGID), unshare.IsRootless())
 
 	// Add temporary copies of the contents of volume locations at the
 	// volume locations, unless we already have something there.
@@ -622,15 +595,117 @@ func runSetupVolumeMounts(mountLabel string, volumeMounts []string, optionMounts
 }
 
 // addNetworkConfig copies files from host and sets them up to bind mount into container
-func (b *Builder) addNetworkConfig(rdir, hostPath string, chownOpts *idtools.IDPair) (string, error) {
-	copyFileWithTar := b.copyFileWithTar(chownOpts, nil)
-
-	cfile := filepath.Join(rdir, filepath.Base(hostPath))
-
-	if err := copyFileWithTar(hostPath, cfile); err != nil {
-		return "", errors.Wrapf(err, "error copying %q for container %q", cfile, b.ContainerID)
+func (b *Builder) addNetworkConfig(rdir, hostPath string, chownOpts *idtools.IDPair, dnsServers, dnsSearch, dnsOptions []string) (string, error) {
+	stat, err := os.Stat(hostPath)
+	if err != nil {
+		return "", errors.Wrapf(err, "error statting %q for container %q", hostPath, b.ContainerID)
+	}
+	contents, err := ioutil.ReadFile(hostPath)
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to read %s", hostPath)
 	}
 
+	search := resolvconf.GetSearchDomains(contents)
+	nameservers := resolvconf.GetNameservers(contents, types.IP)
+	options := resolvconf.GetOptions(contents)
+
+	if len(dnsSearch) > 0 {
+		search = dnsSearch
+	}
+	if len(dnsServers) != 0 {
+		dns, err := getDNSIP(dnsServers)
+		if err != nil {
+			return "", errors.Wrapf(err, "error getting dns servers")
+		}
+		nameservers = []string{}
+		for _, server := range dns {
+			nameservers = append(nameservers, server.String())
+		}
+	}
+
+	if len(dnsOptions) != 0 {
+		options = dnsOptions
+	}
+
+	cfile := filepath.Join(rdir, filepath.Base(hostPath))
+	if _, err = resolvconf.Build(cfile, nameservers, search, options); err != nil {
+		return "", errors.Wrapf(err, "error building resolv.conf for container %s", b.ContainerID)
+	}
+
+	uid := int(stat.Sys().(*syscall.Stat_t).Uid)
+	gid := int(stat.Sys().(*syscall.Stat_t).Gid)
+	if chownOpts != nil {
+		uid = chownOpts.UID
+		gid = chownOpts.GID
+	}
+	if err = os.Chown(cfile, uid, gid); err != nil {
+		return "", errors.Wrapf(err, "error chowning file %q for container %q", cfile, b.ContainerID)
+	}
+
+	if err := label.Relabel(cfile, b.MountLabel, false); err != nil {
+		return "", errors.Wrapf(err, "error relabeling %q in container %q", cfile, b.ContainerID)
+	}
+
+	return cfile, nil
+}
+
+func getDNSIP(dnsServers []string) (dns []net.IP, err error) {
+	for _, i := range dnsServers {
+		result := net.ParseIP(i)
+		if result == nil {
+			return dns, errors.Errorf("invalid IP address %s", i)
+		}
+		dns = append(dns, result)
+	}
+	return dns, nil
+}
+
+// generateHosts creates a containers hosts file
+func (b *Builder) generateHosts(rdir, hostname string, addHosts []string, chownOpts *idtools.IDPair) (string, error) {
+	hostPath := "/etc/hosts"
+	stat, err := os.Stat(hostPath)
+	if err != nil {
+		return "", errors.Wrapf(err, "error statting %q for container %q", hostPath, b.ContainerID)
+	}
+
+	hosts := bytes.NewBufferString("# Generated by Buildah\n")
+	orig, err := ioutil.ReadFile(hostPath)
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to read %s", hostPath)
+	}
+	hosts.Write(orig)
+	for _, host := range addHosts {
+		// verify the host format
+		values := strings.SplitN(host, ":", 2)
+		if len(values) != 2 {
+			return "", errors.Errorf("unable to parse host entry %q: incorrect format", host)
+		}
+		if values[0] == "" {
+			return "", errors.Errorf("hostname in host entry %q is empty", host)
+		}
+		if values[1] == "" {
+			return "", errors.Errorf("IP address in host entry %q is empty", host)
+		}
+		hosts.Write([]byte(fmt.Sprintf("%s\t%s\n", values[1], values[0])))
+	}
+
+	if hostname != "" {
+		hosts.Write([]byte(fmt.Sprintf("127.0.0.1   %s\n", hostname)))
+		hosts.Write([]byte(fmt.Sprintf("::1         %s\n", hostname)))
+	}
+	cfile := filepath.Join(rdir, filepath.Base(hostPath))
+	if err = ioutils.AtomicWriteFile(cfile, hosts.Bytes(), stat.Mode().Perm()); err != nil {
+		return "", errors.Wrapf(err, "error writing /etc/hosts into the container")
+	}
+	uid := int(stat.Sys().(*syscall.Stat_t).Uid)
+	gid := int(stat.Sys().(*syscall.Stat_t).Gid)
+	if chownOpts != nil {
+		uid = chownOpts.UID
+		gid = chownOpts.GID
+	}
+	if err = os.Chown(cfile, uid, gid); err != nil {
+		return "", errors.Wrapf(err, "error chowning file %q for container %q", cfile, b.ContainerID)
+	}
 	if err := label.Relabel(cfile, b.MountLabel, false); err != nil {
 		return "", errors.Wrapf(err, "error relabeling %q in container %q", cfile, b.ContainerID)
 	}
@@ -1081,19 +1156,15 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 	volumes := b.Volumes()
 
 	if !contains(volumes, "/etc/hosts") {
-		hostFile, err := b.addNetworkConfig(path, "/etc/hosts", rootIDPair)
+		hostFile, err := b.generateHosts(path, spec.Hostname, b.CommonBuildOpts.AddHost, rootIDPair)
 		if err != nil {
 			return err
 		}
 		bindFiles["/etc/hosts"] = hostFile
-
-		if err := addHostsToFile(b.CommonBuildOpts.AddHost, hostFile); err != nil {
-			return err
-		}
 	}
 
 	if !contains(volumes, "/etc/resolv.conf") {
-		resolvFile, err := b.addNetworkConfig(path, "/etc/resolv.conf", rootIDPair)
+		resolvFile, err := b.addNetworkConfig(path, "/etc/resolv.conf", rootIDPair, b.CommonBuildOpts.DNSServers, b.CommonBuildOpts.DNSSearch, b.CommonBuildOpts.DNSOptions)
 		if err != nil {
 			return err
 		}
@@ -1702,7 +1773,7 @@ func setupRootlessNetwork(pid int) (teardown func(), err error) {
 		unix.CloseOnExec(fd)
 	}
 
-	cmd := exec.Command(slirp4netns, "-r", "3", "-c", fmt.Sprintf("%d", pid), "tap0")
+	cmd := exec.Command(slirp4netns, "--mtu", "65520", "-r", "3", "-c", fmt.Sprintf("%d", pid), "tap0")
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	cmd.ExtraFiles = []*os.File{rootlessSlirpSyncW}
 
@@ -1747,7 +1818,9 @@ func runConfigureNetwork(isolation Isolation, options RunOptions, configureNetwo
 	var netconf, undo []*libcni.NetworkConfigList
 
 	if isolation == IsolationOCIRootless {
-		return setupRootlessNetwork(pid)
+		if ns := options.NamespaceOptions.Find(string(specs.NetworkNamespace)); ns != nil && !ns.Host && ns.Path == "" {
+			return setupRootlessNetwork(pid)
+		}
 	}
 	// Scan for CNI configuration files.
 	confdir := options.CNIConfigDir
@@ -1815,7 +1888,7 @@ func runConfigureNetwork(isolation Isolation, options RunOptions, configureNetwo
 	rtconf := make(map[*libcni.NetworkConfigList]*libcni.RuntimeConf)
 	teardown = func() {
 		for _, nc := range undo {
-			if err = cni.DelNetworkList(nc, rtconf[nc]); err != nil {
+			if err = cni.DelNetworkList(context.Background(), nc, rtconf[nc]); err != nil {
 				logrus.Errorf("error cleaning up network %v for %v: %v", rtconf[nc].IfName, command, err)
 			}
 		}
@@ -1831,7 +1904,7 @@ func runConfigureNetwork(isolation Isolation, options RunOptions, configureNetwo
 			CapabilityArgs: map[string]interface{}{},
 		}
 		// Bring it up.
-		_, err := cni.AddNetworkList(nc, rtconf[nc])
+		_, err := cni.AddNetworkList(context.Background(), nc, rtconf[nc])
 		if err != nil {
 			return teardown, errors.Wrapf(err, "error configuring network list %v for %v", rtconf[nc].IfName, command)
 		}

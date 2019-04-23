@@ -244,7 +244,7 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 
 	c := &Controller{
 		queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
-		client:        kc.Route(),
+		client:        kc.RouteV1(),
 		ingressLister: i,
 		routeLister:   r,
 		secretLister:  s,
@@ -1014,8 +1014,8 @@ func TestController_sync(t *testing.T) {
 							TLS: &routev1.TLSConfig{
 								Termination:                   routev1.TLSTerminationEdge,
 								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
-								Key:         "key",
-								Certificate: "cert",
+								Key:                           "key",
+								Certificate:                   "cert",
 							},
 						},
 					},
@@ -1211,8 +1211,8 @@ func TestController_sync(t *testing.T) {
 							TLS: &routev1.TLSConfig{
 								Termination:                   routev1.TLSTerminationEdge,
 								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
-								Key:         "key",
-								Certificate: "cert",
+								Key:                           "key",
+								Certificate:                   "cert",
 							},
 						},
 					},
@@ -1273,8 +1273,8 @@ func TestController_sync(t *testing.T) {
 							TLS: &routev1.TLSConfig{
 								Termination:                   routev1.TLSTerminationEdge,
 								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
-								Key:         "",
-								Certificate: "",
+								Key:                           "",
+								Certificate:                   "",
 							},
 						},
 					},
@@ -1396,8 +1396,8 @@ func TestController_sync(t *testing.T) {
 							TLS: &routev1.TLSConfig{
 								Termination:                   routev1.TLSTerminationEdge,
 								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
-								Key:         "key",
-								Certificate: "cert",
+								Key:                           "key",
+								Certificate:                   "cert",
 							},
 						},
 					},
@@ -1463,8 +1463,8 @@ func TestController_sync(t *testing.T) {
 							TLS: &routev1.TLSConfig{
 								Termination:                   routev1.TLSTerminationEdge,
 								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
-								Key:         "key",
-								Certificate: "",
+								Key:                           "key",
+								Certificate:                   "",
 							},
 						},
 					},
@@ -1515,7 +1515,7 @@ func TestController_sync(t *testing.T) {
 
 			c := &Controller{
 				queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
-				client:        kc.Route(),
+				client:        kc.RouteV1(),
 				ingressLister: tt.fields.i,
 				routeLister:   tt.fields.r,
 				secretLister:  tt.fields.s,

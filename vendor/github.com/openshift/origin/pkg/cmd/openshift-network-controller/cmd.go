@@ -12,16 +12,16 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/coreos/go-systemd/daemon"
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	configv1 "github.com/openshift/api/config/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
@@ -63,7 +63,7 @@ func NewOpenShiftNetworkControllerCommand(name, basename string, out, errout io.
 						os.Exit(255)
 					}
 				}
-				glog.Fatal(err)
+				klog.Fatal(err)
 			}
 		},
 	}

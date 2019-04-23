@@ -14,7 +14,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/RangelReale/osincli"
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -93,7 +93,7 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 
 	// retry this a couple times.  We seem to be flaking on update conflicts and missing secrets all together
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		defaultSA, err = clusterAdminKubeClientset.Core().ServiceAccounts(projectName).Get("default", metav1.GetOptions{})
+		defaultSA, err = clusterAdminKubeClientset.CoreV1().ServiceAccounts(projectName).Get("default", metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -102,7 +102,7 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 		}
 		defaultSA.Annotations[saoauth.OAuthRedirectModelAnnotationURIPrefix+"one"] = redirectURL
 		defaultSA.Annotations[saoauth.OAuthWantChallengesAnnotationPrefix] = "true"
-		defaultSA, err = clusterAdminKubeClientset.Core().ServiceAccounts(projectName).Update(defaultSA)
+		defaultSA, err = clusterAdminKubeClientset.CoreV1().ServiceAccounts(projectName).Update(defaultSA)
 		return err
 	})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 	var oauthSecret *corev1.Secret
 	// retry this a couple times.  We seem to be flaking on update conflicts and missing secrets all together
 	err = wait.PollImmediate(30*time.Millisecond, 10*time.Second, func() (done bool, err error) {
-		allSecrets, err := clusterAdminKubeClientset.Core().Secrets(projectName).List(metav1.ListOptions{})
+		allSecrets, err := clusterAdminKubeClientset.CoreV1().Secrets(projectName).List(metav1.ListOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -258,12 +258,12 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 
 	{
 		oauthClientConfig := &osincli.ClientConfig{
-			ClientId:     apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
-			ClientSecret: string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
-			AuthorizeUrl: clusterAdminClientConfig.Host + "/oauth/authorize",
-			TokenUrl:     clusterAdminClientConfig.Host + "/oauth/token",
-			RedirectUrl:  redirectURL,
-			Scope:        scope.Join([]string{"user:info", "role:edit:" + projectName}),
+			ClientId:                 apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
+			ClientSecret:             string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
+			AuthorizeUrl:             clusterAdminClientConfig.Host + "/oauth/authorize",
+			TokenUrl:                 clusterAdminClientConfig.Host + "/oauth/token",
+			RedirectUrl:              redirectURL,
+			Scope:                    scope.Join([]string{"user:info", "role:edit:" + projectName}),
 			SendClientSecretInParams: true,
 		}
 		t.Log("Testing allowed scopes")
@@ -294,12 +294,12 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 
 	{
 		oauthClientConfig := &osincli.ClientConfig{
-			ClientId:     apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
-			ClientSecret: string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
-			AuthorizeUrl: clusterAdminClientConfig.Host + "/oauth/authorize",
-			TokenUrl:     clusterAdminClientConfig.Host + "/oauth/token",
-			RedirectUrl:  redirectURL,
-			Scope:        scope.Join([]string{"user:info", "role:edit:other-ns"}),
+			ClientId:                 apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
+			ClientSecret:             string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
+			AuthorizeUrl:             clusterAdminClientConfig.Host + "/oauth/authorize",
+			TokenUrl:                 clusterAdminClientConfig.Host + "/oauth/token",
+			RedirectUrl:              redirectURL,
+			Scope:                    scope.Join([]string{"user:info", "role:edit:other-ns"}),
 			SendClientSecretInParams: true,
 		}
 		t.Log("Testing disallowed scopes")
@@ -316,12 +316,12 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 	{
 		t.Log("Testing invalid scopes")
 		oauthClientConfig := &osincli.ClientConfig{
-			ClientId:     apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
-			ClientSecret: string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
-			AuthorizeUrl: clusterAdminClientConfig.Host + "/oauth/authorize",
-			TokenUrl:     clusterAdminClientConfig.Host + "/oauth/token",
-			RedirectUrl:  redirectURL,
-			Scope:        scope.Join([]string{"unknown-scope"}),
+			ClientId:                 apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
+			ClientSecret:             string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
+			AuthorizeUrl:             clusterAdminClientConfig.Host + "/oauth/authorize",
+			TokenUrl:                 clusterAdminClientConfig.Host + "/oauth/token",
+			RedirectUrl:              redirectURL,
+			Scope:                    scope.Join([]string{"unknown-scope"}),
 			SendClientSecretInParams: true,
 		}
 		runOAuthFlow(t, clusterAdminClientConfig, projectName, oauthClientConfig, nil, authorizationCodes, authorizationErrors, false, false, []string{
@@ -337,12 +337,12 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 	{
 		t.Log("Testing allowed scopes with failed API call")
 		oauthClientConfig := &osincli.ClientConfig{
-			ClientId:     apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
-			ClientSecret: string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
-			AuthorizeUrl: clusterAdminClientConfig.Host + "/oauth/authorize",
-			TokenUrl:     clusterAdminClientConfig.Host + "/oauth/token",
-			RedirectUrl:  redirectURL,
-			Scope:        scope.Join([]string{"user:info"}),
+			ClientId:                 apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
+			ClientSecret:             string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
+			AuthorizeUrl:             clusterAdminClientConfig.Host + "/oauth/authorize",
+			TokenUrl:                 clusterAdminClientConfig.Host + "/oauth/token",
+			RedirectUrl:              redirectURL,
+			Scope:                    scope.Join([]string{"user:info"}),
 			SendClientSecretInParams: true,
 		}
 		// First time, the approval is needed
@@ -372,12 +372,12 @@ func TestOAuthServiceAccountClient(t *testing.T) {
 
 	{
 		oauthClientConfig := &osincli.ClientConfig{
-			ClientId:     apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
-			ClientSecret: string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
-			AuthorizeUrl: clusterAdminClientConfig.Host + "/oauth/authorize",
-			TokenUrl:     clusterAdminClientConfig.Host + "/oauth/token",
-			RedirectUrl:  redirectURL,
-			Scope:        scope.Join([]string{"user:info", "role:edit:" + projectName}),
+			ClientId:                 apiserverserviceaccount.MakeUsername(defaultSA.Namespace, defaultSA.Name),
+			ClientSecret:             string(oauthSecret.Data[corev1.ServiceAccountTokenKey]),
+			AuthorizeUrl:             clusterAdminClientConfig.Host + "/oauth/authorize",
+			TokenUrl:                 clusterAdminClientConfig.Host + "/oauth/token",
+			RedirectUrl:              redirectURL,
+			Scope:                    scope.Join([]string{"user:info", "role:edit:" + projectName}),
 			SendClientSecretInParams: true,
 		}
 		t.Log("Testing grant flow is reentrant")
@@ -506,7 +506,7 @@ func runOAuthFlow(
 	directHTTPClient := &http.Client{
 		Transport: testTransport,
 		CheckRedirect: func(redirectReq *http.Request, via []*http.Request) error {
-			glog.Infof("302 Location: %s", redirectReq.URL.String())
+			klog.Infof("302 Location: %s", redirectReq.URL.String())
 			req = redirectReq
 			operations = append(operations, "redirect to "+redirectReq.URL.Path)
 			return nil
@@ -515,16 +515,16 @@ func runOAuthFlow(
 	}
 
 	for {
-		glog.Infof("%s %s", req.Method, req.URL.String())
+		klog.Infof("%s %s", req.Method, req.URL.String())
 		operations = append(operations, req.Method+" "+req.URL.Path)
 
 		// Always set the csrf header
 		req.Header.Set("X-CSRF-Token", "1")
 		resp, err := directHTTPClient.Do(req)
 		if err != nil {
-			glog.Infof("%#v", operations)
-			glog.Infof("%#v", jar)
-			glog.Errorf("Error %v\n%#v\n%#v", err, err, resp)
+			klog.Infof("%#v", operations)
+			klog.Infof("%#v", jar)
+			klog.Errorf("Error %v\n%#v\n%#v", err, err, resp)
 			t.Errorf("Error %v\n%#v\n%#v", err, err, resp)
 			return
 		}
@@ -590,7 +590,7 @@ func runOAuthFlow(
 
 		whoamiConfig := restclient.AnonymousClientConfig(clusterAdminClientConfig)
 		whoamiConfig.BearerToken = accessData.AccessToken
-		whoamiBuildClient := buildv1client.NewForConfigOrDie(whoamiConfig).Build()
+		whoamiBuildClient := buildv1client.NewForConfigOrDie(whoamiConfig).BuildV1()
 		whoamiUserClient := userclient.NewForConfigOrDie(whoamiConfig)
 
 		_, err = whoamiBuildClient.Builds(projectName).List(metav1.ListOptions{})

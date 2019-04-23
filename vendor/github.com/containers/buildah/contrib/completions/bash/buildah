@@ -327,7 +327,6 @@ return 1
           --format
           -f
           --iidfile
-          --signature-policy
   "
 
      local all_options="$options_with_args $boolean_options"
@@ -391,6 +390,9 @@ return 1
      --cpuset-cpus
      --cpuset-mems
      --creds
+     --dns-search
+     --dns
+     --dns-option
      -f
      --file
      --format
@@ -411,7 +413,6 @@ return 1
      --runtime-flag
      --security-opt
      --shm-size
-     --signature-policy
      -t
      --tag
      --target
@@ -579,7 +580,6 @@ return 1
      --authfile
      --cert-dir
      --creds
-     --signature-policy
   "
 
      local all_options="$options_with_args $boolean_options"
@@ -608,7 +608,6 @@ return 1
           --creds
           --format
           -f
-          --signature-policy
   "
 
      local all_options="$options_with_args $boolean_options"
@@ -814,7 +813,6 @@ _buildah_containers() {
      --net
      --network
      --pid
-     --signature-policy
      --security-opt
      --shm-size
      --ulimit

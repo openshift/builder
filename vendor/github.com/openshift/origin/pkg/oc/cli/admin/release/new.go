@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,16 +21,16 @@ import (
 	"github.com/blang/semver"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/ghodss/yaml"
-	"github.com/golang/glog"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	imageapi "github.com/openshift/api/image/v1"
 	imageclient "github.com/openshift/client-go/image/clientset/versioned"
@@ -37,12 +38,13 @@ import (
 	imagereference "github.com/openshift/origin/pkg/image/apis/image/reference"
 	imageappend "github.com/openshift/origin/pkg/oc/cli/image/append"
 	"github.com/openshift/origin/pkg/oc/cli/image/extract"
+	imagemanifest "github.com/openshift/origin/pkg/oc/cli/image/manifest"
 )
 
 func NewNewOptions(streams genericclioptions.IOStreams) *NewOptions {
 	return &NewOptions{
-		IOStreams:      streams,
-		MaxPerRegistry: 4,
+		IOStreams:       streams,
+		ParallelOptions: imagemanifest.ParallelOptions{MaxPerRegistry: 4},
 		// TODO: only cluster-version-operator and maybe CLI should be in this list,
 		//   the others should always be referenced by the cluster-bootstrap or
 		//   another operator.
@@ -65,19 +67,23 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 
 			OpenShift uses long-running active management processes called "operators" to
 			keep the cluster running and manage component lifecycle. This command
-			composes a set of images and operator definitions into a single update payload
-			that can be used to update a cluster.
+			composes a set of images with operator definitions into a single update payload
+			that can be used to install or update a cluster.
 
 			Operators are expected to host the config they need to be installed to a cluster
 			in the '/manifests' directory in their image. This command iterates over a set of
 			operator images and extracts those manifests into a single, ordered list of
 			Kubernetes objects that can then be iteratively updated on a cluster by the
 			cluster version operator when it is time to perform an update. Manifest files are
-			renamed to '99_<image_name>_<filename>' by default, and an operator author that
+			renamed to '0000_70_<image_name>_<filename>' by default, and an operator author that
 			needs to provide a global-ordered file (before or after other operators) should
-			prepend '0000_' to their filename, which instructs the release builder to not
-			assign a component prefix. Only images with the label
-			'release.openshift.io/operator=true' are considered to be included.
+			prepend '0000_NN_<component>_' to their filename, which instructs the release builder
+			to not assign a component prefix. Only images in the input that have the image label
+			'io.openshift.release.operator=true' will have manifests loaded.
+
+			If an image is in the input but is not referenced by an operator's image-references
+			file, the image will not be included in the final release image unless
+			--include=NAME is provided.
 
 			Mappings specified via SRC=DST positional arguments allows overriding particular
 			operators with a specific image.  For example:
@@ -86,23 +92,33 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 
 			will override the default cluster-version-operator image with one pulled from
 			registry.example.com.
-
-			Experimental: This command is under active development and may change without notice.
 		`),
 		Example: templates.Examples(fmt.Sprintf(`
 			# Create a release from the latest origin images and push to a DockerHub repo
 			%[1]s new --from-image-stream=origin-v4.0 -n openshift --to-image docker.io/mycompany/myrepo:latest
-		`, parentName)),
+
+			# Create a new release with updated metadata from a previous release
+			%[1]s new --from-release registry.svc.ci.openshift.org/openshift/origin-release:v4.0 --name 4.0.1 \
+				--previous 4.0.0 --metadata ... --to-image docker.io/mycompany/myrepo:latest
+
+			# Create a new release and override a single image
+			%[1]s new --from-release registry.svc.ci.openshift.org/openshift/origin-release:v4.0 \
+			  cli=docker.io/mycompany/cli:latest
+				`, parentName)),
 		Run: func(cmd *cobra.Command, args []string) {
 			kcmdutil.CheckErr(o.Complete(f, cmd, args))
+			kcmdutil.CheckErr(o.Validate())
 			kcmdutil.CheckErr(o.Run())
 		},
 	}
 	flags := cmd.Flags()
+	o.SecurityOptions.Bind(flags)
+	o.ParallelOptions.Bind(flags)
 
 	// image inputs
-	flags.StringSliceVarP(&o.Filenames, "filename", "f", o.Filenames, "A file defining a mapping of input images to use to build the release")
+	flags.StringSliceVar(&o.MappingFilenames, "mapping-file", o.MappingFilenames, "A file defining a mapping of input images to use to build the release")
 	flags.StringVar(&o.FromImageStream, "from-image-stream", o.FromImageStream, "Look at all tags in the provided image stream and build a release payload from them.")
+	flags.StringVarP(&o.FromImageStreamFile, "from-image-stream-file", "f", o.FromImageStreamFile, "Take the provided image stream on disk and build a release payload from it.")
 	flags.StringVar(&o.FromDirectory, "from-dir", o.FromDirectory, "Use this directory as the source for the release payload.")
 	flags.StringVar(&o.FromReleaseImage, "from-release", o.FromReleaseImage, "Use an existing release image as input.")
 	flags.StringVar(&o.ReferenceMode, "reference-mode", o.ReferenceMode, "By default, the image reference from an image stream points to the public registry for the stream and the image digest. Pass 'source' to build references to the originating image.")
@@ -131,10 +147,8 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 	flags.StringVar(&o.ToImageBaseTag, "to-image-base-tag", o.ToImageBaseTag, "If specified, the image tag in the input to add the release layer on top of. Defaults to cluster-version-operator.")
 
 	// misc
-	flags.StringVarP(&o.RegistryConfig, "registry-config", "a", o.RegistryConfig, "Path to your registry credentials (defaults to ~/.docker/config.json)")
 	flags.StringVarP(&o.Output, "output", "o", o.Output, "Output the mapping definition in this format.")
 	flags.StringVar(&o.Directory, "dir", o.Directory, "Directory to write release contents to, will default to a temporary directory.")
-	flags.IntVar(&o.MaxPerRegistry, "max-per-registry", o.MaxPerRegistry, "Number of concurrent images that will be extracted at a time.")
 
 	return cmd
 }
@@ -142,17 +156,21 @@ func NewRelease(f kcmdutil.Factory, parentName string, streams genericclioptions
 type NewOptions struct {
 	genericclioptions.IOStreams
 
-	FromDirectory string
-	Directory     string
-	Filenames     []string
-	Output        string
-	Name          string
+	SecurityOptions imagemanifest.SecurityOptions
+	ParallelOptions imagemanifest.ParallelOptions
+
+	FromDirectory    string
+	Directory        string
+	MappingFilenames []string
+	Output           string
+	Name             string
 
 	FromReleaseImage string
 
-	FromImageStream string
-	Namespace       string
-	ReferenceMode   string
+	FromImageStream     string
+	FromImageStreamFile string
+	Namespace           string
+	ReferenceMode       string
 
 	ExtraComponentVersions string
 	AllowedComponents      []string
@@ -174,9 +192,6 @@ type NewOptions struct {
 
 	Mirror string
 
-	RegistryConfig string
-	MaxPerRegistry int
-
 	AllowMissingImages bool
 	SkipManifestCheck  bool
 
@@ -190,7 +205,7 @@ type NewOptions struct {
 func (o *NewOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []string) error {
 	overlap := make(map[string]string)
 	var mappings []Mapping
-	for _, filename := range o.Filenames {
+	for _, filename := range o.MappingFilenames {
 		fileMappings, err := parseFile(filename, overlap)
 		if err != nil {
 			return err
@@ -225,25 +240,61 @@ func (o *NewOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []str
 	return nil
 }
 
-type imageData struct {
-	Ref       imagereference.DockerImageReference
-	Config    *docker10.DockerImageConfig
-	Digest    digest.Digest
-	Directory string
-}
-
-func findStatusTagEvent(tags []imageapi.NamedTagEventList, name string) *imageapi.TagEvent {
-	for _, tag := range tags {
-		if tag.Tag != name {
-			continue
+func (o *NewOptions) Validate() error {
+	sources := 0
+	if len(o.FromImageStream) > 0 {
+		sources++
+	}
+	if len(o.FromImageStreamFile) > 0 {
+		sources++
+	}
+	if len(o.FromReleaseImage) > 0 {
+		sources++
+	}
+	if len(o.FromDirectory) > 0 {
+		sources++
+	}
+	if sources > 1 {
+		return fmt.Errorf("only one of --from-image-stream, --from-image-stream-file, --from-release, or --from-dir may be specified")
+	}
+	if sources == 0 {
+		if len(o.Mappings) == 0 {
+			return fmt.Errorf("must specify image mappings when no other source is defined")
 		}
-		if len(tag.Items) == 0 {
-			return nil
-		}
-		return &tag.Items[0]
+	}
+	if len(o.Mirror) > 0 && o.ReferenceMode != "" && o.ReferenceMode != "public" {
+		return fmt.Errorf("--reference-mode must be public or empty when using --mirror")
 	}
 	return nil
 }
+
+type imageData struct {
+	Ref           imagereference.DockerImageReference
+	Config        *docker10.DockerImageConfig
+	Digest        digest.Digest
+	ContentDigest digest.Digest
+	Directory     string
+}
+
+func findStatusTagEvents(tags []imageapi.NamedTagEventList, name string) *imageapi.NamedTagEventList {
+	for i := range tags {
+		tag := &tags[i]
+		if tag.Tag != name {
+			continue
+		}
+		return tag
+	}
+	return nil
+}
+
+func findStatusTagEvent(tags []imageapi.NamedTagEventList, name string) *imageapi.TagEvent {
+	events := findStatusTagEvents(tags, name)
+	if events == nil || len(events.Items) == 0 {
+		return nil
+	}
+	return &events.Items[0]
+}
+
 func findSpecTag(tags []imageapi.TagReference, name string) *imageapi.TagReference {
 	for i, tag := range tags {
 		if tag.Name != name {
@@ -272,18 +323,6 @@ func (o *NewOptions) cleanup() {
 
 func (o *NewOptions) Run() error {
 	defer o.cleanup()
-
-	if len(o.FromImageStream) > 0 && len(o.FromDirectory) > 0 {
-		return fmt.Errorf("only one of --from-image-stream and --from-dir may be specified")
-	}
-	if len(o.FromDirectory) == 0 && len(o.FromImageStream) == 0 && len(o.FromReleaseImage) == 0 {
-		if len(o.Mappings) == 0 {
-			return fmt.Errorf("must specify image mappings")
-		}
-	}
-	if len(o.Mirror) > 0 && o.ReferenceMode != "" && o.ReferenceMode != "public" {
-		return fmt.Errorf("--reference-mode must be public or empty when using --mirror")
-	}
 
 	extraComponentVersions, err := parseComponentVersionsLabel(o.ExtraComponentVersions)
 	if err != nil {
@@ -330,7 +369,7 @@ func (o *NewOptions) Run() error {
 			cm.Previous = []string{}
 		}
 	}
-	glog.V(4).Infof("Release metadata:\n%s", toJSONString(cm))
+	klog.V(4).Infof("Release metadata:\n%s", toJSONString(cm))
 
 	exclude := sets.NewString()
 	for _, s := range o.Exclude {
@@ -348,12 +387,13 @@ func (o *NewOptions) Run() error {
 			return fmt.Errorf("--from-release was not a valid pullspec: %v", err)
 		}
 
+		verifier := imagemanifest.NewVerifier()
 		var baseDigest string
 		var imageReferencesData, releaseMetadata []byte
 
 		buf := &bytes.Buffer{}
 		extractOpts := extract.NewOptions(genericclioptions.IOStreams{Out: buf, ErrOut: o.ErrOut})
-		extractOpts.RegistryConfig = o.RegistryConfig
+		extractOpts.SecurityOptions = o.SecurityOptions
 		extractOpts.OnlyFiles = true
 		extractOpts.Mappings = []extract.Mapping{
 			{
@@ -361,10 +401,11 @@ func (o *NewOptions) Run() error {
 				From:     "release-manifests/",
 			},
 		}
-		extractOpts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {
+		extractOpts.ImageMetadataCallback = func(m *extract.Mapping, dgst, contentDigest digest.Digest, config *docker10.DockerImageConfig) {
+			verifier.Verify(dgst, contentDigest)
 			if config.Config != nil {
 				baseDigest = config.Config.Labels[annotationReleaseBaseImageDigest]
-				glog.V(4).Infof("Release image was built on top of %s", baseDigest)
+				klog.V(4).Infof("Release image was built on top of %s", baseDigest)
 			}
 		}
 		extractOpts.TarEntryCallback = func(hdr *tar.Header, _ extract.LayerInfo, r io.Reader) (bool, error) {
@@ -391,6 +432,13 @@ func (o *NewOptions) Run() error {
 		}
 		if len(imageReferencesData) == 0 {
 			return fmt.Errorf("release image did not contain any image-references content")
+		}
+		if !verifier.Verified() {
+			err := fmt.Errorf("the input release image failed content verification and may have been tampered with")
+			if !o.SecurityOptions.SkipVerification {
+				return err
+			}
+			fmt.Fprintf(o.ErrOut, "warning: %v\n", err)
 		}
 
 		inputIS, err := readReleaseImageReferences(imageReferencesData)
@@ -438,16 +486,37 @@ func (o *NewOptions) Run() error {
 
 		fmt.Fprintf(o.ErrOut, "info: Found %d images in release\n", len(is.Spec.Tags))
 
-	case len(o.FromImageStream) > 0:
+	case len(o.FromImageStream) > 0, len(o.FromImageStreamFile) > 0:
 		is = &imageapi.ImageStream{}
 		is.Annotations = map[string]string{}
 		if len(o.FromImageStream) > 0 && len(o.Namespace) > 0 {
 			is.Annotations[annotationReleaseFromImageStream] = fmt.Sprintf("%s/%s", o.Namespace, o.FromImageStream)
 		}
 
-		inputIS, err := o.ImageClient.ImageV1().ImageStreams(o.Namespace).Get(o.FromImageStream, metav1.GetOptions{})
-		if err != nil {
-			return err
+		var inputIS *imageapi.ImageStream
+		if len(o.FromImageStreamFile) > 0 {
+			data, err := filenameContents(o.FromImageStreamFile, o.IOStreams.In)
+			if os.IsNotExist(err) {
+				return err
+			}
+			if err != nil {
+				return fmt.Errorf("unable to read input image stream file: %v", err)
+			}
+			is := &imageapi.ImageStream{}
+			if err := yaml.Unmarshal(data, &is); err != nil {
+				return fmt.Errorf("unable to load input image stream file: %v", err)
+			}
+			if is.Kind != "ImageStream" || is.APIVersion != "image.openshift.io/v1" {
+				return fmt.Errorf("unrecognized input image stream file, must be an ImageStream in image.openshift.io/v1")
+			}
+			inputIS = is
+
+		} else {
+			is, err := o.ImageClient.ImageV1().ImageStreams(o.Namespace).Get(o.FromImageStream, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			inputIS = is
 		}
 
 		if inputIS.Annotations == nil {
@@ -475,7 +544,7 @@ func (o *NewOptions) Run() error {
 			if f.IsDir() {
 				name := f.Name()
 				if exclude.Has(name) {
-					glog.V(2).Infof("Excluded directory %#v", f)
+					klog.V(2).Infof("Excluded directory %#v", f)
 					continue
 				}
 				metadata[name] = imageData{Directory: filepath.Join(o.FromDirectory, f.Name())}
@@ -502,7 +571,7 @@ func (o *NewOptions) Run() error {
 	default:
 		for _, m := range o.Mappings {
 			if exclude.Has(m.Source) {
-				glog.V(2).Infof("Excluded mapping %s", m.Source)
+				klog.V(2).Infof("Excluded mapping %s", m.Source)
 				continue
 			}
 			ordered = append(ordered, m.Source)
@@ -525,7 +594,7 @@ func (o *NewOptions) Run() error {
 	// update any custom mappings and then sort the spec tags
 	for _, m := range o.Mappings {
 		if exclude.Has(m.Source) {
-			glog.V(2).Infof("Excluded mapping %s", m.Source)
+			klog.V(2).Infof("Excluded mapping %s", m.Source)
 			continue
 		}
 		tag := hasTag(is.Spec.Tags, m.Source)
@@ -578,7 +647,6 @@ func (o *NewOptions) Run() error {
 		if err := o.mirrorImages(is); err != nil {
 			return err
 		}
-
 	}
 
 	var verifiers []PayloadVerifier
@@ -617,7 +685,10 @@ func (o *NewOptions) Run() error {
 		})
 	}
 
-	if err := pruneUnreferencedImageStreams(o.ErrOut, is, metadata, o.AlwaysInclude); err != nil {
+	// any input image with content, referenced in AlwaysInclude, or referenced from image-references is
+	// included, which guarantees the content of a payload can be reproduced
+	forceInclude := append(append([]string{}, o.AlwaysInclude...), ordered...)
+	if err := pruneUnreferencedImageStreams(o.ErrOut, is, metadata, forceInclude); err != nil {
 		return err
 	}
 
@@ -662,54 +733,103 @@ func resolveImageStreamTagsToReferenceMode(inputIS, is *imageapi.ImageStream, re
 		if forceExternal && len(external) == 0 {
 			return fmt.Errorf("only image streams or releases with public image repositories can be the source for releases when using the default --reference-mode")
 		}
-		for _, tag := range inputIS.Status.Tags {
-			if exclude.Has(tag.Tag) {
-				glog.V(2).Infof("Excluded status tag %s", tag.Tag)
+
+		externalFn := func(source, image string) string {
+			// filter source URLs
+			if len(source) > 0 && len(internal) > 0 && strings.HasPrefix(source, internal) {
+				klog.V(2).Infof("Can't use source %s because it points to the internal registry", source)
+				source = ""
+			}
+			// default to the external registry name
+			if (forceExternal || len(source) == 0) && len(external) > 0 {
+				return external + "@" + image
+			}
+			return source
+		}
+
+		covered := sets.NewString()
+		for _, ref := range inputIS.Spec.Tags {
+			if exclude.Has(ref.Name) {
+				klog.V(2).Infof("Excluded spec tag %s", ref.Name)
 				continue
 			}
+
+			if ref.From != nil && ref.From.Kind == "DockerImage" {
+				switch from, err := imagereference.Parse(ref.From.Name); {
+				case err != nil:
+					return err
+
+				case len(from.ID) > 0:
+					source := externalFn(ref.From.Name, from.ID)
+					if len(source) == 0 {
+						klog.V(2).Infof("Can't use spec tag %q because we cannot locate or calculate a source location", ref.Name)
+						continue
+					}
+
+					ref := ref.DeepCopy()
+					ref.From = &corev1.ObjectReference{Kind: "DockerImage", Name: source}
+					is.Spec.Tags = append(is.Spec.Tags, *ref)
+					covered.Insert(ref.Name)
+
+				case len(from.Tag) > 0:
+					tag := findStatusTagEvents(inputIS.Status.Tags, ref.Name)
+					if tag == nil {
+						continue
+					}
+					if len(tag.Items) == 0 {
+						for _, condition := range tag.Conditions {
+							if condition.Type == imageapi.ImportSuccess && condition.Status != metav1.StatusSuccess {
+								return fmt.Errorf("the tag %q in the source input stream has not been imported yet", tag.Tag)
+							}
+						}
+						continue
+					}
+					if ref.Generation != nil && *ref.Generation != tag.Items[0].Generation {
+						return fmt.Errorf("the tag %q in the source input stream has not been imported yet", tag.Tag)
+					}
+					if len(tag.Items[0].Image) == 0 {
+						return fmt.Errorf("the tag %q in the source input stream has no image id", tag.Tag)
+					}
+
+					source := externalFn(tag.Items[0].DockerImageReference, tag.Items[0].Image)
+					ref := ref.DeepCopy()
+					ref.From = &corev1.ObjectReference{Kind: "DockerImage", Name: source}
+					is.Spec.Tags = append(is.Spec.Tags, *ref)
+					covered.Insert(ref.Name)
+				}
+				continue
+			}
+			// TODO: support ImageStreamTag and ImageStreamImage
+		}
+
+		for _, tag := range inputIS.Status.Tags {
+			if covered.Has(tag.Tag) {
+				continue
+			}
+			if exclude.Has(tag.Tag) {
+				klog.V(2).Infof("Excluded status tag %s", tag.Tag)
+				continue
+			}
+
+			// error if we haven't imported anything to this tag, or skip otherwise
 			if len(tag.Items) == 0 {
+				for _, condition := range tag.Conditions {
+					if condition.Type == imageapi.ImportSuccess && condition.Status != metav1.StatusSuccess {
+						return fmt.Errorf("the tag %q in the source input stream has not been imported yet", tag.Tag)
+					}
+				}
+				continue
+			}
+			// skip rather than error (user created a reference spec tag, then deleted it)
+			if len(tag.Items[0].Image) == 0 {
+				klog.V(2).Infof("the tag %q in the source input stream has no image id", tag.Tag)
 				continue
 			}
 
 			// attempt to identify the source image
-			source := tag.Items[0].DockerImageReference
-			if len(tag.Items[0].Image) == 0 {
-				glog.V(2).Infof("Ignored tag %q because it had no image id or reference", tag.Tag)
-				continue
-			}
-			// eliminate status tag references that point to the outside
-			if len(source) > 0 {
-				if len(internal) > 0 && strings.HasPrefix(tag.Items[0].DockerImageReference, internal) {
-					glog.V(2).Infof("Can't use tag %q source %s because it points to the internal registry", tag.Tag, source)
-					source = ""
-				}
-			}
-			ref := findSpecTag(inputIS.Spec.Tags, tag.Tag)
-			if ref == nil {
-				ref = &imageapi.TagReference{Name: tag.Tag}
-			} else {
-				// prevent unimported images from being skipped
-				if ref.Generation != nil && *ref.Generation != tag.Items[0].Generation {
-					return fmt.Errorf("the tag %q in the source input stream has not been imported yet", tag.Tag)
-				}
-				// use the tag ref as the source
-				if ref.From != nil && ref.From.Kind == "DockerImage" && !strings.HasPrefix(ref.From.Name, internal) {
-					if from, err := imagereference.Parse(ref.From.Name); err == nil {
-						from.Tag = ""
-						from.ID = tag.Items[0].Image
-						source = from.Exact()
-					} else {
-						glog.V(2).Infof("Can't use tag %q from %s because it isn't a valid image reference", tag.Tag, ref.From.Name)
-					}
-				}
-				ref = ref.DeepCopy()
-			}
-			// default to the external registry name
-			if (forceExternal || len(source) == 0) && len(external) > 0 {
-				source = external + "@" + tag.Items[0].Image
-			}
+			source := externalFn(tag.Items[0].DockerImageReference, tag.Items[0].Image)
 			if len(source) == 0 {
-				glog.V(2).Infof("Can't use tag %q because we cannot locate or calculate a source location", tag.Tag)
+				klog.V(2).Infof("Can't use tag %q because we cannot locate or calculate a source location", tag.Tag)
 				continue
 			}
 			sourceRef, err := imagereference.Parse(source)
@@ -720,6 +840,7 @@ func resolveImageStreamTagsToReferenceMode(inputIS, is *imageapi.ImageStream, re
 			sourceRef.ID = tag.Items[0].Image
 			source = sourceRef.Exact()
 
+			ref := &imageapi.TagReference{Name: tag.Tag}
 			ref.From = &corev1.ObjectReference{Kind: "DockerImage", Name: source}
 			is.Spec.Tags = append(is.Spec.Tags, *ref)
 		}
@@ -734,7 +855,7 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 		return fmt.Errorf("no component images defined, unable to build a release payload")
 	}
 
-	glog.V(4).Infof("Extracting manifests for release from input images")
+	klog.V(4).Infof("Extracting manifests for release from input images")
 
 	dir := o.Directory
 	if len(dir) == 0 {
@@ -747,19 +868,23 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 		fmt.Fprintf(o.ErrOut, "info: Manifests will be extracted to %s\n", dir)
 	}
 
+	verifier := imagemanifest.NewVerifier()
 	var lock sync.Mutex
 	opts := extract.NewOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
-	opts.RegistryConfig = o.RegistryConfig
+	opts.SecurityOptions = o.SecurityOptions
 	opts.OnlyFiles = true
-	opts.MaxPerRegistry = o.MaxPerRegistry
-	opts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {
+	opts.ParallelOptions = o.ParallelOptions
+	opts.ImageMetadataCallback = func(m *extract.Mapping, dgst, contentDigest digest.Digest, config *docker10.DockerImageConfig) {
+		verifier.Verify(dgst, contentDigest)
+
 		lock.Lock()
 		defer lock.Unlock()
 		metadata[m.Name] = imageData{
-			Directory: m.To,
-			Ref:       m.ImageRef,
-			Config:    config,
-			Digest:    dgst,
+			Directory:     m.To,
+			Ref:           m.ImageRef,
+			Config:        config,
+			Digest:        dgst,
+			ContentDigest: contentDigest,
 		}
 	}
 
@@ -799,7 +924,6 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 				if imageConfig.Config != nil {
 					labels = imageConfig.Config.Labels
 				}
-
 				if tag.Annotations == nil {
 					tag.Annotations = make(map[string]string)
 				}
@@ -822,10 +946,10 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 				}
 
 				if len(labels[annotationReleaseOperator]) == 0 {
-					glog.V(2).Infof("Image %s has no %s label, skipping", m.ImageRef, annotationReleaseOperator)
+					klog.V(2).Infof("Image %s has no %s label, skipping", m.ImageRef, annotationReleaseOperator)
 					return false, nil
 				}
-				if err := os.MkdirAll(dstDir, 0770); err != nil {
+				if err := os.MkdirAll(dstDir, 0777); err != nil {
 					return false, err
 				}
 				if custom {
@@ -837,12 +961,21 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 			},
 		})
 	}
-	glog.V(4).Infof("Manifests will be extracted from:\n%#v", opts.Mappings)
+	klog.V(4).Infof("Manifests will be extracted from:\n%#v", opts.Mappings)
 	if err := opts.Run(); err != nil {
 		return err
 	}
+
+	if !verifier.Verified() {
+		err := fmt.Errorf("one or more input images failed content verification and may have been tampered with")
+		if !o.SecurityOptions.SkipVerification {
+			return err
+		}
+		fmt.Fprintf(o.ErrOut, "warning: %v\n", err)
+	}
+
 	if len(is.Spec.Tags) > 0 {
-		if err := os.MkdirAll(dir, 0770); err != nil {
+		if err := os.MkdirAll(dir, 0777); err != nil {
 			return err
 		}
 		data, err := json.MarshalIndent(is, "", "  ")
@@ -857,14 +990,14 @@ func (o *NewOptions) extractManifests(is *imageapi.ImageStream, name string, met
 }
 
 func (o *NewOptions) mirrorImages(is *imageapi.ImageStream) error {
-	glog.V(4).Infof("Mirroring release contents to %s", o.Mirror)
+	klog.V(4).Infof("Mirroring release contents to %s", o.Mirror)
 	copied := is.DeepCopy()
 	opts := NewMirrorOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
 	opts.DryRun = o.DryRun
 	opts.ImageStream = copied
 	opts.To = o.Mirror
 	opts.SkipRelease = true
-	opts.RegistryConfig = o.RegistryConfig
+	opts.SecurityOptions = o.SecurityOptions
 
 	if err := opts.Run(); err != nil {
 		return err
@@ -888,9 +1021,9 @@ func (o *NewOptions) mirrorImages(is *imageapi.ImageStream) error {
 			tag.From.Name = value
 		}
 	}
-	if glog.V(4) {
+	if klog.V(4) {
 		data, _ := json.MarshalIndent(is, "", "  ")
-		glog.Infof("Image references updated to:\n%s", string(data))
+		klog.Infof("Image references updated to:\n%s", string(data))
 	}
 
 	return nil
@@ -899,8 +1032,8 @@ func (o *NewOptions) mirrorImages(is *imageapi.ImageStream) error {
 func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time) error {
 	switch {
 	case len(o.ToDir) > 0:
-		glog.V(4).Infof("Writing release contents to directory %s", o.ToDir)
-		if err := os.MkdirAll(o.ToDir, 0755); err != nil {
+		klog.V(4).Infof("Writing release contents to directory %s", o.ToDir)
+		if err := os.MkdirAll(o.ToDir, 0777); err != nil {
 			return err
 		}
 		r, err := archive.DecompressStream(r)
@@ -936,7 +1069,7 @@ func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time)
 			}
 		}
 	case len(o.ToFile) > 0:
-		glog.V(4).Infof("Writing release contents to file %s", o.ToFile)
+		klog.V(4).Infof("Writing release contents to file %s", o.ToFile)
 		var w io.WriteCloser
 		if o.ToFile == "-" {
 			w = nopCloser{o.Out}
@@ -956,11 +1089,11 @@ func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time)
 		}
 		if o.ToFile != "-" {
 			if err := os.Chtimes(o.ToFile, is.CreationTimestamp.Time, is.CreationTimestamp.Time); err != nil {
-				glog.V(2).Infof("Unable to set timestamps on output file: %v", err)
+				klog.V(2).Infof("Unable to set timestamps on output file: %v", err)
 			}
 		}
 	case len(o.ToImage) > 0:
-		glog.V(4).Infof("Writing release contents to image %s", o.ToImage)
+		klog.V(4).Infof("Writing release contents to image %s", o.ToImage)
 		toRef, err := imagereference.Parse(o.ToImage)
 		if err != nil {
 			return fmt.Errorf("--to-image was not valid: %v", err)
@@ -983,11 +1116,13 @@ func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time)
 			}
 		}
 
+		verifier := imagemanifest.NewVerifier()
 		options := imageappend.NewAppendImageOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
-		options.RegistryConfig = o.RegistryConfig
+		options.SecurityOptions = o.SecurityOptions
 		options.DryRun = o.DryRun
 		options.From = toImageBase
-		options.ConfigurationCallback = func(dgst digest.Digest, config *docker10.DockerImageConfig) error {
+		options.ConfigurationCallback = func(dgst, contentDigest digest.Digest, config *docker10.DockerImageConfig) error {
+			verifier.Verify(dgst, contentDigest)
 			// reset any base image info
 			if len(config.OS) == 0 {
 				config.OS = "linux"
@@ -1017,6 +1152,14 @@ func (o *NewOptions) write(r io.Reader, is *imageapi.ImageStream, now time.Time)
 		if err := options.Run(); err != nil {
 			return err
 		}
+		if !verifier.Verified() {
+			err := fmt.Errorf("the base image failed content verification and may have been tampered with")
+			if !o.SecurityOptions.SkipVerification {
+				return err
+			}
+			fmt.Fprintf(o.ErrOut, "warning: %v\n", err)
+		}
+
 	default:
 		fmt.Fprintf(o.ErrOut, "info: Extracting operator contents to disk without building a release artifact\n")
 		if _, err := io.Copy(ioutil.Discard, r); err != nil {
@@ -1081,7 +1224,7 @@ func writePayload(w io.Writer, is *imageapi.ImageStream, cm *CincinnatiMetadata,
 	}
 	newest = newest.UTC().Truncate(time.Second)
 	is.CreationTimestamp.Time = newest
-	glog.V(4).Infof("Most recent content has date %s", newest.Format(time.RFC3339))
+	klog.V(4).Infof("Most recent content has date %s", newest.Format(time.RFC3339))
 
 	gw := gzip.NewWriter(w)
 	tw := tar.NewWriter(gw)
@@ -1123,7 +1266,7 @@ func writePayload(w io.Writer, is *imageapi.ImageStream, cm *CincinnatiMetadata,
 
 		if fi := takeFileByName(&contents, "image-references"); fi != nil {
 			path := filepath.Join(image.Directory, fi.Name())
-			glog.V(2).Infof("Perform image replacement based on inclusion of %s", path)
+			klog.V(2).Infof("Perform image replacement based on inclusion of %s", path)
 			transform, err = NewTransformFromImageStreamFile(path, is, allowMissingImages)
 			if err != nil {
 				return fmt.Errorf("operator %q failed to map images: %s", name, err)
@@ -1152,7 +1295,7 @@ func writePayload(w io.Writer, is *imageapi.ImageStream, cm *CincinnatiMetadata,
 			}
 			src := filepath.Join(image.Directory, fi.Name())
 			dst := path.Join(append(append([]string{}, parts...), filename)...)
-			glog.V(4).Infof("Copying %s to %s", src, dst)
+			klog.V(4).Infof("Copying %s to %s", src, dst)
 
 			data, err := ioutil.ReadFile(src)
 			if err != nil {
@@ -1172,7 +1315,7 @@ func writePayload(w io.Writer, is *imageapi.ImageStream, cm *CincinnatiMetadata,
 			if err := tw.WriteHeader(&tar.Header{Mode: 0444, ModTime: fi.ModTime(), Typeflag: tar.TypeReg, Name: dst, Size: int64(len(modified))}); err != nil {
 				return err
 			}
-			glog.V(6).Infof("Writing payload to %s\n%s", dst, string(modified))
+			klog.V(6).Infof("Writing payload to %s\n%s", dst, string(modified))
 			if _, err := tw.Write(modified); err != nil {
 				return err
 			}
@@ -1239,7 +1382,7 @@ func pruneEmptyDirectories(dir string) error {
 		if len(names) > 0 {
 			return nil
 		}
-		glog.V(4).Infof("Component %s does not have any manifests", path)
+		klog.V(4).Infof("Component %s does not have any manifests", path)
 		return os.Remove(path)
 	})
 }
@@ -1340,7 +1483,7 @@ func pruneUnreferencedImageStreams(out io.Writer, is *imageapi.ImageStream, meta
 	for _, tag := range is.Spec.Tags {
 		_, ok := referenced[tag.Name]
 		if !ok {
-			glog.V(3).Infof("Excluding tag %s which is not referenced by an operator", tag.Name)
+			klog.V(3).Infof("Excluding tag %s which is not referenced by an operator", tag.Name)
 			continue
 		}
 		updated = append(updated, tag)
@@ -1350,4 +1493,25 @@ func pruneUnreferencedImageStreams(out io.Writer, is *imageapi.ImageStream, meta
 		is.Spec.Tags = updated
 	}
 	return nil
+}
+
+func filenameContents(s string, in io.Reader) ([]byte, error) {
+	switch {
+	case s == "-":
+		return ioutil.ReadAll(in)
+	case strings.Index(s, "http://") == 0 || strings.Index(s, "https://") == 0:
+		resp, err := http.Get(s)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		switch {
+		case resp.StatusCode >= 200 && resp.StatusCode < 300:
+			return ioutil.ReadAll(resp.Body)
+		default:
+			return nil, fmt.Errorf("unable to load URL: server returned %d: %s", resp.StatusCode, resp.Status)
+		}
+	default:
+		return ioutil.ReadFile(s)
+	}
 }

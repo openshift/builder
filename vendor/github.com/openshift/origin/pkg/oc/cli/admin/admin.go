@@ -3,12 +3,15 @@ package admin
 import (
 	"fmt"
 
+	"k8s.io/kubernetes/pkg/kubectl/cmd/certificates"
+	"k8s.io/kubernetes/pkg/kubectl/cmd/taint"
+
 	"github.com/spf13/cobra"
 
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	kubecmd "k8s.io/kubernetes/pkg/kubectl/cmd"
-	ktemplates "k8s.io/kubernetes/pkg/kubectl/cmd/templates"
+	"k8s.io/kubernetes/pkg/kubectl/cmd/drain"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	ktemplates "k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	"github.com/openshift/origin/pkg/cmd/server/admin"
 	"github.com/openshift/origin/pkg/cmd/templates"
@@ -26,6 +29,7 @@ import (
 	migratehpa "github.com/openshift/origin/pkg/oc/cli/admin/migrate/legacyhpa"
 	migratestorage "github.com/openshift/origin/pkg/oc/cli/admin/migrate/storage"
 	migratetemplateinstances "github.com/openshift/origin/pkg/oc/cli/admin/migrate/templateinstances"
+	"github.com/openshift/origin/pkg/oc/cli/admin/mustgather"
 	"github.com/openshift/origin/pkg/oc/cli/admin/network"
 	"github.com/openshift/origin/pkg/oc/cli/admin/node"
 	"github.com/openshift/origin/pkg/oc/cli/admin/policy"
@@ -59,15 +63,16 @@ func NewCommandAdmin(name, fullName string, f kcmdutil.Factory, streams genericc
 			Commands: []*cobra.Command{
 				upgrade.New(f, fullName, streams),
 				top.NewCommandTop(top.TopRecommendedName, fullName+" "+top.TopRecommendedName, f, streams),
+				mustgather.NewMustGatherCommand(f, streams),
 			},
 		},
 		{
 			Message: "Node Management:",
 			Commands: []*cobra.Command{
-				cmdutil.ReplaceCommandName("kubectl", fullName, kubecmd.NewCmdDrain(f, streams)),
-				cmdutil.ReplaceCommandName("kubectl", fullName, ktemplates.Normalize(kubecmd.NewCmdCordon(f, streams))),
-				cmdutil.ReplaceCommandName("kubectl", fullName, ktemplates.Normalize(kubecmd.NewCmdUncordon(f, streams))),
-				cmdutil.ReplaceCommandName("kubectl", fullName, ktemplates.Normalize(kubecmd.NewCmdTaint(f, streams))),
+				cmdutil.ReplaceCommandName("kubectl", fullName, drain.NewCmdDrain(f, streams)),
+				cmdutil.ReplaceCommandName("kubectl", fullName, ktemplates.Normalize(drain.NewCmdCordon(f, streams))),
+				cmdutil.ReplaceCommandName("kubectl", fullName, ktemplates.Normalize(drain.NewCmdUncordon(f, streams))),
+				cmdutil.ReplaceCommandName("kubectl", fullName, ktemplates.Normalize(taint.NewCmdTaint(f, streams))),
 				node.NewCmdLogs(fullName, f, streams),
 			},
 		},
@@ -77,7 +82,7 @@ func NewCommandAdmin(name, fullName string, f kcmdutil.Factory, streams genericc
 				project.NewCmdNewProject(project.NewProjectRecommendedName, fullName+" "+project.NewProjectRecommendedName, f, streams),
 				policy.NewCmdPolicy(policy.PolicyRecommendedName, fullName+" "+policy.PolicyRecommendedName, f, streams),
 				groups.NewCmdGroups(groups.GroupsRecommendedName, fullName+" "+groups.GroupsRecommendedName, f, streams),
-				withShortDescription(kubecmd.NewCmdCertificate(f, streams), "Approve or reject certificate requests"),
+				withShortDescription(certificates.NewCmdCertificate(f, streams), "Approve or reject certificate requests"),
 				network.NewCmdPodNetwork(network.PodNetworkCommandName, fullName+" "+network.PodNetworkCommandName, f, streams),
 			},
 		},
@@ -99,7 +104,6 @@ func NewCommandAdmin(name, fullName string, f kcmdutil.Factory, streams genericc
 		{
 			Message: "Configuration:",
 			Commands: []*cobra.Command{
-				cert.NewCmdCert(cert.CertRecommendedName, fullName+" "+cert.CertRecommendedName, streams),
 				admin.NewCommandCreateKubeConfig(admin.CreateKubeConfigCommandName, fullName+" "+admin.CreateKubeConfigCommandName, streams),
 				admin.NewCommandCreateClient(admin.CreateClientCommandName, fullName+" "+admin.CreateClientCommandName, streams),
 
@@ -113,21 +117,10 @@ func NewCommandAdmin(name, fullName string, f kcmdutil.Factory, streams genericc
 		},
 	}
 
+	cmds.AddCommand(cert.NewCmdCert(cert.CertRecommendedName, fullName+" "+cert.CertRecommendedName, streams))
+
 	groups.Add(cmds)
 	templates.ActsAsRootCommand(cmds, []string{"options"}, groups...)
-
-	deprecatedCACommands := []*cobra.Command{
-		admin.NewCommandCreateMasterCerts(admin.CreateMasterCertsCommandName, fullName+" "+admin.CreateMasterCertsCommandName, streams),
-		admin.NewCommandCreateKeyPair(admin.CreateKeyPairCommandName, fullName+" "+admin.CreateKeyPairCommandName, streams),
-		admin.NewCommandCreateServerCert(admin.CreateServerCertCommandName, fullName+" "+admin.CreateServerCertCommandName, streams),
-		admin.NewCommandCreateSignerCert(admin.CreateSignerCertCommandName, fullName+" "+admin.CreateSignerCertCommandName, streams),
-	}
-	for _, cmd := range deprecatedCACommands {
-		// Unsetting Short description will not show this command in help
-		cmd.Short = ""
-		cmd.Deprecated = fmt.Sprintf("Use '%s ca' instead.", fullName)
-		cmds.AddCommand(cmd)
-	}
 
 	cmds.AddCommand(
 		release.NewCmd(f, fullName, streams),

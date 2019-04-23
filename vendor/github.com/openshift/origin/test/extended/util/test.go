@@ -10,12 +10,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/golang/glog"
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/config"
 	"github.com/onsi/ginkgo/reporters"
 	"github.com/onsi/ginkgo/types"
 	"github.com/onsi/gomega"
+	"k8s.io/klog"
 
 	kapiv1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +28,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/retry"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/testfiles"
+	"k8s.io/kubernetes/test/e2e/generated"
 
 	"github.com/openshift/origin/pkg/cmd/server/bootstrappolicy"
 	"github.com/openshift/origin/pkg/oc/cli/admin/policy"
@@ -68,10 +70,18 @@ func InitTest() {
 
 	TestContext.DeleteNamespace = os.Getenv("DELETE_NAMESPACE") != "false"
 	TestContext.VerifyServiceAccount = true
-	TestContext.RepoRoot = os.Getenv("KUBE_REPO_ROOT")
+	testfiles.AddFileSource(testfiles.BindataFileSource{
+		Asset:      generated.Asset,
+		AssetNames: generated.AssetNames,
+	})
 	TestContext.KubectlPath = "kubectl"
 	TestContext.KubeConfig = KubeConfigPath()
 	os.Setenv("KUBECONFIG", TestContext.KubeConfig)
+
+	// "debian" is used when not set. At least GlusterFS tests need "custom".
+	// (There is no option for "rhel" or "centos".)
+	TestContext.NodeOSDistro = "custom"
+	TestContext.MasterOSDistro = "custom"
 
 	// load and set the host variable for kubectl
 	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(&clientcmd.ClientConfigLoadingRules{ExplicitPath: TestContext.KubeConfig}, &clientcmd.ConfigOverrides{})
@@ -91,7 +101,7 @@ func InitTest() {
 	// Ensure that Kube tests run privileged (like they do upstream)
 	TestContext.CreateTestingNS = createTestingNS
 
-	glog.V(2).Infof("Extended test version %s", version.Get().String())
+	klog.V(2).Infof("Extended test version %s", version.Get().String())
 }
 
 func ExecuteTest(t ginkgo.GinkgoTestingT, suite string) {
@@ -103,7 +113,7 @@ func ExecuteTest(t ginkgo.GinkgoTestingT, suite string) {
 
 	if TestContext.ReportDir != "" {
 		if err := os.MkdirAll(TestContext.ReportDir, 0755); err != nil {
-			glog.Errorf("Failed creating report directory: %v", err)
+			klog.Errorf("Failed creating report directory: %v", err)
 		}
 		defer e2e.CoreDump(TestContext.ReportDir)
 	}
@@ -257,7 +267,7 @@ func createTestingNS(baseName string, c kclientset.Interface, labels map[string]
 		return ns, err
 	}
 
-	glog.V(2).Infof("blah=%s", ginkgo.CurrentGinkgoTestDescription().FileName)
+	klog.V(2).Infof("blah=%s", ginkgo.CurrentGinkgoTestDescription().FileName)
 
 	// Add anyuid and privileged permissions for upstream tests
 	if (isKubernetesE2ETest() && !skipTestNamespaceCustomization()) || isOriginUpgradeTest() {
@@ -325,6 +335,8 @@ var (
 			`Kubernetes Dashboard`,            // Not installed by default (also probably slow image pull)
 			`\[Feature:ServiceLoadBalancer\]`, // Not enabled yet
 			`PersistentVolumes-local`,         // Disable local storage in 4.0 for now (sig-storage/hekumar@redhat.com)
+			`\[Feature:RuntimeClass\]`,        // disable runtimeclass tests in 4.1 (sig-pod/sjenning@redhat.com)
+			`\[Feature:CustomResourceWebhookConversion\]`, // webhook conversion is off by default.  sig-master/@sttts
 
 			`NetworkPolicy between server and client should allow egress access on one named port`, // not yet implemented
 
@@ -336,7 +348,7 @@ var (
 			`\[Feature:Audit\]`,                         // Needs special configuration
 			`\[Feature:LocalStorageCapacityIsolation\]`, // relies on a separate daemonset?
 
-			`kube-dns-autoscaler`,                                                    // Don't run kube-dns
+			`kube-dns-autoscaler`, // Don't run kube-dns
 			`should check if Kubernetes master services is included in cluster-info`, // Don't run kube-dns
 			`DNS configMap`, // this tests dns federation configuration via configmap, which we don't support yet
 
@@ -388,7 +400,11 @@ var (
 
 			`should idle the service and DeploymentConfig properly`, // idling with a single service and DeploymentConfig [Conformance]
 
-			`\[Feature:Volumes\]`, // storage team to investigate it post-rebase
+			`\[Feature:Volumes\]`,    // storage team to investigate it post-rebase
+			`\[Driver: csi-hostpath`, // storage team to investigate it post-rebase. @hekumar
+			// BlockVolume tests that need kubelet 1.13
+			`\[Driver: nfs\] \[Testpattern: Pre-provisioned PV \(block volmode\)\] volumeMode should fail to create pod by failing to mount volume`,
+			`\[Driver: aws\] \[Testpattern: Dynamic PV \(block volmode\)\] volumeMode should create sc, pod, pv, and pvc, read/write to the pv, and delete all created resources`,
 
 			// TODO: the following list of tests is disabled temporarily due to the fact
 			// that we're running kubelet 1.11 and these require 1.12. We will remove them

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -26,6 +26,7 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"
+	"github.com/openshift/library-go/pkg/operator/loglevel"
 	"github.com/openshift/library-go/pkg/operator/management"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceread"
@@ -35,11 +36,11 @@ import (
 )
 
 const (
-	operatorStatusInstallerControllerFailing = "InstallerControllerFailing"
-	nodeInstallerFailing                     = "NodeInstallerFailing"
-	installerControllerWorkQueueKey          = "key"
-	manifestDir                              = "pkg/operator/staticpod/controller/installer"
-	manifestInstallerPodPath                 = "manifests/installer-pod.yaml"
+	operatorStatusInstallerControllerDegraded = "InstallerControllerDegraded"
+	nodeInstallerDegraded                     = "NodeInstallerDegraded"
+	installerControllerWorkQueueKey           = "key"
+	manifestDir                               = "pkg/operator/staticpod/controller/installer"
+	manifestInstallerPodPath                  = "manifests/installer-pod.yaml"
 
 	hostResourceDirDir = "/etc/kubernetes/static-pod-resources"
 	hostPodManifestDir = "/etc/kubernetes/manifests"
@@ -65,15 +66,14 @@ type InstallerController struct {
 	certSecrets    []revision.RevisionResource
 	certDir        string
 
-	operatorConfigClient v1helpers.StaticPodOperatorClient
+	operatorClient v1helpers.StaticPodOperatorClient
 
 	configMapsGetter corev1client.ConfigMapsGetter
 	podsGetter       corev1client.PodsGetter
 
+	cachesToSync  []cache.InformerSynced
+	queue         workqueue.RateLimitingInterface
 	eventRecorder events.Recorder
-
-	// queue only ever has one item, but it has nice error handling backoff/retry semantics
-	queue workqueue.RateLimitingInterface
 
 	// installerPodImageFn returns the image name for the installer pod
 	installerPodImageFn func() string
@@ -117,7 +117,7 @@ func NewInstallerController(
 	secrets []revision.RevisionResource,
 	command []string,
 	kubeInformersForTargetNamespace informers.SharedInformerFactory,
-	operatorConfigClient v1helpers.StaticPodOperatorClient,
+	operatorClient v1helpers.StaticPodOperatorClient,
 	configMapsGetter corev1client.ConfigMapsGetter,
 	podsGetter corev1client.PodsGetter,
 	eventRecorder events.Recorder,
@@ -129,10 +129,10 @@ func NewInstallerController(
 		secrets:         secrets,
 		command:         command,
 
-		operatorConfigClient: operatorConfigClient,
-		configMapsGetter:     configMapsGetter,
-		podsGetter:           podsGetter,
-		eventRecorder:        eventRecorder.WithComponentSuffix("installer-controller"),
+		operatorClient:   operatorClient,
+		configMapsGetter: configMapsGetter,
+		podsGetter:       podsGetter,
+		eventRecorder:    eventRecorder.WithComponentSuffix("installer-controller"),
 
 		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "InstallerController"),
 
@@ -140,8 +140,12 @@ func NewInstallerController(
 	}
 
 	c.ownerRefsFn = c.setOwnerRefs
-	operatorConfigClient.Informer().AddEventHandler(c.eventHandler())
+
+	operatorClient.Informer().AddEventHandler(c.eventHandler())
 	kubeInformersForTargetNamespace.Core().V1().Pods().Informer().AddEventHandler(c.eventHandler())
+
+	c.cachesToSync = append(c.cachesToSync, operatorClient.Informer().HasSynced)
+	c.cachesToSync = append(c.cachesToSync, kubeInformersForTargetNamespace.Core().V1().Pods().Informer().HasSynced)
 
 	return c
 }
@@ -298,8 +302,8 @@ func (c *InstallerController) manageInstallationPods(operatorSpec *operatorv1.St
 			// if we make a change to this status, we want to write it out to the API before we commence work on the next node.
 			// it's an extra write/read, but it makes the state debuggable from outside this process
 			if !equality.Semantic.DeepEqual(newCurrNodeState, currNodeState) {
-				glog.Infof("%q moving to %v", currNodeState.NodeName, spew.Sdump(*newCurrNodeState))
-				newOperatorStatus, updated, updateError := v1helpers.UpdateStaticPodStatus(c.operatorConfigClient, setNodeStatusFn(newCurrNodeState), setAvailableProgressingNodeInstallerFailingConditions)
+				klog.Infof("%q moving to %v", currNodeState.NodeName, spew.Sdump(*newCurrNodeState))
+				newOperatorStatus, updated, updateError := v1helpers.UpdateStaticPodStatus(c.operatorClient, setNodeStatusFn(newCurrNodeState), setAvailableProgressingNodeInstallerFailingConditions)
 				if updateError != nil {
 					return false, updateError
 				} else if updated && currNodeState.CurrentRevision != newCurrNodeState.CurrentRevision {
@@ -307,18 +311,18 @@ func (c *InstallerController) manageInstallationPods(operatorSpec *operatorv1.St
 						currNodeState.CurrentRevision, newCurrNodeState.CurrentRevision)
 				}
 				if err := c.updateRevisionStatus(newOperatorStatus); err != nil {
-					glog.Errorf("error updating revision status configmap: %v", err)
+					klog.Errorf("error updating revision status configmap: %v", err)
 				}
 				return false, nil
 			} else {
-				glog.V(2).Infof("%q is in transition to %d, but has not made progress", currNodeState.NodeName, currNodeState.TargetRevision)
+				klog.V(2).Infof("%q is in transition to %d, but has not made progress", currNodeState.NodeName, currNodeState.TargetRevision)
 			}
 			if !oom {
 				break
 			}
 
 			// OOM is special. We want to retry the installer pod by falling through here. Also we don't set LastFailedRevision.
-			glog.V(2).Infof("Retrying %q for revision %d because it was OOM killed", currNodeState.NodeName, currNodeState.TargetRevision)
+			klog.V(2).Infof("Retrying %q for revision %d because it was OOM killed", currNodeState.NodeName, currNodeState.TargetRevision)
 			installerPodName := getInstallerPodName(currNodeState.TargetRevision, currNodeState.NodeName)
 			if err := c.podsGetter.Pods(c.targetNamespace).Delete(installerPodName, &metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 				return true, err
@@ -327,10 +331,10 @@ func (c *InstallerController) manageInstallationPods(operatorSpec *operatorv1.St
 
 		revisionToStart := c.getRevisionToStart(currNodeState, prevNodeState, operatorStatus)
 		if revisionToStart == 0 {
-			glog.V(4).Infof("%q does not need update", currNodeState.NodeName)
+			klog.V(4).Infof("%q does not need update", currNodeState.NodeName)
 			continue
 		}
-		glog.Infof("%q needs new revision %d", currNodeState.NodeName, revisionToStart)
+		klog.Infof("%q needs new revision %d", currNodeState.NodeName, revisionToStart)
 
 		newCurrNodeState := currNodeState.DeepCopy()
 		newCurrNodeState.TargetRevision = revisionToStart
@@ -339,8 +343,8 @@ func (c *InstallerController) manageInstallationPods(operatorSpec *operatorv1.St
 		// if we make a change to this status, we want to write it out to the API before we commence work on the next node.
 		// it's an extra write/read, but it makes the state debuggable from outside this process
 		if !equality.Semantic.DeepEqual(newCurrNodeState, currNodeState) {
-			glog.Infof("%q moving to %v", currNodeState.NodeName, spew.Sdump(*newCurrNodeState))
-			if _, updated, updateError := v1helpers.UpdateStaticPodStatus(c.operatorConfigClient, setNodeStatusFn(newCurrNodeState), setAvailableProgressingNodeInstallerFailingConditions); updateError != nil {
+			klog.Infof("%q moving to %v", currNodeState.NodeName, spew.Sdump(*newCurrNodeState))
+			if _, updated, updateError := v1helpers.UpdateStaticPodStatus(c.operatorClient, setNodeStatusFn(newCurrNodeState), setAvailableProgressingNodeInstallerFailingConditions); updateError != nil {
 				return false, updateError
 			} else if updated && currNodeState.TargetRevision != newCurrNodeState.TargetRevision && newCurrNodeState.TargetRevision != 0 {
 				c.eventRecorder.Eventf("NodeTargetRevisionChanged", "Updating node %q from revision %d to %d", currNodeState.NodeName,
@@ -378,7 +382,7 @@ func (c *InstallerController) updateConfigMapForRevision(currentRevisions map[in
 	for currentRevision := range currentRevisions {
 		statusConfigMap, err := c.configMapsGetter.ConfigMaps(c.targetNamespace).Get(statusConfigMapNameForRevision(currentRevision), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
-			glog.Infof("%s configmap not found, skipping update revision status", statusConfigMapNameForRevision(currentRevision))
+			klog.Infof("%s configmap not found, skipping update revision status", statusConfigMapNameForRevision(currentRevision))
 			continue
 		}
 		if err != nil {
@@ -485,14 +489,14 @@ func setAvailableProgressingNodeInstallerFailingConditions(newStatus *operatorv1
 		failingDescription := strings.Join(failingStrings, "; ")
 
 		v1helpers.SetOperatorCondition(&newStatus.Conditions, operatorv1.OperatorCondition{
-			Type:    nodeInstallerFailing,
+			Type:    nodeInstallerDegraded,
 			Status:  operatorv1.ConditionTrue,
 			Reason:  "InstallerPodFailed",
 			Message: failingDescription,
 		})
 	} else {
 		v1helpers.SetOperatorCondition(&newStatus.Conditions, operatorv1.OperatorCondition{
-			Type:   nodeInstallerFailing,
+			Type:   nodeInstallerDegraded,
 			Status: operatorv1.ConditionFalse,
 		})
 	}
@@ -624,8 +628,9 @@ func (c *InstallerController) ensureInstallerPod(nodeName string, operatorSpec *
 	if c.configMaps[0].Optional {
 		return fmt.Errorf("pod configmap %s is required, cannot be optional", c.configMaps[0].Name)
 	}
+
 	args := []string{
-		"-v=4", // TODO: Make this configurable?
+		fmt.Sprintf("-v=%d", loglevel.LogLevelToKlog(operatorSpec.LogLevel)),
 		fmt.Sprintf("--revision=%d", revision),
 		fmt.Sprintf("--namespace=%s", pod.Namespace),
 		fmt.Sprintf("--pod=%s", c.configMaps[0].Name),
@@ -696,7 +701,7 @@ func getInstallerPodImageFromEnv() string {
 }
 
 func (c InstallerController) sync() error {
-	operatorSpec, originalOperatorStatus, resourceVersion, err := c.operatorConfigClient.GetStaticPodOperatorState()
+	operatorSpec, originalOperatorStatus, resourceVersion, err := c.operatorClient.GetStaticPodOperatorState()
 	if err != nil {
 		return err
 	}
@@ -714,7 +719,7 @@ func (c InstallerController) sync() error {
 
 	// update failing condition
 	cond := operatorv1.OperatorCondition{
-		Type:   operatorStatusInstallerControllerFailing,
+		Type:   operatorStatusInstallerControllerDegraded,
 		Status: operatorv1.ConditionFalse,
 	}
 	if err != nil {
@@ -722,7 +727,7 @@ func (c InstallerController) sync() error {
 		cond.Reason = "Error"
 		cond.Message = err.Error()
 	}
-	if _, _, updateError := v1helpers.UpdateStaticPodStatus(c.operatorConfigClient, v1helpers.UpdateStaticPodConditionFn(cond), setAvailableProgressingNodeInstallerFailingConditions); updateError != nil {
+	if _, _, updateError := v1helpers.UpdateStaticPodStatus(c.operatorClient, v1helpers.UpdateStaticPodConditionFn(cond), setAvailableProgressingNodeInstallerFailingConditions); updateError != nil {
 		if err == nil {
 			return updateError
 		}
@@ -736,8 +741,11 @@ func (c *InstallerController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	glog.Infof("Starting InstallerController")
-	defer glog.Infof("Shutting down InstallerController")
+	klog.Infof("Starting InstallerController")
+	defer klog.Infof("Shutting down InstallerController")
+	if !cache.WaitForCacheSync(stopCh, c.cachesToSync...) {
+		return
+	}
 
 	// doesn't matter what workers say, only start one.
 	go wait.Until(c.runWorker, time.Second, stopCh)

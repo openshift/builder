@@ -9,8 +9,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	imageclient "github.com/openshift/client-go/image/clientset/versioned"
 	"github.com/openshift/library-go/pkg/image/reference"
@@ -116,7 +116,7 @@ func (i *RegistryInfo) HostPort() (string, bool) {
 
 func findRegistryInfo(client imageclient.Interface, namespaces ...string) (*RegistryInfo, error) {
 	for _, ns := range namespaces {
-		imageStreams, err := client.Image().ImageStreams(ns).List(metav1.ListOptions{})
+		imageStreams, err := client.ImageV1().ImageStreams(ns).List(metav1.ListOptions{})
 		if err != nil || len(imageStreams.Items) == 0 {
 			continue
 		}

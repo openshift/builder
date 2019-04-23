@@ -11,13 +11,13 @@ import (
 
 	"github.com/onsi/gomega"
 
-	"github.com/golang/glog"
 	"github.com/onsi/ginkgo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/klog"
 
 	"k8s.io/apiserver/pkg/util/logs"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
 
 	"github.com/openshift/library-go/pkg/serviceability"
@@ -117,6 +117,7 @@ func newRunCommand() *cobra.Command {
 					return err
 				}
 				os.Setenv("TEST_PROVIDER", opt.Provider)
+				e2e.AfterReadingAllFlags(exutil.TestContext)
 				return opt.Run(args)
 			})
 		},
@@ -165,6 +166,7 @@ func newRunUpgradeCommand() *cobra.Command {
 					return err
 				}
 				os.Setenv("TEST_PROVIDER", opt.Provider)
+				e2e.AfterReadingAllFlags(exutil.TestContext)
 				return opt.Run(args)
 			})
 		},
@@ -199,6 +201,7 @@ func newRunTestCommand() *cobra.Command {
 			if err := initUpgrade(os.Getenv("TEST_UPGRADE")); err != nil {
 				return err
 			}
+			e2e.AfterReadingAllFlags(exutil.TestContext)
 			return testOpt.Run(args)
 		},
 	}
@@ -250,6 +253,10 @@ func initProvider(provider string) error {
 	exutil.TestContext.MaxNodesToGather = 0
 	exutil.TestContext.Viper = os.Getenv("VIPERCONFIG")
 
+	// set defaults so these tests don't log
+	exutil.TestContext.LoggingSoak.Scale = 1
+	exutil.TestContext.LoggingSoak.MilliSecondsBetweenWaves = 5000
+
 	exutil.AnnotateTestSuite()
 	exutil.InitTest()
 	gomega.RegisterFailHandler(ginkgo.Fail)
@@ -280,6 +287,9 @@ func decodeProviderTo(provider string, testContext *e2e.TestContextType) error {
 			return fmt.Errorf("provider must decode into the cloud config object: %v", err)
 		}
 	}
-	glog.V(2).Infof("Provider %s: %#v", testContext.Provider, testContext.CloudConfig)
+	if len(testContext.Provider) == 0 {
+		testContext.Provider = "skeleton"
+	}
+	klog.V(2).Infof("Provider %s: %#v", testContext.Provider, testContext.CloudConfig)
 	return nil
 }

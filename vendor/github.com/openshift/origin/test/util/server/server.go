@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -16,7 +17,8 @@ import (
 	"time"
 
 	etcdclientv3 "github.com/coreos/etcd/clientv3"
-	"github.com/golang/glog"
+	"github.com/openshift/library-go/pkg/assets/create"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +41,7 @@ import (
 	authorizationv1typedclient "github.com/openshift/client-go/authorization/clientset/versioned/typed/authorization/v1"
 	projectv1typedclient "github.com/openshift/client-go/project/clientset/versioned/typed/project/v1"
 	"github.com/openshift/library-go/pkg/crypto"
+
 	"github.com/openshift/origin/pkg/api/legacy"
 	"github.com/openshift/origin/pkg/cmd/openshift-apiserver"
 	"github.com/openshift/origin/pkg/cmd/openshift-controller-manager"
@@ -54,10 +57,11 @@ import (
 	newproject "github.com/openshift/origin/pkg/oc/cli/admin/project"
 	"github.com/openshift/origin/test/util"
 
-	// install all APIs
-	_ "github.com/openshift/origin/pkg/api/install"
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 	_ "k8s.io/kubernetes/pkg/apis/extensions/install"
+
+	// install all APIs
+	_ "github.com/openshift/origin/pkg/api/install"
 )
 
 var (
@@ -65,8 +69,6 @@ var (
 	startLock sync.Mutex
 	// startedMaster is true if the master has already been started in process
 	startedMaster bool
-	// startedNode is true if the node has already been started in process
-	startedNode bool
 
 	openshiftGVs = []schema.GroupVersion{
 		{Group: "apps.openshift.io", Version: "v1"},
@@ -91,16 +93,6 @@ func guardMaster() {
 		panic("the master has already been started once in this process - run only a single test, or use the sub-shell")
 	}
 	startedMaster = true
-}
-
-// guardMaster prevents multiple master processes from being started at once
-func guardNode() {
-	startLock.Lock()
-	defer startLock.Unlock()
-	if startedNode {
-		panic("the node has already been started once in this process - run only a single test, or use the sub-shell")
-	}
-	startedNode = true
 }
 
 // ServiceAccountWaitTimeout is used to determine how long to wait for the service account
@@ -161,7 +153,7 @@ func setupStartOptions() *start.MasterArgs {
 	masterAddr := os.Getenv("OS_MASTER_ADDR")
 	if len(masterAddr) == 0 {
 		if addr, err := FindAvailableBindAddress(10000, 29999); err != nil {
-			glog.Fatalf("Couldn't find free address for master: %v", err)
+			klog.Fatalf("Couldn't find free address for master: %v", err)
 		} else {
 			masterAddr = addr
 		}
@@ -172,7 +164,7 @@ func setupStartOptions() *start.MasterArgs {
 	dnsAddr := os.Getenv("OS_DNS_ADDR")
 	if len(dnsAddr) == 0 {
 		if addr, err := FindAvailableBindAddress(10000, 29999); err != nil {
-			glog.Fatalf("Couldn't find free address for DNS: %v", err)
+			klog.Fatalf("Couldn't find free address for DNS: %v", err)
 		} else {
 			dnsAddr = addr
 		}
@@ -251,7 +243,7 @@ func DefaultMasterOptionsWithTweaks() (*configapi.MasterConfig, error) {
 	}
 	masterConfig.ImagePolicyConfig.AllowedRegistriesForImport = &allowedRegistries
 
-	glog.Infof("Starting integration server from master %s", masterArgs.ConfigDir.Value())
+	klog.Infof("Starting integration server from master %s", masterArgs.ConfigDir.Value())
 
 	return masterConfig, nil
 }
@@ -448,15 +440,28 @@ func startKubernetesAPIServer(masterConfig *configapi.MasterConfig, clientConfig
 	kubeAPIServerConfig.APIServerArguments["audit-log-format"] = kubecontrolplanev1.Arguments{"json"}
 	go func() {
 		if err := openshift_kube_apiserver.RunOpenShiftKubeAPIServerServer(kubeAPIServerConfig, stopCh); err != nil {
-			glog.Errorf("openshift-kube-apiserver terminated: %v", err)
+			klog.Errorf("openshift-kube-apiserver terminated: %v", err)
 		} else {
-			glog.Info("openshift-kube-apiserver terminated cleanly")
+			klog.Info("openshift-kube-apiserver terminated cleanly")
 		}
 	}()
 
-	url, err := url.Parse(fmt.Sprintf("https://%s", masterConfig.ServingInfo.BindAddress))
-	if err := waitForServerHealthy(url); err != nil {
+	serverURL, err := url.Parse(fmt.Sprintf("https://%s", masterConfig.ServingInfo.BindAddress))
+	if err := waitForServerHealthy(serverURL); err != nil {
 		return fmt.Errorf("Waiting for Kubernetes API /healthz failed with: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 30*time.Second)
+	defer cancel()
+
+	crdManifestsDir := "../../hack/local-up-master/kube-apiserver-manifests"
+	if _, err := os.Stat(crdManifestsDir); os.IsNotExist(err) {
+		return fmt.Errorf("directory with CRD manifests %q not found", crdManifestsDir)
+	}
+	if err := create.EnsureManifestsCreated(ctx, crdManifestsDir, clientConfig, create.CreateOptions{
+		Verbose: true,
+	}); err != nil {
+		return err
 	}
 
 	return nil
@@ -500,9 +505,9 @@ func startOpenShiftAPIServer(masterConfig *configapi.MasterConfig, clientConfig 
 	openshiftAPIServerConfig.ServingInfo.BindAddress = openshiftAddrStr
 	go func() {
 		if err := openshift_apiserver.RunOpenShiftAPIServer(openshiftAPIServerConfig, stopCh); err != nil {
-			glog.Errorf("openshift-apiserver terminated: %v", err)
+			klog.Errorf("openshift-apiserver terminated: %v", err)
 		} else {
-			glog.Info("openshift-apiserver terminated cleanly")
+			klog.Info("openshift-apiserver terminated cleanly")
 		}
 	}()
 
@@ -664,9 +669,9 @@ func startKubernetesControllers(masterConfig *configapi.MasterConfig, adminKubeC
 	}
 
 	go func() {
-		cmd := kube_controller_manager.NewControllerManagerCommand()
+		cmd := kube_controller_manager.NewControllerManagerCommand(wait.NeverStop)
 		if err := cmd.ParseFlags(args); err != nil {
-			glog.Errorf("kube-controller-manager failed to parse flags: %v", err)
+			klog.Errorf("kube-controller-manager failed to parse flags: %v", err)
 			return
 		}
 		cmd.Run(cmd, nil)
@@ -720,7 +725,7 @@ func startOpenShiftControllers(masterConfig *configapi.MasterConfig) error {
 	openshiftControllerConfig.ServingInfo.BindAddress = openshiftAddrStr
 	go func() {
 		if err := openshift_controller_manager.RunOpenShiftControllerManager(openshiftControllerConfig, privilegedLoopbackConfig); err != nil {
-			glog.Errorf("openshift-controller-manager terminated: %v", err)
+			klog.Errorf("openshift-controller-manager terminated: %v", err)
 		}
 		// TODO: stop openshift-controller-manager on exit of the test
 	}()
@@ -785,7 +790,7 @@ func serviceAccountSecretsExist(clientset kubernetes.Interface, namespace string
 		if len(secret.Namespace) > 0 {
 			ns = secret.Namespace
 		}
-		secret, err := clientset.Core().Secrets(ns).Get(secret.Name, metav1.GetOptions{})
+		secret, err := clientset.CoreV1().Secrets(ns).Get(secret.Name, metav1.GetOptions{})
 		if err == nil {
 			switch secret.Type {
 			case corev1.SecretTypeServiceAccountToken:
@@ -818,10 +823,10 @@ func WaitForPodCreationServiceAccounts(clientset kubernetes.Interface, namespace
 	return wait.PollImmediate(time.Second, PodCreationWaitTimeout, func() (bool, error) {
 		pod, err := clientset.CoreV1().Pods(namespace).Create(testPod)
 		if err != nil {
-			glog.Warningf("Error attempting to create test pod: %v", err)
+			klog.Warningf("Error attempting to create test pod: %v", err)
 			return false, nil
 		}
-		err = clientset.Core().Pods(namespace).Delete(pod.Name, metav1.NewDeleteOptions(0))
+		err = clientset.CoreV1().Pods(namespace).Delete(pod.Name, metav1.NewDeleteOptions(0))
 		if err != nil {
 			return false, err
 		}

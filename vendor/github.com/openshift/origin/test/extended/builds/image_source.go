@@ -64,16 +64,16 @@ var _ = g.Describe("[Feature:Builds][Slow] build can have Docker image source", 
 				br.AssertSuccess()
 
 				g.By("expecting the pod to deploy successfully")
-				pods, err := exutil.WaitForPods(oc.KubeClient().Core().Pods(oc.Namespace()), imageSourceLabel, exutil.CheckPodIsRunning, 1, 4*time.Minute)
+				pods, err := exutil.WaitForPods(oc.KubeClient().CoreV1().Pods(oc.Namespace()), imageSourceLabel, exutil.CheckPodIsRunning, 1, 4*time.Minute)
 				o.Expect(err).NotTo(o.HaveOccurred())
 				o.Expect(len(pods)).To(o.Equal(1))
-				pod, err := oc.KubeClient().Core().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
+				pod, err := oc.KubeClient().CoreV1().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				g.By("expecting the pod to contain the file from the input image")
-				out, err := oc.Run("exec").Args(pod.Name, "-c", pod.Spec.Containers[0].Name, "--", "ls", "injected/dir").Output()
+				out, err := oc.Run("exec").Args(pod.Name, "-c", pod.Spec.Containers[0].Name, "--", "ls", "-R", "-l", "injected/opt/app-root").Output()
 				o.Expect(err).NotTo(o.HaveOccurred())
-				o.Expect(out).To(o.ContainSubstring("ruby"))
+				o.Expect(out).To(o.ContainSubstring("bin -> ../../rh/rh-ruby22/root/usr/bin"))
 			})
 		})
 		g.Describe("buildconfig with input source image and docker strategy", func() {
@@ -91,16 +91,16 @@ var _ = g.Describe("[Feature:Builds][Slow] build can have Docker image source", 
 				br.AssertSuccess()
 
 				g.By("expect the pod to deploy successfully")
-				pods, err := exutil.WaitForPods(oc.KubeClient().Core().Pods(oc.Namespace()), imageDockerLabel, exutil.CheckPodIsRunning, 1, 4*time.Minute)
+				pods, err := exutil.WaitForPods(oc.KubeClient().CoreV1().Pods(oc.Namespace()), imageDockerLabel, exutil.CheckPodIsRunning, 1, 4*time.Minute)
 				o.Expect(err).NotTo(o.HaveOccurred())
 				o.Expect(len(pods)).To(o.Equal(1))
-				pod, err := oc.KubeClient().Core().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
+				pod, err := oc.KubeClient().CoreV1().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				g.By("expecting the pod to contain the file from the input image")
-				out, err := oc.Run("exec").Args(pod.Name, "-c", pod.Spec.Containers[0].Name, "--", "ls", "injected/dir").Output()
+				out, err := oc.Run("exec").Args(pod.Name, "-c", pod.Spec.Containers[0].Name, "--", "ls", "-R", "-l", "injected/opt/app-root").Output()
 				o.Expect(err).NotTo(o.HaveOccurred())
-				o.Expect(out).To(o.ContainSubstring("ruby"))
+				o.Expect(out).To(o.ContainSubstring("bin -> ../../rh/rh-ruby22/root/usr/bin"))
 			})
 		})
 		g.Describe("creating a build with an input source image and s2i strategy", func() {
@@ -118,10 +118,10 @@ var _ = g.Describe("[Feature:Builds][Slow] build can have Docker image source", 
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				g.By("expecting the build pod to exist")
-				pods, err := exutil.WaitForPods(oc.KubeClient().Core().Pods(oc.Namespace()), sourceBuildLabel, exutil.CheckPodNoOp, 1, 4*time.Minute)
+				pods, err := exutil.WaitForPods(oc.KubeClient().CoreV1().Pods(oc.Namespace()), sourceBuildLabel, exutil.CheckPodNoOp, 1, 4*time.Minute)
 				o.Expect(err).NotTo(o.HaveOccurred())
 				o.Expect(len(pods)).To(o.Equal(1))
-				pod, err := oc.KubeClient().Core().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
+				pod, err := oc.KubeClient().CoreV1().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				foundEnv := false
@@ -163,10 +163,10 @@ var _ = g.Describe("[Feature:Builds][Slow] build can have Docker image source", 
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				g.By("expecting the build pod to exist")
-				pods, err := exutil.WaitForPods(oc.KubeClient().Core().Pods(oc.Namespace()), dockerBuildLabel, exutil.CheckPodNoOp, 1, 4*time.Minute)
+				pods, err := exutil.WaitForPods(oc.KubeClient().CoreV1().Pods(oc.Namespace()), dockerBuildLabel, exutil.CheckPodNoOp, 1, 4*time.Minute)
 				o.Expect(err).NotTo(o.HaveOccurred())
 				o.Expect(len(pods)).To(o.Equal(1))
-				pod, err := oc.KubeClient().Core().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
+				pod, err := oc.KubeClient().CoreV1().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				foundEnv := false
@@ -208,10 +208,10 @@ var _ = g.Describe("[Feature:Builds][Slow] build can have Docker image source", 
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				g.By("expecting the build pod to exist")
-				pods, err := exutil.WaitForPods(oc.KubeClient().Core().Pods(oc.Namespace()), customBuildLabel, exutil.CheckPodNoOp, 1, 4*time.Minute)
+				pods, err := exutil.WaitForPods(oc.KubeClient().CoreV1().Pods(oc.Namespace()), customBuildLabel, exutil.CheckPodNoOp, 1, 4*time.Minute)
 				o.Expect(err).NotTo(o.HaveOccurred())
 				o.Expect(len(pods)).To(o.Equal(1))
-				pod, err := oc.KubeClient().Core().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
+				pod, err := oc.KubeClient().CoreV1().Pods(oc.Namespace()).Get(pods[0], metav1.GetOptions{})
 				o.Expect(err).NotTo(o.HaveOccurred())
 
 				foundBuildEnv := false

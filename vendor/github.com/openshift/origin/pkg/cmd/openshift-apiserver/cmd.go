@@ -8,8 +8,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,8 +18,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	configv1 "github.com/openshift/api/config/v1"
 	legacyconfigv1 "github.com/openshift/api/legacyconfig/v1"
@@ -71,7 +71,7 @@ func NewOpenShiftAPIServerCommand(name, basename string, out, errout io.Writer, 
 						os.Exit(255)
 					}
 				}
-				glog.Fatal(err)
+				klog.Fatal(err)
 			}
 		},
 	}
@@ -144,7 +144,7 @@ func (o *OpenShiftAPIServer) RunAPIServer(stopCh <-chan struct{}) error {
 	validationResults := validation.ValidateMasterConfig(masterConfig, nil)
 	if len(validationResults.Warnings) != 0 {
 		for _, warning := range validationResults.Warnings {
-			glog.Warningf("%v", warning)
+			klog.Warningf("%v", warning)
 		}
 	}
 	if len(validationResults.Errors) != 0 {

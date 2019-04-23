@@ -36,7 +36,7 @@ os::cmd::expect_failure_and_text 'oc adm ca create-master-certs --hostnames=exam
 
 # check encrypt/decrypt of plain text
 os::cmd::expect_success          "echo -n 'secret data 1' | oc adm ca encrypt --genkey='${ARTIFACT_DIR}/secret.key' --out='${ARTIFACT_DIR}/secret.encrypted'"
-os::cmd::expect_success_and_text "oc adm ca decrypt --in='${ARTIFACT_DIR}/secret.encrypted' --key='${ARTIFACT_DIR}/secret.key'" '^secret data 1$'
+os::cmd::expect_success_and_text "oc adm ca decrypt --in='${ARTIFACT_DIR}/secret.encrypted' --key='${ARTIFACT_DIR}/secret.key'" 'secret data 1'
 # create a file with trailing whitespace
 echo "data with newline" > "${ARTIFACT_DIR}/secret.whitespace.data"
 os::cmd::expect_success_and_text "oc adm ca encrypt --key='${ARTIFACT_DIR}/secret.key' --in='${ARTIFACT_DIR}/secret.whitespace.data'      --out='${ARTIFACT_DIR}/secret.whitespace.encrypted'" 'Warning.*whitespace'
@@ -390,6 +390,11 @@ os::cmd::expect_success "oc login --server=${KUBERNETES_MASTER} --certificate-au
 os::cmd::expect_success_and_text "oc adm prune images" "Dry run enabled - no modifications will be made. Add --confirm to remove images"
 
 echo "images: ok"
+os::test::junit::declare_suite_end
+
+# oc adm must-gather
+os::test::junit::declare_suite_start "cmd/admin/must-gather"
+os::cmd::expect_success "oc adm must-gather --help"
 os::test::junit::declare_suite_end
 
 os::test::junit::declare_suite_end

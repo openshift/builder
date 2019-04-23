@@ -261,7 +261,7 @@
     "allowedImportPackages": [
       "vendor/k8s.io/kubernetes/pkg/apis/core",
       "vendor/k8s.io/kubernetes/pkg/apis/core/v1",
-      "vendor/github.com/golang/glog",
+      "vendor/k8s.io/klog",
       "vendor/github.com/blang/semver"
     ]
   },
@@ -416,13 +416,14 @@
       "github.com/openshift/origin/pkg/template/servicebroker"
     ],
     "allowedImportPackages": [
-      "vendor/github.com/golang/glog",
+      "vendor/k8s.io/klog",
       "vendor/k8s.io/api/core/v1",
       "vendor/k8s.io/api/authorization/v1",
       "vendor/k8s.io/kubernetes/pkg/apis/core",
       "vendor/k8s.io/kubernetes/pkg/apis/core/install",
       "vendor/github.com/emicklei/go-restful",
       "vendor/github.com/lestrrat/go-jsschema",
+      "vendor/k8s.io/kube-aggregator/pkg/apiserver",
       "vendor/k8s.io/kubernetes/pkg/controller",
       "vendor/k8s.io/kubernetes/pkg/kubectl/cmd/util",
       "github.com/openshift/origin/pkg/api",
@@ -454,7 +455,7 @@
       "github.com/openshift/origin/pkg/oauthserver"
     ],
     "allowedImportPackages": [
-      "vendor/github.com/golang/glog",
+      "vendor/k8s.io/klog",
       "vendor/github.com/davecgh/go-spew/spew",
       "github.com/openshift/origin/pkg/authorization/authorizer/scope",
       "github.com/openshift/origin/pkg/oauth/apis/oauth/validation",
@@ -486,7 +487,7 @@
       "vendor/github.com/docker/libtrust",
       "vendor/github.com/fsnotify/fsnotify",
       "vendor/github.com/fsouza/go-dockerclient",
-      "vendor/github.com/golang/glog",
+      "vendor/k8s.io/klog",
       "vendor/github.com/gonum/graph",
       "vendor/github.com/joho/godotenv",
       "vendor/github.com/MakeNowJust/heredoc",
@@ -507,8 +508,8 @@
       "vendor/k8s.io/apiserver",
       "vendor/k8s.io/client-go",
       "vendor/k8s.io/cli-runtime",
+      "vendor/k8s.io/klog",
       "vendor/k8s.io/kubernetes/pkg/apis",
-      "vendor/k8s.io/kubernetes/pkg/client",
       "vendor/k8s.io/kubernetes/pkg/kubectl",
       "vendor/k8s.io/kubernetes/pkg/printers",
       "vendor/k8s.io/kubernetes/pkg/util",
@@ -521,7 +522,6 @@
       "github.com/openshift/origin/pkg/oauth/generated",
       "github.com/openshift/origin/pkg/pod/envresolve",
       "github.com/openshift/origin/pkg/project/generated",
-      "github.com/openshift/origin/pkg/quota/generated",
       "github.com/openshift/origin/pkg/route/apis/route/v1",
       "github.com/openshift/origin/pkg/route/generated",
       "github.com/openshift/origin/pkg/security/apis/security/v1",

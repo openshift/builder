@@ -142,8 +142,12 @@ Print the version
 
 	registries.conf is the configuration file which specifies which container registries should be consulted when completing image names which do not include a registry or domain portion.
 
+**registries.d** (`/etc/containers/registries.d`)
+
+Directory which contains configuration snippets which specify registries which should be consulted when completing image names which do not include a registry or domain portion.
+
 ## SEE ALSO
-podman(1), mounts.conf(5), newuidmap(1), newgidmap(1), registries.conf(5), storage.conf(5)
+podman(1), containers-mounts.conf(5), newuidmap(1), newgidmap(1), containers-registries.conf(5), containers-storage.conf(5)
 
 ## HISTORY
 December 2017, Originally compiled by Tom Sweeney <tsweeney@redhat.com>

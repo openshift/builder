@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	kappsv1 "k8s.io/api/apps/v1"
 	kappsv1beta1 "k8s.io/api/apps/v1beta1"
@@ -30,11 +30,12 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	kapi "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/kubectl"
-	kcmd "k8s.io/kubernetes/pkg/kubectl/cmd"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
+	"k8s.io/kubernetes/pkg/kubectl/cmd/attach"
+	"k8s.io/kubernetes/pkg/kubectl/cmd/logs"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/polymorphichelpers"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 	"k8s.io/kubernetes/pkg/kubectl/util/term"
 	"k8s.io/kubernetes/pkg/util/interrupt"
 
@@ -97,7 +98,7 @@ var (
 type DebugOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
-	Attach kcmd.AttachOptions
+	Attach attach.AttachOptions
 
 	CoreClient  corev1client.CoreV1Interface
 	AppsClient  appsv1client.AppsV1Interface
@@ -142,7 +143,7 @@ type DebugOptions struct {
 }
 
 func NewDebugOptions(streams genericclioptions.IOStreams) *DebugOptions {
-	attachOpts := kcmd.NewAttachOptions(streams)
+	attachOpts := attach.NewAttachOptions(streams)
 	attachOpts.TTY = true
 	attachOpts.Stdin = true
 	return &DebugOptions{
@@ -233,7 +234,7 @@ func (o *DebugOptions) Complete(cmd *cobra.Command, f kcmdutil.Factory, args []s
 		o.Attach.Stdin = false
 	default:
 		o.Attach.TTY = term.IsTerminal(o.In)
-		glog.V(4).Infof("Defaulting TTY to %t", o.Attach.TTY)
+		klog.V(4).Infof("Defaulting TTY to %t", o.Attach.TTY)
 	}
 	if o.NoStdin {
 		o.Attach.TTY = false
@@ -340,7 +341,7 @@ func (o *DebugOptions) RunDebug() error {
 		return fmt.Errorf("cannot debug %s: %v", infos[0].Name, err)
 	}
 	if err != nil {
-		glog.V(4).Infof("Unable to get exact template, but continuing with fallback: %v", err)
+		klog.V(4).Infof("Unable to get exact template, but continuing with fallback: %v", err)
 	}
 	template := &corev1.PodTemplateSpec{}
 	if err := legacyscheme.Scheme.Convert(templateV1, template, nil); err != nil {
@@ -364,7 +365,7 @@ func (o *DebugOptions) RunDebug() error {
 			fmt.Fprintf(o.ErrOut, "\n")
 		}
 
-		glog.V(4).Infof("Defaulting container name to %s", pod.Spec.Containers[0].Name)
+		klog.V(4).Infof("Defaulting container name to %s", pod.Spec.Containers[0].Name)
 		o.Attach.ContainerName = pod.Spec.Containers[0].Name
 	}
 
@@ -395,7 +396,7 @@ func (o *DebugOptions) RunDebug() error {
 		return o.Printer.PrintObj(pod, o.Out)
 	}
 
-	glog.V(5).Infof("Creating pod: %#v", pod)
+	klog.V(5).Infof("Creating pod: %#v", pod)
 	pod, err = o.createPod(pod)
 	if err != nil {
 		return err
@@ -418,7 +419,7 @@ func (o *DebugOptions) RunDebug() error {
 		},
 	)
 
-	glog.V(5).Infof("Created attach arguments: %#v", o.Attach)
+	klog.V(5).Infof("Created attach arguments: %#v", o.Attach)
 	return o.Attach.InterruptParent.Run(func() error {
 		w, err := o.CoreClient.Pods(pod.Namespace).Watch(metav1.SingleObject(pod.ObjectMeta))
 		if err != nil {
@@ -444,15 +445,15 @@ func (o *DebugOptions) RunDebug() error {
 			}
 			return fmt.Errorf(msg)
 			// switch to logging output
-		case err == kubectl.ErrPodCompleted, err == kubectl.ErrContainerTerminated, !o.Attach.Stdin:
-			return kcmd.LogsOptions{
+		case err == kubectl.ErrPodCompleted, err == conditions.ErrContainerTerminated, !o.Attach.Stdin:
+			return logs.LogsOptions{
 				Object: pod,
 				Options: &corev1.PodLogOptions{
 					Container: o.Attach.ContainerName,
 					Follow:    true,
 				},
 				RESTClientGetter: o.RESTClientGetter,
-				ConsumeRequestFn: kcmd.DefaultConsumeRequest,
+				ConsumeRequestFn: logs.DefaultConsumeRequest,
 				IOStreams:        o.IOStreams,
 				LogsForObject:    o.LogsForObject,
 			}.RunLogs()

@@ -9,13 +9,9 @@
 #   clean: Clean up.
 
 OUT_DIR = _output
-OS_OUTPUT_GOPATH ?= 1
 
 export GOFLAGS
 export TESTFLAGS
-# If set to 1, create an isolated GOPATH inside _output using symlinks to avoid
-# other packages being accidentally included. Defaults to on.
-export OS_OUTPUT_GOPATH
 # May be used to set additional arguments passed to the image build commands for
 # mounting secrets specific to a build environment.
 export OS_BUILD_IMAGE_ARGS
@@ -102,8 +98,6 @@ verify: build
 	hack/verify-generated-clientsets.sh ||r=1;\
 	hack/verify-generated-deep-copies.sh ||r=1;\
 	hack/verify-generated-defaulters.sh ||r=1;\
-	hack/verify-generated-listers.sh ||r=1;\
-	hack/verify-generated-informers.sh ||r=1;\
 	hack/verify-generated-openapi.sh ||r=1;\
 	hack/verify-generated-completions.sh ||r=1;\
 	hack/verify-cli-conventions.sh ||r=1;\
@@ -133,8 +127,6 @@ update:
 	hack/update-generated-clientsets.sh
 	hack/update-generated-deep-copies.sh
 	hack/update-generated-defaulters.sh
-	hack/update-generated-listers.sh
-	hack/update-generated-informers.sh
 	hack/update-generated-openapi.sh
 	$(MAKE) build
 	hack/update-generated-completions.sh

@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -21,17 +22,17 @@ import (
 	"github.com/blang/semver"
 	"github.com/docker/distribution"
 	units "github.com/docker/go-units"
-	"github.com/golang/glog"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	imageapi "github.com/openshift/api/image/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
@@ -39,24 +40,47 @@ import (
 	imagereference "github.com/openshift/origin/pkg/image/apis/image/reference"
 	"github.com/openshift/origin/pkg/oc/cli/image/extract"
 	imageinfo "github.com/openshift/origin/pkg/oc/cli/image/info"
+	imagemanifest "github.com/openshift/origin/pkg/oc/cli/image/manifest"
 )
 
 func NewInfoOptions(streams genericclioptions.IOStreams) *InfoOptions {
 	return &InfoOptions{
-		IOStreams:      streams,
-		MaxPerRegistry: 4,
+		IOStreams:       streams,
+		ParallelOptions: imagemanifest.ParallelOptions{MaxPerRegistry: 4},
 	}
 }
 
 func NewInfo(f kcmdutil.Factory, parentName string, streams genericclioptions.IOStreams) *cobra.Command {
 	o := NewInfoOptions(streams)
 	cmd := &cobra.Command{
-		Use:   "info IMAGE [--changes-from=IMAGE]",
+		Use:   "info IMAGE [--changes-from=IMAGE] [--verify|--commits|--pullspecs]",
 		Short: "Display information about a release",
 		Long: templates.LongDesc(`
 			Show information about an OpenShift release
 
-			Experimental: This command is under active development and may change without notice.
+			This command retrieves, verifies, and formats the information describing an OpenShift update.
+			Updates are delivered as container images with metadata describing the component images and
+			the configuration necessary to install the system operators. A release image is usually
+			referenced via its content digest, which allows this command and the update infrastructure to
+			validate that updates have not been tampered with.
+
+			If no arguments are specified the release of the currently connected cluster is displayed.
+			Specify one or more images via pull spec to see details of each release image. The --commits
+			flag will display the Git commit IDs and repository URLs for the source of each component
+			image. The --pullspecs flag will display the full component image pull spec. --size will show
+			a breakdown of each image, their layers, and the total size of the payload. --contents shows
+			the configuration that will be applied to the cluster when the update is run. If you have
+			specified two images the difference between the first and second image will be shown.
+
+			The --verify flag will display one summary line per input release image and verify the
+			integrity of each. The command will return an error if the release has been tampered with.
+			Passing a pull spec with a digest (e.g. quay.io/openshift/release@sha256:a9bc...) instead of
+			a tag when verifying an image is recommended since it ensures an attacker cannot trick you
+			into installing an older, potentially vulnerable version.
+
+			The --bugs and --changelog flags will use git to clone the source of the release and display
+			the code changes that occurred between the two release arguments. This operation is slow
+			and requires sufficient disk space on the selected drive to clone all repositories.
 		`),
 		Run: func(cmd *cobra.Command, args []string) {
 			kcmdutil.CheckErr(o.Complete(f, cmd, args))
@@ -65,11 +89,14 @@ func NewInfo(f kcmdutil.Factory, parentName string, streams genericclioptions.IO
 		},
 	}
 	flags := cmd.Flags()
-	flags.StringVarP(&o.RegistryConfig, "registry-config", "a", o.RegistryConfig, "Path to your registry credentials (defaults to ~/.docker/config.json)")
-	flags.IntVar(&o.MaxPerRegistry, "max-per-registry", o.MaxPerRegistry, "Number of concurrent requests allowed per registry when fetching image info.")
-	flags.BoolVar(&o.Insecure, "insecure", o.Insecure, "Allow image info operations to registries to be made over HTTP")
+	o.SecurityOptions.Bind(flags)
+	o.ParallelOptions.Bind(flags)
 
 	flags.StringVar(&o.From, "changes-from", o.From, "Show changes from this image to the requested image.")
+
+	flags.BoolVar(&o.Verify, "verify", o.Verify, "Generate bug listings from the changelogs in the git repositories extracted to this path.")
+
+	flags.BoolVar(&o.ShowContents, "contents", o.ShowContents, "Display the contents of a release.")
 	flags.BoolVar(&o.ShowCommit, "commits", o.ShowCommit, "Display information about the source an image was created with.")
 	flags.BoolVar(&o.ShowPullSpec, "pullspecs", o.ShowPullSpec, "Display the pull spec of each image instead of the digest.")
 	flags.BoolVar(&o.ShowSize, "size", o.ShowSize, "Display the size of each image including overlap.")
@@ -88,6 +115,7 @@ type InfoOptions struct {
 
 	Output       string
 	ImageFor     string
+	ShowContents bool
 	ShowCommit   bool
 	ShowPullSpec bool
 	ShowSize     bool
@@ -96,9 +124,8 @@ type InfoOptions struct {
 	ChangelogDir string
 	BugsDir      string
 
-	RegistryConfig string
-	Insecure       bool
-	MaxPerRegistry int
+	ParallelOptions imagemanifest.ParallelOptions
+	SecurityOptions imagemanifest.SecurityOptions
 }
 
 func (o *InfoOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []string) error {
@@ -111,7 +138,7 @@ func (o *InfoOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []st
 		if err != nil {
 			return fmt.Errorf("info expects one argument, or a connection to an OpenShift 4.x server: %v", err)
 		}
-		cv, err := client.Config().ClusterVersions().Get("version", metav1.GetOptions{})
+		cv, err := client.ConfigV1().ClusterVersions().Get("version", metav1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				return fmt.Errorf("you must be connected to an OpenShift 4.x server to fetch the current version")
@@ -131,7 +158,7 @@ func (o *InfoOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []st
 		return fmt.Errorf("info expects at least one argument, a release image pull spec")
 	}
 	o.Images = args
-	if len(o.From) == 0 && len(o.Images) == 2 {
+	if len(o.From) == 0 && len(o.Images) == 2 && !o.Verify {
 		o.From = o.Images[0]
 		o.Images = o.Images[1:]
 	}
@@ -139,15 +166,34 @@ func (o *InfoOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []st
 }
 
 func (o *InfoOptions) Validate() error {
+	count := 0
+	if len(o.ImageFor) > 0 {
+		count++
+	}
+	if o.ShowCommit {
+		count++
+	}
+	if o.ShowPullSpec {
+		count++
+	}
+	if o.ShowContents {
+		count++
+	}
+	if o.ShowSize {
+		count++
+	}
+	if o.Verify {
+		count++
+	}
+	if count > 1 {
+		return fmt.Errorf("only one of --commits, --pullspecs, --contents, --size, --verify may be specified")
+	}
 	if len(o.ImageFor) > 0 && len(o.Output) > 0 {
 		return fmt.Errorf("--output and --image-for may not both be specified")
 	}
 	if len(o.ChangelogDir) > 0 || len(o.BugsDir) > 0 {
 		if len(o.From) == 0 {
 			return fmt.Errorf("--changelog/--bugs require --from")
-		}
-		if len(o.ImageFor) > 0 || o.ShowCommit || o.ShowPullSpec || o.ShowSize || o.Verify {
-			return fmt.Errorf("--changelog/--bugs may not be specified with any other flag except --from")
 		}
 	}
 	if len(o.ChangelogDir) > 0 && len(o.BugsDir) > 0 {
@@ -183,16 +229,22 @@ func (o *InfoOptions) Validate() error {
 }
 
 func (o *InfoOptions) Run() error {
-	if len(o.From) > 0 {
+	fetchImages := o.ShowSize || o.Verify
+
+	if len(o.From) > 0 && !o.Verify {
+		if o.ShowContents {
+			return diffContents(o.From, o.Images[0], o.Out)
+		}
+
 		var baseRelease *ReleaseInfo
 		var baseErr error
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			baseRelease, baseErr = o.LoadReleaseInfo(o.From, o.ShowSize)
+			baseRelease, baseErr = o.LoadReleaseInfo(o.From, fetchImages)
 		}()
 
-		release, err := o.LoadReleaseInfo(o.Images[0], o.ShowSize)
+		release, err := o.LoadReleaseInfo(o.Images[0], fetchImages)
 		if err != nil {
 			return err
 		}
@@ -201,6 +253,7 @@ func (o *InfoOptions) Run() error {
 		if baseErr != nil {
 			return baseErr
 		}
+
 		diff, err := calculateDiff(baseRelease, release)
 		if err != nil {
 			return err
@@ -216,7 +269,17 @@ func (o *InfoOptions) Run() error {
 
 	var exitErr error
 	for _, image := range o.Images {
-		if err := o.describeImage(image); err != nil {
+		release, err := o.LoadReleaseInfo(image, fetchImages)
+		if err != nil {
+			exitErr = kcmdutil.ErrExit
+			fmt.Fprintf(o.ErrOut, "error: %v\n", err)
+			continue
+		}
+		if o.Verify {
+			fmt.Fprintf(o.Out, "%s %s %s\n", release.Digest, release.References.CreationTimestamp.UTC().Format(time.RFC3339), release.PreferredName())
+			continue
+		}
+		if err := o.describeImage(release); err != nil {
 			exitErr = kcmdutil.ErrExit
 			fmt.Fprintf(o.ErrOut, "error: %v\n", err)
 			continue
@@ -225,9 +288,20 @@ func (o *InfoOptions) Run() error {
 	return exitErr
 }
 
-func (o *InfoOptions) describeImage(image string) error {
-	release, err := o.LoadReleaseInfo(image, o.ShowSize)
-	if err != nil {
+func diffContents(a, b string, out io.Writer) error {
+	fmt.Fprintf(out, `To see the differences between these releases, run:
+
+  %[1]s adm release extract %[2]s --to=/tmp/old
+  %[1]s adm release extract %[3]s --to=/tmp/new
+  diff /tmp/old /tmp/new
+
+`, os.Args[0], a, b)
+	return nil
+}
+
+func (o *InfoOptions) describeImage(release *ReleaseInfo) error {
+	if o.ShowContents {
+		_, err := io.Copy(o.Out, newContentStreamForRelease(release))
 		return err
 	}
 	if len(o.Output) > 0 {
@@ -239,7 +313,7 @@ func (o *InfoOptions) describeImage(image string) error {
 		return nil
 	}
 	if len(o.ImageFor) > 0 {
-		spec, err := findImageSpec(release.References, o.ImageFor, image)
+		spec, err := findImageSpec(release.References, o.ImageFor, release.Image)
 		if err != nil {
 			return err
 		}
@@ -341,17 +415,21 @@ type ReleaseManifestDiff struct {
 }
 
 type ReleaseInfo struct {
-	Image      string                              `json:"image"`
-	ImageRef   imagereference.DockerImageReference `json:"-"`
-	Digest     digest.Digest                       `json:"digest"`
-	Config     *docker10.DockerImageConfig         `json:"config"`
-	Metadata   *CincinnatiMetadata                 `json:"metadata"`
-	References *imageapi.ImageStream               `json:"references"`
+	Image         string                              `json:"image"`
+	ImageRef      imagereference.DockerImageReference `json:"-"`
+	Digest        digest.Digest                       `json:"digest"`
+	ContentDigest digest.Digest                       `json:"contentDigest"`
+	// TODO: return the list digest in the future
+	// ListDigest    digest.Digest                       `json:"listDigest"`
+	Config     *docker10.DockerImageConfig `json:"config"`
+	Metadata   *CincinnatiMetadata         `json:"metadata"`
+	References *imageapi.ImageStream       `json:"references"`
 
 	ComponentVersions map[string]string `json:"versions"`
 
 	Images map[string]*Image `json:"images"`
 
+	RawMetadata   map[string][]byte `json:"-"`
 	ManifestFiles map[string][]byte `json:"-"`
 	UnknownFiles  []string          `json:"-"`
 
@@ -359,12 +437,16 @@ type ReleaseInfo struct {
 }
 
 type Image struct {
-	Name      string                              `json:"name"`
-	Ref       imagereference.DockerImageReference `json:"-"`
-	Digest    digest.Digest                       `json:"digest"`
-	MediaType string                              `json:"mediaType"`
-	Layers    []distribution.Descriptor           `json:"layers"`
-	Config    *docker10.DockerImageConfig         `json:"config"`
+	Name          string                              `json:"name"`
+	Ref           imagereference.DockerImageReference `json:"-"`
+	Digest        digest.Digest                       `json:"digest"`
+	ContentDigest digest.Digest                       `json:"contentDigest"`
+	ListDigest    digest.Digest                       `json:"listDigest"`
+	MediaType     string                              `json:"mediaType"`
+	Layers        []distribution.Descriptor           `json:"layers"`
+	Config        *docker10.DockerImageConfig         `json:"config"`
+
+	Manifest distribution.Manifest `json:"-"`
 }
 
 func (i *ReleaseInfo) PreferredName() string {
@@ -391,15 +473,22 @@ func (o *InfoOptions) LoadReleaseInfo(image string, retrieveImages bool) (*Relea
 	if err != nil {
 		return nil, err
 	}
+
+	verifier := imagemanifest.NewVerifier()
 	opts := extract.NewOptions(genericclioptions.IOStreams{Out: o.Out, ErrOut: o.ErrOut})
-	opts.RegistryConfig = o.RegistryConfig
+	opts.SecurityOptions = o.SecurityOptions
 
 	release := &ReleaseInfo{
-		Image: image,
+		Image:    image,
+		ImageRef: ref,
+
+		RawMetadata: make(map[string][]byte),
 	}
 
-	opts.ImageMetadataCallback = func(m *extract.Mapping, dgst digest.Digest, config *docker10.DockerImageConfig) {
+	opts.ImageMetadataCallback = func(m *extract.Mapping, dgst, contentDigest digest.Digest, config *docker10.DockerImageConfig) {
+		verifier.Verify(dgst, contentDigest)
 		release.Digest = dgst
+		release.ContentDigest = contentDigest
 		release.Config = config
 	}
 	opts.OnlyFiles = true
@@ -421,6 +510,7 @@ func (o *InfoOptions) LoadReleaseInfo(image string, retrieveImages bool) (*Relea
 				errs = append(errs, fmt.Errorf("unable to read release image-references: %v", err))
 				return true, nil
 			}
+			release.RawMetadata[hdr.Name] = data
 			is, err := readReleaseImageReferences(data)
 			if err != nil {
 				errs = append(errs, err)
@@ -433,6 +523,7 @@ func (o *InfoOptions) LoadReleaseInfo(image string, retrieveImages bool) (*Relea
 				errs = append(errs, fmt.Errorf("unable to read release metadata: %v", err))
 				return true, nil
 			}
+			release.RawMetadata[hdr.Name] = data
 			m := &CincinnatiMetadata{}
 			if err := json.Unmarshal(data, m); err != nil {
 				errs = append(errs, fmt.Errorf("invalid release metadata: %v", err))
@@ -441,7 +532,7 @@ func (o *InfoOptions) LoadReleaseInfo(image string, retrieveImages bool) (*Relea
 			release.Metadata = m
 		default:
 			if ext := path.Ext(hdr.Name); len(ext) > 0 && (ext == ".yaml" || ext == ".yml" || ext == ".json") {
-				glog.V(4).Infof("Found manifest %s", hdr.Name)
+				klog.V(4).Infof("Found manifest %s", hdr.Name)
 				data, err := ioutil.ReadAll(r)
 				if err != nil {
 					errs = append(errs, fmt.Errorf("unable to read release manifest %q: %v", hdr.Name, err))
@@ -463,6 +554,7 @@ func (o *InfoOptions) LoadReleaseInfo(image string, retrieveImages bool) (*Relea
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("release image could not be read: %s", errorList(errs))
 	}
+
 	if release.References == nil {
 		return nil, fmt.Errorf("release image did not contain an image-references file")
 	}
@@ -476,11 +568,13 @@ func (o *InfoOptions) LoadReleaseInfo(image string, retrieveImages bool) (*Relea
 		var lock sync.Mutex
 		release.Images = make(map[string]*Image)
 		r := &imageinfo.ImageRetriever{
-			Image:          make(map[string]imagereference.DockerImageReference),
-			RegistryConfig: o.RegistryConfig,
-			Insecure:       o.Insecure,
-			MaxPerRegistry: o.MaxPerRegistry,
+			Image:           make(map[string]imagereference.DockerImageReference),
+			SecurityOptions: o.SecurityOptions,
+			ParallelOptions: o.ParallelOptions,
 			ImageMetadataCallback: func(name string, image *imageinfo.Image, err error) error {
+				if image != nil {
+					verifier.Verify(image.Digest, image.ContentDigest)
+				}
 				lock.Lock()
 				defer lock.Unlock()
 				if err != nil {
@@ -506,6 +600,14 @@ func (o *InfoOptions) LoadReleaseInfo(image string, retrieveImages bool) (*Relea
 		if err := r.Run(); err != nil {
 			return nil, err
 		}
+	}
+
+	if !verifier.Verified() {
+		err := fmt.Errorf("the release image failed content verification and may have been tampered with")
+		if !o.SecurityOptions.SkipVerification {
+			return nil, err
+		}
+		fmt.Fprintf(o.ErrOut, "warning: %v\n", err)
 	}
 
 	sort.Strings(release.Warnings)
@@ -759,12 +861,19 @@ func describeReleaseInfo(out io.Writer, release *ReleaseInfo, showCommit, pullSp
 	now := time.Now()
 	fmt.Fprintf(w, "Name:\t%s\n", release.PreferredName())
 	fmt.Fprintf(w, "Digest:\t%s\n", release.Digest)
-	fmt.Fprintf(w, "Created:\t%s\n", release.Config.Created.Local().Truncate(time.Second))
+	fmt.Fprintf(w, "Created:\t%s\n", release.Config.Created.UTC().Truncate(time.Second).Format(time.RFC3339))
 	fmt.Fprintf(w, "OS/Arch:\t%s/%s\n", release.Config.OS, release.Config.Architecture)
 	fmt.Fprintf(w, "Manifests:\t%d\n", len(release.ManifestFiles))
 	if len(release.UnknownFiles) > 0 {
 		fmt.Fprintf(w, "Unknown files:\t%d\n", len(release.UnknownFiles))
 	}
+
+	fmt.Fprintln(w)
+	refExact := release.ImageRef
+	refExact.Tag = ""
+	refExact.ID = release.Digest.String()
+	fmt.Fprintf(w, "Pull From:\t%s\n", refExact.String())
+
 	if m := release.Metadata; m != nil {
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "Release Metadata:\n")
@@ -831,6 +940,7 @@ func describeReleaseInfo(out io.Writer, release *ReleaseInfo, showCommit, pullSp
 				image, ok := release.Images[tag.Name]
 				if !ok {
 					fmt.Fprintf(w, "  %s\t\t\t\t\t\n", tag.Name)
+					continue
 				}
 
 				// create a column for a small number of unique base layers that visually indicates
@@ -1402,4 +1512,73 @@ func orderedKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+type contentStream struct {
+	current []byte
+	parts   [][]byte
+}
+
+func (s *contentStream) Read(p []byte) (int, error) {
+	remaining := len(p)
+	count := 0
+	for remaining > 0 {
+		// find the next buffer, if we have nothing
+		if len(s.current) == 0 {
+			if len(s.parts) == 0 {
+				return count, io.EOF
+			}
+			s.current = s.parts[0]
+			s.parts = s.parts[1:]
+		}
+
+		have := len(s.current)
+
+		// fill the buffer completely
+		if have >= remaining {
+			copy(p, s.current[:remaining])
+			s.current = s.current[remaining:]
+			return count + remaining, nil
+		}
+
+		// fill the buffer with whatever we have left
+		copy(p, s.current[:have])
+		s.current = nil
+		p = p[have:]
+		count += have
+		remaining -= have
+	}
+	return count, nil
+}
+
+func newContentStreamForRelease(image *ReleaseInfo) io.Reader {
+	names := make([]string, 0, len(image.ManifestFiles))
+	for name := range image.ManifestFiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	rawNames := make([]string, 0, len(image.RawMetadata))
+	for name := range image.RawMetadata {
+		rawNames = append(rawNames, name)
+	}
+	sort.Strings(rawNames)
+
+	data := make([][]byte, 0, (len(names)+len(rawNames))*3)
+
+	for _, name := range rawNames {
+		content := image.RawMetadata[name]
+		data = append(data, []byte(fmt.Sprintf("# %s\n", name)), content)
+		if len(content) > 0 && !bytes.HasSuffix(content, []byte("\n")) {
+			data = append(data, []byte("\n"))
+		}
+	}
+	for _, name := range names {
+		content := image.ManifestFiles[name]
+		data = append(data, []byte(fmt.Sprintf("# %s\n", name)), content)
+		if len(content) > 0 && !bytes.HasSuffix(content, []byte("\n")) {
+			data = append(data, []byte("\n"))
+		}
+	}
+	return &contentStream{parts: data}
 }

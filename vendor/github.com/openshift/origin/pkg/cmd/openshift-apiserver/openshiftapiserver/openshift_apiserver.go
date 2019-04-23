@@ -6,10 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftapiserver/configprocessing"
-
 	restful "github.com/emicklei/go-restful"
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	kapierror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,20 +18,23 @@ import (
 	genericmux "k8s.io/apiserver/pkg/server/mux"
 	kubeinformers "k8s.io/client-go/informers"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	openapicontroller "k8s.io/kube-aggregator/pkg/controllers/openapi"
+	openapiaggregator "k8s.io/kube-aggregator/pkg/controllers/openapi/aggregator"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	kapi "k8s.io/kubernetes/pkg/apis/core"
 	coreclient "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/core/internalversion"
-	kinternalinformers "k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion"
 	rbacrest "k8s.io/kubernetes/pkg/registry/rbac/rest"
 	rbacregistryvalidation "k8s.io/kubernetes/pkg/registry/rbac/validation"
 	rbacauthorizer "k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac"
 
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
+	quotainformer "github.com/openshift/client-go/quota/informers/externalversions"
 	securityv1informer "github.com/openshift/client-go/security/informers/externalversions"
 	oappsapiserver "github.com/openshift/origin/pkg/apps/apiserver"
 	authorizationapiserver "github.com/openshift/origin/pkg/authorization/apiserver"
 	buildapiserver "github.com/openshift/origin/pkg/build/apiserver"
+	"github.com/openshift/origin/pkg/cmd/openshift-apiserver/openshiftapiserver/configprocessing"
 	"github.com/openshift/origin/pkg/cmd/server/bootstrappolicy"
 	imageapiserver "github.com/openshift/origin/pkg/image/apiserver"
 	"github.com/openshift/origin/pkg/image/apiserver/registryhostname"
@@ -44,7 +45,6 @@ import (
 	projectcache "github.com/openshift/origin/pkg/project/cache"
 	quotaapiserver "github.com/openshift/origin/pkg/quota/apiserver"
 	"github.com/openshift/origin/pkg/quota/controller/clusterquotamapping"
-	quotainformer "github.com/openshift/origin/pkg/quota/generated/informers/internalversion"
 	routeapiserver "github.com/openshift/origin/pkg/route/apiserver"
 	routeallocationcontroller "github.com/openshift/origin/pkg/route/controller/allocation"
 	securityapiserver "github.com/openshift/origin/pkg/security/apiserver"
@@ -55,7 +55,6 @@ import (
 
 	// register api groups
 	_ "github.com/openshift/origin/pkg/api/install"
-	"k8s.io/client-go/restmapper"
 )
 
 type OpenshiftAPIExtraConfig struct {
@@ -63,7 +62,6 @@ type OpenshiftAPIExtraConfig struct {
 	InformerStart func(stopCh <-chan struct{})
 
 	KubeAPIServerClientConfig *restclient.Config
-	KubeInternalInformers     kinternalinformers.SharedInformerFactory
 	KubeInformers             kubeinformers.SharedInformerFactory
 
 	QuotaInformers    quotainformer.SharedInformerFactory
@@ -99,17 +97,14 @@ type OpenshiftAPIExtraConfig struct {
 func (c *OpenshiftAPIExtraConfig) Validate() error {
 	ret := []error{}
 
-	if c.KubeInternalInformers == nil {
-		ret = append(ret, fmt.Errorf("KubeInternalInformers is required"))
-	}
 	if c.KubeInformers == nil {
 		ret = append(ret, fmt.Errorf("KubeInformers is required"))
 	}
 	if c.QuotaInformers == nil {
-		ret = append(ret, fmt.Errorf("InternalQuotaInformers is required"))
+		ret = append(ret, fmt.Errorf("QuotaInformers is required"))
 	}
 	if c.SecurityInformers == nil {
-		ret = append(ret, fmt.Errorf("InternalSecurityInformers is required"))
+		ret = append(ret, fmt.Errorf("SecurityInformers is required"))
 	}
 	if c.RuleResolver == nil {
 		ret = append(ret, fmt.Errorf("RuleResolver is required"))
@@ -175,8 +170,8 @@ func (c *completedConfig) withAppsAPIServer(delegateAPIServer genericapiserver.D
 		GenericConfig: &genericapiserver.RecommendedConfig{Config: *c.GenericConfig.Config, SharedInformerFactory: c.GenericConfig.SharedInformerFactory},
 		ExtraConfig: oappsapiserver.ExtraConfig{
 			KubeAPIServerClientConfig: c.ExtraConfig.KubeAPIServerClientConfig,
-			Codecs: legacyscheme.Codecs,
-			Scheme: legacyscheme.Scheme,
+			Codecs:                    legacyscheme.Codecs,
+			Scheme:                    legacyscheme.Scheme,
 		},
 	}
 	config := cfg.Complete()
@@ -217,8 +212,8 @@ func (c *completedConfig) withBuildAPIServer(delegateAPIServer genericapiserver.
 		GenericConfig: &genericapiserver.RecommendedConfig{Config: *c.GenericConfig.Config, SharedInformerFactory: c.GenericConfig.SharedInformerFactory},
 		ExtraConfig: buildapiserver.ExtraConfig{
 			KubeAPIServerClientConfig: c.ExtraConfig.KubeAPIServerClientConfig,
-			Codecs: legacyscheme.Codecs,
-			Scheme: legacyscheme.Scheme,
+			Codecs:                    legacyscheme.Codecs,
+			Scheme:                    legacyscheme.Scheme,
 		},
 	}
 	config := cfg.Complete()
@@ -239,9 +234,9 @@ func (c *completedConfig) withImageAPIServer(delegateAPIServer genericapiserver.
 			RegistryHostnameRetriever:          c.ExtraConfig.RegistryHostnameRetriever,
 			AllowedRegistriesForImport:         c.ExtraConfig.AllowedRegistriesForImport,
 			MaxImagesBulkImportedPerRepository: c.ExtraConfig.MaxImagesBulkImportedPerRepository,
-			Codecs:              legacyscheme.Codecs,
-			Scheme:              legacyscheme.Scheme,
-			AdditionalTrustedCA: c.ExtraConfig.AdditionalTrustedCA,
+			Codecs:                             legacyscheme.Codecs,
+			Scheme:                             legacyscheme.Scheme,
+			AdditionalTrustedCA:                c.ExtraConfig.AdditionalTrustedCA,
 		},
 	}
 	config := cfg.Complete()
@@ -383,8 +378,8 @@ func (c *completedConfig) withTemplateAPIServer(delegateAPIServer genericapiserv
 		GenericConfig: &genericapiserver.RecommendedConfig{Config: *c.GenericConfig.Config, SharedInformerFactory: c.GenericConfig.SharedInformerFactory},
 		ExtraConfig: templateapiserver.ExtraConfig{
 			KubeAPIServerClientConfig: c.ExtraConfig.KubeAPIServerClientConfig,
-			Codecs: legacyscheme.Codecs,
-			Scheme: legacyscheme.Scheme,
+			Codecs:                    legacyscheme.Codecs,
+			Scheme:                    legacyscheme.Scheme,
 		},
 	}
 	config := cfg.Complete()
@@ -423,8 +418,8 @@ func (c *completedConfig) withOpenAPIAggregationController(delegatedAPIServer *g
 	// openapi fields that may have been previously set.
 	delegatedAPIServer.RemoveOpenAPIData()
 
-	specDownloader := openapicontroller.NewDownloader()
-	openAPIAggregator, err := openapicontroller.BuildAndRegisterAggregator(
+	specDownloader := openapiaggregator.NewDownloader()
+	openAPIAggregator, err := openapiaggregator.BuildAndRegisterAggregator(
 		&specDownloader,
 		delegatedAPIServer,
 		delegatedAPIServer.Handler.GoRestfulContainer.RegisteredWebServices(),
@@ -447,7 +442,7 @@ type apiServerAppenderFunc func(delegateAPIServer genericapiserver.DelegationTar
 func addAPIServerOrDie(delegateAPIServer genericapiserver.DelegationTarget, apiServerAppenderFn apiServerAppenderFunc) genericapiserver.DelegationTarget {
 	delegateAPIServer, err := apiServerAppenderFn(delegateAPIServer)
 	if err != nil {
-		glog.Fatal(err)
+		klog.Fatal(err)
 	}
 
 	return delegateAPIServer
@@ -543,7 +538,7 @@ func AddOpenshiftVersionRoute(container *restful.Container, path string) {
 	// Build version info once
 	versionInfo, err := json.MarshalIndent(version.Get(), "", "  ")
 	if err != nil {
-		glog.Errorf("Unable to initialize version route: %v", err)
+		klog.Errorf("Unable to initialize version route: %v", err)
 		return
 	}
 
@@ -570,7 +565,7 @@ func writeJSON(resp *restful.Response, json []byte) {
 
 func (c *completedConfig) startProjectCache(context genericapiserver.PostStartHookContext) error {
 	// RunProjectCache populates project cache, used by scheduler and project admission controller.
-	glog.Infof("Using default project node label selector: %s", c.ExtraConfig.ProjectCache.DefaultNodeSelector)
+	klog.Infof("Using default project node label selector: %s", c.ExtraConfig.ProjectCache.DefaultNodeSelector)
 	go c.ExtraConfig.ProjectCache.Run(context.StopCh)
 	return nil
 }
@@ -609,7 +604,7 @@ func (c *completedConfig) bootstrapSCC(context genericapiserver.PostStartHookCon
 			utilruntime.HandleError(fmt.Errorf("unable to create default security context constraint %s.  Got error: %v", scc.Name, err))
 			continue
 		}
-		glog.Infof("Created default security context constraint %s", scc.Name)
+		klog.Infof("Created default security context constraint %s", scc.Name)
 	}
 	return nil
 }
@@ -642,7 +637,7 @@ func (c *completedConfig) EnsureOpenShiftInfraNamespace(context genericapiserver
 	// Ensure we have the bootstrap SA for Nodes
 	_, err = coreClient.ServiceAccounts(namespaceName).Create(&kapi.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: bootstrappolicy.InfraNodeBootstrapServiceAccountName}})
 	if err != nil && !kapierror.IsAlreadyExists(err) {
-		glog.Errorf("Error creating service account %s/%s: %v", namespaceName, bootstrappolicy.InfraNodeBootstrapServiceAccountName, err)
+		klog.Errorf("Error creating service account %s/%s: %v", namespaceName, bootstrappolicy.InfraNodeBootstrapServiceAccountName, err)
 	}
 
 	return nil

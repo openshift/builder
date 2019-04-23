@@ -15,12 +15,15 @@ import (
 	kerrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/util/flowcontrol"
-	kapi "k8s.io/kubernetes/pkg/apis/core"
+	coreapi "k8s.io/kubernetes/pkg/apis/core"
 	quota "k8s.io/kubernetes/pkg/quota/v1"
 	sautil "k8s.io/kubernetes/pkg/serviceaccount"
 
@@ -160,14 +163,14 @@ func GetScopedClientForUser(clusterAdminClientConfig *restclient.Config, usernam
 }
 
 func GetClientForServiceAccount(adminClient kubernetes.Interface, clientConfig restclient.Config, namespace, name string) (*kubernetes.Clientset, *restclient.Config, error) {
-	_, err := adminClient.Core().Namespaces().Create(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}})
+	_, err := adminClient.CoreV1().Namespaces().Create(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}})
 	if err != nil && !kerrs.IsAlreadyExists(err) {
 		return nil, nil, err
 	}
 
-	sa, err := adminClient.Core().ServiceAccounts(namespace).Create(&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name}})
+	sa, err := adminClient.CoreV1().ServiceAccounts(namespace).Create(&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name}})
 	if kerrs.IsAlreadyExists(err) {
-		sa, err = adminClient.Core().ServiceAccounts(namespace).Get(name, metav1.GetOptions{})
+		sa, err = adminClient.CoreV1().ServiceAccounts(namespace).Get(name, metav1.GetOptions{})
 	}
 	if err != nil {
 		return nil, nil, err
@@ -175,7 +178,7 @@ func GetClientForServiceAccount(adminClient kubernetes.Interface, clientConfig r
 
 	token := ""
 	err = wait.Poll(time.Second, 30*time.Second, func() (bool, error) {
-		selector := fields.OneTermEqualSelector(kapi.SecretTypeField, string(corev1.SecretTypeServiceAccountToken))
+		selector := fields.OneTermEqualSelector(coreapi.SecretTypeField, string(corev1.SecretTypeServiceAccountToken))
 		secrets, err := adminClient.CoreV1().Secrets(namespace).List(metav1.ListOptions{FieldSelector: selector.String()})
 		if err != nil {
 			return false, err
@@ -201,6 +204,24 @@ func GetClientForServiceAccount(adminClient kubernetes.Interface, clientConfig r
 	}
 
 	return kubeClientset, saClientConfig, nil
+}
+
+func WaitForClusterResourceQuotaCRDAvailable(clusterAdminClientConfig *rest.Config) error {
+	dynamicClient := dynamic.NewForConfigOrDie(clusterAdminClientConfig)
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+	err := wait.PollImmediateUntil(1*time.Minute, func() (done bool, err error) {
+		_, listErr := dynamicClient.Resource(schema.GroupVersionResource{
+			Version:  "v1",
+			Group:    "quota.openshift.io",
+			Resource: "clusterresourcequotas",
+		}).List(metav1.ListOptions{})
+		return listErr == nil, nil
+	}, stopCh)
+	if err != nil {
+		return fmt.Errorf("failed to wait for cluster resource quota CRD: %v", err)
+	}
+	return nil
 }
 
 // WaitForResourceQuotaLimitSync watches given resource quota until its hard limit is updated to match the desired
@@ -268,6 +289,13 @@ func isLimitSynced(received, expected corev1.ResourceList) bool {
 		return false
 	}
 	return true
+}
+
+func NonProtobufConfig(inConfig *rest.Config) *rest.Config {
+	npConfig := rest.CopyConfig(inConfig)
+	npConfig.ContentConfig.AcceptContentTypes = "application/json"
+	npConfig.ContentConfig.ContentType = "application/json"
+	return npConfig
 }
 
 // turnOffRateLimiting reduces the chance that a flaky test can be written while using this package

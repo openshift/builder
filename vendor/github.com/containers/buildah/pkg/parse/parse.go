@@ -6,7 +6,6 @@ package parse
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"net"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/unix"
 )
@@ -71,6 +71,11 @@ func CommonBuildOptions(c *cobra.Command) (*buildah.CommonBuildOptions, error) {
 			}
 		}
 	}
+
+	dnsServers, _ := c.Flags().GetStringSlice("dns")
+	dnsSearch, _ := c.Flags().GetStringSlice("dns-search")
+	dnsOptions, _ := c.Flags().GetStringSlice("dns-option")
+
 	if _, err := units.FromHumanSize(c.Flag("shm-size").Value.String()); err != nil {
 		return nil, errors.Wrapf(err, "invalid --shm-size")
 	}
@@ -90,13 +95,16 @@ func CommonBuildOptions(c *cobra.Command) (*buildah.CommonBuildOptions, error) {
 		CPUSetCPUs:   c.Flag("cpuset-cpus").Value.String(),
 		CPUSetMems:   c.Flag("cpuset-mems").Value.String(),
 		CPUShares:    cpuShares,
+		DNSSearch:    dnsSearch,
+		DNSServers:   dnsServers,
+		DNSOptions:   dnsOptions,
 		Memory:       memoryLimit,
 		MemorySwap:   memorySwap,
 		ShmSize:      c.Flag("shm-size").Value.String(),
 		Ulimit:       append(defaultLimits, ulimit...),
 		Volumes:      volumes,
 	}
-	securityOpts, _ := c.Flags().GetStringSlice("security-opt")
+	securityOpts, _ := c.Flags().GetStringArray("security-opt")
 	if err := parseSecurityOpts(securityOpts, commonOpts); err != nil {
 		return nil, err
 	}
@@ -319,7 +327,7 @@ func getDockerAuth(creds string) (*types.DockerAuthConfig, error) {
 }
 
 // IDMappingOptions parses the build options related to user namespaces and ID mapping.
-func IDMappingOptions(c *cobra.Command) (usernsOptions buildah.NamespaceOptions, idmapOptions *buildah.IDMappingOptions, err error) {
+func IDMappingOptions(c *cobra.Command, isolation buildah.Isolation) (usernsOptions buildah.NamespaceOptions, idmapOptions *buildah.IDMappingOptions, err error) {
 	user := c.Flag("userns-uid-map-user").Value.String()
 	group := c.Flag("userns-gid-map-group").Value.String()
 	// If only the user or group was specified, use the same value for the
@@ -391,6 +399,7 @@ func IDMappingOptions(c *cobra.Command) (usernsOptions buildah.NamespaceOptions,
 	if len(gidmap) == 0 && len(uidmap) != 0 {
 		gidmap = uidmap
 	}
+
 	// By default, having mappings configured means we use a user
 	// namespace.  Otherwise, we don't.
 	usernsOption := buildah.NamespaceOption{

@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -21,8 +21,8 @@ var (
 func executeWithLogging(e executor, cmd []string) error {
 	w := &bytes.Buffer{}
 	err := e.Execute(cmd, nil, w, w)
-	glog.V(4).Infof("%s", w.String())
-	glog.V(4).Infof("error: %v", err)
+	klog.V(4).Infof("%s", w.String())
+	klog.V(4).Infof("error: %v", err)
 	return err
 }
 
@@ -133,6 +133,6 @@ type podAPIChecker struct {
 
 // CheckPods will check if pods exists in the provided context
 func (p podAPIChecker) CheckPod() error {
-	_, err := p.client.Core().Pods(p.namespace).Get(p.podName, metav1.GetOptions{})
+	_, err := p.client.CoreV1().Pods(p.namespace).Get(p.podName, metav1.GetOptions{})
 	return err
 }

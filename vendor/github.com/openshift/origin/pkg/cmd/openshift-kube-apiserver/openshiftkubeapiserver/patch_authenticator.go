@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/apiserver/pkg/server/certs"
-
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/group"
 	"k8s.io/apiserver/pkg/authentication/request/anonymous"
@@ -14,11 +12,14 @@ import (
 	"k8s.io/apiserver/pkg/authentication/request/union"
 	"k8s.io/apiserver/pkg/authentication/request/websocket"
 	x509request "k8s.io/apiserver/pkg/authentication/request/x509"
+	"k8s.io/apiserver/pkg/authentication/token/cache"
 	tokencache "k8s.io/apiserver/pkg/authentication/token/cache"
 	tokenunion "k8s.io/apiserver/pkg/authentication/token/union"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/certs"
 	webhooktoken "k8s.io/apiserver/plugin/pkg/authenticator/token/webhook"
 	kclientsetexternal "k8s.io/client-go/kubernetes"
+	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/cert"
 	sacontroller "k8s.io/kubernetes/pkg/controller/serviceaccount"
@@ -46,6 +47,9 @@ func NewAuthenticator(
 	servingInfo configv1.ServingInfo,
 	serviceAccountPublicKeyFiles []string, oauthConfig *osinv1.OAuthConfig, authConfig kubecontrolplanev1.MasterAuthConfig,
 	privilegedLoopbackConfig *rest.Config,
+	podLister corev1listers.PodLister,
+	secretLister corev1listers.SecretLister,
+	saLister corev1listers.ServiceAccountLister,
 	oauthClientLister oauthclientlister.OAuthClientLister,
 	groupInformer userinformer.GroupInformer,
 ) (authenticator.Request, map[string]genericapiserver.PostStartHookFunc, error) {
@@ -64,7 +68,7 @@ func NewAuthenticator(
 
 	// this is safe because the server does a quorum read and we're hitting a "magic" authorizer to get permissions based on system:masters
 	// once the cache is added, we won't be paying a double hop cost to etcd on each request, so the simplification will help.
-	serviceAccountTokenGetter := sacontroller.NewGetterFromClient(kubeExternalClient)
+	serviceAccountTokenGetter := sacontroller.NewGetterFromClient(kubeExternalClient, secretLister, saLister, podLister)
 
 	return newAuthenticator(
 		serviceAccountPublicKeyFiles,
@@ -73,7 +77,7 @@ func NewAuthenticator(
 		oauthClient.OAuthAccessTokens(),
 		oauthClientLister,
 		serviceAccountTokenGetter,
-		userClient.User().Users(),
+		userClient.UserV1().Users(),
 		servingInfo.ClientCA,
 		usercache.NewGroupCache(groupInformer),
 		bootstrap.NewBootstrapUserDataGetter(kubeExternalClient.CoreV1(), kubeExternalClient.CoreV1()),
@@ -110,6 +114,7 @@ func newAuthenticator(
 		serviceAccountTokenAuthenticator := serviceaccount.JWTTokenAuthenticator(
 			serviceaccount.LegacyIssuer,
 			publicKeys,
+			nil, // TODO audiences
 			serviceaccount.NewLegacyValidator(true, tokenGetter),
 		)
 		tokenAuthenticators = append(tokenAuthenticators, serviceAccountTokenAuthenticator)
@@ -154,11 +159,13 @@ func newAuthenticator(
 		if err != nil {
 			return nil, nil, fmt.Errorf("Error parsing CacheTTL=%q: %v", wta.CacheTTL, err)
 		}
-		webhookTokenAuthenticator, err := webhooktoken.New(wta.ConfigFile, ttl)
+		// TODO audiences
+		webhookTokenAuthenticator, err := webhooktoken.New(wta.ConfigFile, nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Failed to create webhook token authenticator for ConfigFile=%q: %v", wta.ConfigFile, err)
 		}
-		tokenAuthenticators = append(tokenAuthenticators, webhookTokenAuthenticator)
+		cachingTokenAuth := cache.New(webhookTokenAuthenticator, false, ttl, ttl)
+		tokenAuthenticators = append(tokenAuthenticators, cachingTokenAuth)
 	}
 
 	if len(tokenAuthenticators) > 0 {
@@ -168,7 +175,7 @@ func newAuthenticator(
 		// wrap with short cache on success.
 		// this means a revoked service account token or access token will be valid for up to 10 seconds.
 		// it also means group membership changes on users may take up to 10 seconds to become effective.
-		tokenAuth = tokencache.New(tokenAuth, 10*time.Second, 0)
+		tokenAuth = tokencache.New(tokenAuth, true, 10*time.Second, 0)
 
 		authenticators = append(authenticators,
 			bearertoken.New(tokenAuth),

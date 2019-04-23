@@ -8,7 +8,7 @@ import (
 
 	"k8s.io/kubernetes/pkg/apis/core/v1/helper"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,7 +67,7 @@ func (mp *multiTenantPlugin) updatePodNetwork(namespace string, oldNetID, netID 
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Could not get list of local pods in namespace %q: %v", namespace, err))
 	}
-	services, err := mp.node.kClient.Core().Services(namespace).List(metav1.ListOptions{})
+	services, err := mp.node.kClient.CoreV1().Services(namespace).List(metav1.ListOptions{})
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Could not get list of services in namespace %q: %v", namespace, err))
 		services = &corev1.ServiceList{}
@@ -139,7 +139,7 @@ func (mp *multiTenantPlugin) EnsureVNIDRules(vnid uint32) {
 	}
 	mp.vnidInUse.Insert(int(vnid))
 
-	glog.V(5).Infof("EnsureVNIDRules %d - adding rules", vnid)
+	klog.V(5).Infof("EnsureVNIDRules %d - adding rules", vnid)
 
 	otx := mp.node.oc.NewTransaction()
 	otx.AddFlow("table=80, priority=100, reg0=%d, reg1=%d, actions=output:NXM_NX_REG2[]", vnid, vnid)
@@ -153,7 +153,7 @@ func (mp *multiTenantPlugin) SyncVNIDRules() {
 	defer mp.vnidInUseLock.Unlock()
 
 	unused := mp.node.oc.FindUnusedVNIDs()
-	glog.Infof("SyncVNIDRules: %d unused VNIDs", len(unused))
+	klog.Infof("SyncVNIDRules: %d unused VNIDs", len(unused))
 
 	otx := mp.node.oc.NewTransaction()
 	for _, vnid := range unused {

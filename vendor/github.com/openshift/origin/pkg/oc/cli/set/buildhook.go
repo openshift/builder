@@ -3,8 +3,8 @@ package set
 import (
 	"fmt"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,8 +14,8 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions/printers"
 	"k8s.io/cli-runtime/pkg/genericclioptions/resource"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
@@ -228,7 +228,7 @@ func (o *BuildHookOptions) Run() error {
 		}
 
 		if string(patch.Patch) == "{}" || len(patch.Patch) == 0 {
-			glog.V(1).Infof("info: %s was not changed\n", name)
+			klog.V(1).Infof("info: %s was not changed\n", name)
 			continue
 		}
 

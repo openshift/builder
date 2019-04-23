@@ -5,9 +5,9 @@ load helpers
 @test "containers" {
   cid1=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json alpine)
   cid2=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json busybox)
-  run buildah --debug=false containers
-  [ $(wc -l <<< "$output") -eq 3 ]
-  [ "${status}" -eq 0 ]
+  run_buildah --debug=false containers
+  expect_line_count 3
+
   buildah rm -a
   buildah rmi -a -f
 }
@@ -15,9 +15,9 @@ load helpers
 @test "containers filter test" {
   cid1=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json alpine)
   cid2=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json busybox)
-  run buildah --debug=false containers --filter name=$cid1
-  [ $(wc -l <<< "$output") -eq 2 ]
-  [ "${status}" -eq 0 ]
+  run_buildah --debug=false containers --filter name=$cid1
+  expect_line_count 2
+
   buildah rm -a
   buildah rmi -a -f
 }
@@ -25,9 +25,9 @@ load helpers
 @test "containers format test" {
   cid1=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json alpine)
   cid2=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json busybox)
-  run buildah --debug=false containers --format "{{.ContainerName}}"
-  [ $(wc -l <<< "$output") -eq 2 ]
-  [ "${status}" -eq 0 ]
+  run_buildah --debug=false containers --format "{{.ContainerName}}"
+  expect_line_count 2
+
   buildah rm -a
   buildah rmi -a -f
 }
@@ -43,9 +43,9 @@ load helpers
 @test "containers noheading test" {
   cid1=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json alpine)
   cid2=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json busybox)
-  run buildah --debug=false containers --noheading
-  [ $(wc -l <<< "$output") -eq 2 ]
-  [ "${status}" -eq 0 ]
+  run_buildah --debug=false containers --noheading
+  expect_line_count 2
+
   buildah rm -a
   buildah rmi -a -f
 }
@@ -53,9 +53,9 @@ load helpers
 @test "containers quiet test" {
   cid1=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json alpine)
   cid2=$(buildah from --pull --signature-policy ${TESTSDIR}/policy.json busybox)
-  run buildah --debug=false containers --quiet
-  [ $(wc -l <<< "$output") -eq 2 ]
-  [ "${status}" -eq 0 ]
+  run_buildah --debug=false containers --quiet
+  expect_line_count 2
+
   buildah rm -a
   buildah rmi -a -f
 }

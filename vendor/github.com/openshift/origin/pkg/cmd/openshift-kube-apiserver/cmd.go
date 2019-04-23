@@ -8,8 +8,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,7 +17,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	configv1 "github.com/openshift/api/config/v1"
 	kubecontrolplanev1 "github.com/openshift/api/kubecontrolplane/v1"
@@ -53,7 +53,7 @@ func NewOpenShiftKubeAPIServerServerCommand(name, basename string, out, errout i
 		Run: func(c *cobra.Command, args []string) {
 			rest.CommandNameOverride = name
 			if err := options.Validate(); err != nil {
-				glog.Fatal(err)
+				klog.Fatal(err)
 			}
 
 			serviceability.StartProfiler()
@@ -68,7 +68,7 @@ func NewOpenShiftKubeAPIServerServerCommand(name, basename string, out, errout i
 						os.Exit(255)
 					}
 				}
-				glog.Fatal(err)
+				klog.Fatal(err)
 			}
 		},
 	}
@@ -136,7 +136,7 @@ func (o *OpenShiftKubeAPIServerServer) RunAPIServer(stopCh <-chan struct{}) erro
 	validationResults := validation.ValidateMasterConfig(masterConfig, nil)
 	if len(validationResults.Warnings) != 0 {
 		for _, warning := range validationResults.Warnings {
-			glog.Warningf("%v", warning)
+			klog.Warningf("%v", warning)
 		}
 	}
 	if len(validationResults.Errors) != 0 {

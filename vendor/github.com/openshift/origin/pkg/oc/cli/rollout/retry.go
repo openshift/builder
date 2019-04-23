@@ -17,9 +17,9 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions/resource"
 	kexternalclientset "k8s.io/client-go/kubernetes"
 	kapi "k8s.io/kubernetes/pkg/apis/core"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	appsv1 "github.com/openshift/api/apps/v1"
 	appsutil "github.com/openshift/origin/pkg/apps/util"
@@ -166,7 +166,7 @@ func (o RetryOptions) Run() error {
 		}
 
 		latestDeploymentName := appsutil.LatestDeploymentNameForConfig(config)
-		rc, err := o.Clientset.Core().ReplicationControllers(config.Namespace).Get(latestDeploymentName, metav1.GetOptions{})
+		rc, err := o.Clientset.CoreV1().ReplicationControllers(config.Namespace).Get(latestDeploymentName, metav1.GetOptions{})
 		if err != nil {
 			if kerrors.IsNotFound(err) {
 				allErrs = append(allErrs, kcmdutil.AddSourceToErr("retrying", info.Source, fmt.Errorf("unable to find the latest rollout (#%d).\nYou can start a new rollout with 'oc rollout latest dc/%s'.", config.Status.LatestVersion, config.Name)))
@@ -189,7 +189,7 @@ func (o RetryOptions) Run() error {
 		}
 
 		// Delete the deployer pod as well as the deployment hooks pods, if any
-		pods, err := o.Clientset.Core().Pods(config.Namespace).List(metav1.ListOptions{LabelSelector: appsutil.DeployerPodSelector(
+		pods, err := o.Clientset.CoreV1().Pods(config.Namespace).List(metav1.ListOptions{LabelSelector: appsutil.DeployerPodSelector(
 			latestDeploymentName).String()})
 		if err != nil {
 			allErrs = append(allErrs, kcmdutil.AddSourceToErr("retrying", info.Source, fmt.Errorf("failed to list deployer/hook pods for deployment #%d: %v", config.Status.LatestVersion, err)))
@@ -197,7 +197,7 @@ func (o RetryOptions) Run() error {
 		}
 		hasError := false
 		for _, pod := range pods.Items {
-			err := o.Clientset.Core().Pods(pod.Namespace).Delete(pod.Name, metav1.NewDeleteOptions(0))
+			err := o.Clientset.CoreV1().Pods(pod.Namespace).Delete(pod.Name, metav1.NewDeleteOptions(0))
 			if err != nil {
 				allErrs = append(allErrs, kcmdutil.AddSourceToErr("retrying", info.Source, fmt.Errorf("failed to delete deployer/hook pod %s for deployment #%d: %v", pod.Name, config.Status.LatestVersion, err)))
 				hasError = true

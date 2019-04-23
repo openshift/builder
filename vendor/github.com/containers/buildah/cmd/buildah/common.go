@@ -2,15 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"syscall"
 	"time"
 
 	"github.com/containers/buildah"
+	"github.com/containers/buildah/pkg/unshare"
 	"github.com/containers/buildah/util"
 	is "github.com/containers/image/storage"
 	"github.com/containers/image/types"
-	lu "github.com/containers/libpod/pkg/util"
 	"github.com/containers/storage"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -22,7 +23,7 @@ import (
 var needToShutdownStore = false
 
 func getStore(c *cobra.Command) (storage.Store, error) {
-	options, _, err := lu.GetDefaultStoreOptions()
+	options, err := storage.DefaultStoreOptions(unshare.IsRootless(), unshare.GetRootlessUID())
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +44,14 @@ func getStore(c *cobra.Command) (storage.Store, error) {
 		if len(globalFlagResults.StorageOpts) > 0 {
 			options.GraphDriverOptions = globalFlagResults.StorageOpts
 		}
+	}
+
+	// Do not allow to mount a graphdriver that is not vfs if we are creating the userns as part
+	// of the mount command.
+	// Differently, allow the mount if we are already in a userns, as the mount point will still
+	// be accessible once "buildah mount" exits.
+	if os.Geteuid() != 0 && options.GraphDriverName != "vfs" {
+		return nil, fmt.Errorf("cannot mount using driver %s in rootless mode. You need to run it in a `buildah unshare` session", options.GraphDriverName)
 	}
 
 	// For uid/gid mappings, first we check the global definitions

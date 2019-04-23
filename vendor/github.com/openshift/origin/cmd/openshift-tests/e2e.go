@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	"github.com/openshift/origin/pkg/test/ginkgo"
 
@@ -41,6 +41,15 @@ var staticSuites = []*ginkgo.TestSuite{
 		`),
 		Matches: func(name string) bool {
 			return strings.Contains(name, "[Suite:openshift/conformance/serial")
+		},
+	},
+	{
+		Name: "openshift/disruptive",
+		Description: templates.LongDesc(`
+		The disruptive test suite.
+		`),
+		Matches: func(name string) bool {
+			return !strings.Contains(name, "[Disabled") && strings.Contains(name, "[Disruptive]")
 		},
 	},
 	{

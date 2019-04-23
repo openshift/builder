@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -195,14 +195,14 @@ func (r *SourceRef) BuildSource() (*buildv1.BuildSource, []buildv1.BuildTriggerP
 
 // BuildStrategyRef is a reference to a build strategy
 type BuildStrategyRef struct {
-	Strategy generate.Strategy
+	Strategy newapp.Strategy
 	Base     *ImageRef
 }
 
 // BuildStrategy builds an OpenShift BuildStrategy from a BuildStrategyRef
 func (s *BuildStrategyRef) BuildStrategy(env Environment, dockerStrategyOptions *buildv1.DockerStrategyOptions) (*buildv1.BuildStrategy, []buildv1.BuildTriggerPolicy) {
 	switch s.Strategy {
-	case generate.StrategyPipeline:
+	case newapp.StrategyPipeline:
 		return &buildv1.BuildStrategy{
 			JenkinsPipelineStrategy: &buildv1.JenkinsPipelineBuildStrategy{
 				Env: env.List(),
@@ -210,7 +210,7 @@ func (s *BuildStrategyRef) BuildStrategy(env Environment, dockerStrategyOptions 
 			Type: buildv1.JenkinsPipelineBuildStrategyType,
 		}, s.Base.BuildTriggers()
 
-	case generate.StrategyDocker:
+	case newapp.StrategyDocker:
 		var triggers []buildv1.BuildTriggerPolicy
 		strategy := &buildv1.DockerBuildStrategy{
 			Env: env.List(),
@@ -228,7 +228,7 @@ func (s *BuildStrategyRef) BuildStrategy(env Environment, dockerStrategyOptions 
 			Type:           buildv1.DockerBuildStrategyType,
 		}, triggers
 
-	case generate.StrategySource:
+	case newapp.StrategySource:
 		return &buildv1.BuildStrategy{
 			SourceStrategy: &buildv1.SourceBuildStrategy{
 				From: s.Base.ObjectReference(),
@@ -238,7 +238,7 @@ func (s *BuildStrategyRef) BuildStrategy(env Environment, dockerStrategyOptions 
 		}, s.Base.BuildTriggers()
 	}
 
-	glog.Error("BuildStrategy called with unknown strategy")
+	klog.Error("BuildStrategy called with unknown strategy")
 	return nil, nil
 }
 
