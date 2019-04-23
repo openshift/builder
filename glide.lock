@@ -1,5 +1,5 @@
-hash: 5cdd9c7881cdaeb0874cd33622ab26e3b849e139030cdd54c876f2a9def639d6
-updated: 2019-04-22T20:35:23.17186437-04:00
+hash: 676d0d16aec0f8685e7fbafd8384fcd0714e7d7e3c305a3703c7db587ab2064b
+updated: 2019-04-23T11:37:19.232335639-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -272,7 +272,7 @@ imports:
 - name: github.com/json-iterator/go
   version: f2b4162afba35581b6d4a50d3b8f34e33c144682
 - name: github.com/klauspost/compress
-  version: 30be6041bed523c18e269a700ebd9c2ea9328574
+  version: ebcaa75844d0c1d7d8da1921b4c3530d19186529
   subpackages:
   - flate
 - name: github.com/klauspost/cpuid
@@ -350,7 +350,7 @@ imports:
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
-  version: 0255926f53935175fe90b8e7672c4c06c17d79e6
+  version: 8ae2a9c33ba2a3d2ed5dc13d536ca935fc9625b9
   subpackages:
   - build/clientset/versioned
   - build/clientset/versioned/fake
@@ -365,7 +365,7 @@ imports:
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: a47c6814c02c8516ee468a2ce68fbb798755a76e
+  version: 04e2bf481415af9b2583c71f584f1075d0b9960c
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -373,7 +373,7 @@ imports:
   - pkg/image/reference
   - pkg/serviceability
 - name: github.com/openshift/origin
-  version: 5c0e8a64b028931e15a9bf5f9c0ea1daa7d85c7e
+  version: 9c28792c0aece4f9b7926746949111faf61a3be7
   subpackages:
   - pkg/api/apihelpers
   - pkg/build/apis/build
@@ -514,7 +514,7 @@ imports:
   - proxy
   - websocket
 - name: golang.org/x/sync
-  version: 56d357773e8497dfd526f0727e187720d1093757
+  version: 112230192c580c3556b8cee6403af37a4fc5f28c
   subpackages:
   - semaphore
 - name: golang.org/x/sys

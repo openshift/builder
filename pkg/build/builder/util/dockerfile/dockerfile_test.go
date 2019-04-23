@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/builder/dockerfile/command"
+	"github.com/openshift/imagebuilder/dockerfile/command"
 )
 
 // TestWrite tests calling Write with multiple

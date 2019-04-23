@@ -24,6 +24,7 @@ import:
   subpackages:
   - build/v1
 - package: github.com/openshift/client-go
+  version: 8ae2a9c33ba2a3d2ed5dc13d536ca935fc9625b9
   subpackages:
   - build/clientset/versioned/typed/build/v1
 # Pin imagebuilder for buildah compatibility
