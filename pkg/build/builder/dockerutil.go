@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	idocker "github.com/containers/image/docker"
 	docker "github.com/fsouza/go-dockerclient"
+	"github.com/pkg/errors"
 
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 )
@@ -45,6 +47,12 @@ func retryImageAction(actionName string, action func() error) error {
 		}
 		glog.V(0).Infof("Warning: %s failed, retrying in %s ...", actionName, DefaultPushOrPullRetryDelay)
 		time.Sleep(DefaultPushOrPullRetryDelay)
+	}
+
+	switch errors.Cause(err) {
+	case idocker.ErrUnauthorizedForCredentials:
+		// strip off wrappers that mainly add the image name as their added context
+		err = errors.Cause(err)
 	}
 
 	return fmt.Errorf("After retrying %d times, %s image still failed due to error: %v", DefaultPushOrPullRetryCount, actionName, err)
