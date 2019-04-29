@@ -1,1 +1,0 @@
-fedora_base-setup.sh

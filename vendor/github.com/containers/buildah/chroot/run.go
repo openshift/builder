@@ -18,7 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/containers/buildah/bind"
-	"github.com/containers/buildah/unshare"
+	"github.com/containers/buildah/pkg/unshare"
 	"github.com/containers/buildah/util"
 	"github.com/containers/storage/pkg/ioutils"
 	"github.com/containers/storage/pkg/mount"
@@ -512,7 +512,7 @@ func runUsingChroot(spec *specs.Spec, bundlePath string, ctty *os.File, stdin io
 	logNamespaceDiagnostics(spec)
 
 	// If we have configured ID mappings, set them here so that they can apply to the child.
-	hostUidmap, hostGidmap, err := util.GetHostIDMappings("")
+	hostUidmap, hostGidmap, err := unshare.GetHostIDMappings("")
 	if err != nil {
 		return 1, err
 	}

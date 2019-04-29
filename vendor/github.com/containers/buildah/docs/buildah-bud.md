@@ -40,7 +40,7 @@ Note: this information is not present in Docker image formats, so it is discarde
 
 **--authfile** *path*
 
-Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `podman login`.
+Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `buildah login`.
 If the authorization state is not found there, $HOME/.docker/config.json is checked, which is set using `docker login`.
 
 **--build-arg** *arg=value*
@@ -185,6 +185,18 @@ This is a Docker specific option to disable image verification to a Docker
 registry and is not supported by Buildah.  This flag is a NOOP and provided
 soley for scripting compatibility.
 
+**--dns**=[]
+
+Set custom DNS servers
+
+**--dns-option**=[]
+
+Set custom DNS options
+
+**--dns-search**=[]
+
+Set custom DNS search domains
+
 **--file, -f** *Dockerfile*
 
 Specifies a Dockerfile which contains instructions for building the image,
@@ -199,7 +211,7 @@ If you specify `-f -`, the Dockerfile contents will be read from stdin.
 
 **--force-rm** *bool-value*
 
-Always remove intermediate containers after a build, even if the build is unsuccessful..
+Always remove intermediate containers after a build, even if the build fails (default false).
 
 **--format**
 
@@ -209,6 +221,16 @@ Recognized formats include *oci* (OCI image-spec v1.0, the default) and
 
 Note: You can also override the default format by setting the BUILDAH\_FORMAT
 environment variable.  `export BUILDAH_FORMAT=docker`
+
+**--http-proxy**
+
+By default proxy environment variables are passed into the container if set
+for the buildah process.  This can be disabled by setting the `--http-proxy`
+option to `false`.  The environment variables passed in include `http_proxy`,
+`https_proxy`, `ftp_proxy`, `no_proxy`, and also the upper case versions of
+those.
+
+Defaults to `true`
 
 **--iidfile** *ImageIDfile*
 
@@ -311,13 +333,21 @@ not required for Buildah as it supports only Linux.
 
 **--pull**
 
-Pull the image if it is not present.  If this flag is disabled (with
-*--pull=false*) and the image is not present, the image will not be pulled.
+When the flag is enabled, attempt to pull the latest image from the registries
+listed in registries.conf if a local image does not exist or the image is newer
+than the one in storage. Raise an error if the image is not in any listed
+registry and is not present locally.
+
+If the flag is disabled (with *--pull=false*), do not pull the image from the
+registry, use only the local version. Raise an error if the image is not
+present locally.
+
 Defaults to *true*.
 
 **--pull-always**
 
-Pull the image even if a version of the image is already present.
+Pull the image from the first registry it is found in as listed in registries.conf.
+Raise an error if not found in the registries, even if the image is present locally.
 
 **--quiet, -q**
 
@@ -368,12 +398,6 @@ Security Options
 Size of `/dev/shm`. The format is `<number><unit>`. `number` must be greater than `0`.
 Unit is optional and can be `b` (bytes), `k` (kilobytes), `m`(megabytes), or `g` (gigabytes).
 If you omit the unit, the system uses bytes. If you omit the size entirely, the system uses `64m`.
-
-**--signature-policy** *signaturepolicy*
-
-Pathname of a signature policy file to use.  It is not recommended that this
-option be used, as the default behavior of using the system-wide default policy
-(frequently */etc/containers/policy.json*) is most often preferred.
 
 **--squash**
 
@@ -605,6 +629,8 @@ buildah bud --layers --force-rm -t imageName .
 
 buildah bud --no-cache --rm=false -t imageName .
 
+buildah bud --dns-search=example.com --dns=223.5.5.5 --dns-option=use-vc .
+
 ### Building an image using a URL
 
   This will clone the specified GitHub repository from the URL and use it as context. The Dockerfile at the root of the repository is used as Dockerfile. This only works if the GitHub repository is a dedicated repository.
@@ -626,5 +652,9 @@ buildah bud --no-cache --rm=false -t imageName .
 
 registries.conf is the configuration file which specifies which container registries should be consulted when completing image names which do not include a registry or domain portion.
 
+**policy.json** (`/etc/containers/policy.json`)
+
+Signature policy file.  This defines the trust policy for container images.  Controls which container registries can be used for image, and whether or not the tool should trust the images.
+
 ## SEE ALSO
-buildah(1), CPP(1), podman-login(1), docker-login(1), namespaces(7), pid\_namespaces(7), policy.json(5), registries.conf(5), user\_namespaces(7)
+buildah(1), CPP(1), buildah-login(1), docker-login(1), namespaces(7), pid\_namespaces(7), policy.json(5), registries.conf(5), user\_namespaces(7)

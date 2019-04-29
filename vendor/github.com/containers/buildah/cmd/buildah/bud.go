@@ -228,13 +228,23 @@ func budCmd(c *cobra.Command, inputArgs []string, iopts budResults) error {
 	if err != nil {
 		return errors.Wrapf(err, "error parsing namespace-related options")
 	}
-	usernsOption, idmappingOptions, err := parse.IDMappingOptions(c)
+	usernsOption, idmappingOptions, err := parse.IDMappingOptions(c, isolation)
 	if err != nil {
 		return errors.Wrapf(err, "error parsing ID mapping options")
 	}
 	namespaceOptions.AddOrReplace(usernsOption...)
 
 	defaultsMountFile, _ := c.PersistentFlags().GetString("defaults-mount-file")
+	transientMounts := []imagebuildah.Mount{}
+	for _, volume := range iopts.Volumes {
+		mount, err := parse.ParseVolume(volume)
+		if err != nil {
+			return err
+		}
+
+		transientMounts = append(transientMounts, imagebuildah.Mount(mount))
+	}
+
 	options := imagebuildah.BuildOptions{
 		ContextDirectory:        contextDir,
 		PullPolicy:              pullPolicy,
@@ -272,6 +282,7 @@ func budCmd(c *cobra.Command, inputArgs []string, iopts budResults) error {
 		ForceRmIntermediateCtrs: iopts.ForceRm,
 		BlobDirectory:           iopts.BlobCache,
 		Target:                  iopts.Target,
+		TransientMounts:         transientMounts,
 	}
 
 	if iopts.Quiet {

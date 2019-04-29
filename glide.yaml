@@ -21,18 +21,21 @@ import:
   subpackages:
   - libcontainer/cgroups
 - package: github.com/openshift/api
+  version: e8532c51d46fdc99060e3357da9282a3c588ee94
   subpackages:
   - build/v1
 - package: github.com/openshift/client-go
+  version: 8ae2a9c33ba2a3d2ed5dc13d536ca935fc9625b9
   subpackages:
   - build/clientset/versioned/typed/build/v1
 # Pin imagebuilder for buildah compatibility
 - package: github.com/openshift/imagebuilder
-  version: 36823496a6868f72bc36282cc475eb8a070c0934
+  version: v1.1.0
   subpackages:
   - dockerclient
   - imageprogress
 - package: github.com/openshift/library-go
+  version: a0bc3de86cb7439bddbdcd5be875e27f7a86f1e7
   subpackages:
   - pkg/git
   - pkg/serviceability
@@ -49,6 +52,7 @@ import:
   - pkg/util
   - pkg/util/fs
 - package: github.com/prometheus/client_golang
+  version: 7490f0a74525a1f863eaf81b42f3ead3a1ecc43a
   subpackages:
   - prometheus
 - package: github.com/spf13/cobra
@@ -93,15 +97,15 @@ import:
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
 # Pins for buildah
 - package: github.com/containers/buildah
-  version: v1.7.1
+  version: v1.8.2
 - package: github.com/containers/image
-  version: v1.5
-- package: github.com/containers/libpod
-  version: v1.0
+  version: v1.5.1
 - package: github.com/containers/storage
-  version: v1.11
+  version: v1.12.6
 - package: github.com/opencontainers/go-digest
   version: c9281466c8b2f606084ac71339773efd177436e7
+- package: github.com/containernetworking/cni
+  version: v0.7.0-rc2
 - package: github.com/opencontainers/selinux
   version: v1.1
 - package: github.com/opencontainers/runtime-tools
@@ -114,3 +118,20 @@ import:
 # pinned to fix sirupsen issues
 - package: github.com/klauspost/cpuid
   version: 0da02118eaa37aa89aea6776b464a4ad00990af1
+# pinned to freeze kubernetes and openshift APIs
+- package: k8s.io/apiextensions-apiserver
+  version: a384d17938fe55d54a52d5668bf0ff40044daef0
+- package: github.com/docker/docker-credential-helpers
+  version: 123ba1b7cd646aaee13ba2e028b7c268db72e2b2
+- package: github.com/klauspost/compress
+  version: 30be6041bed523c18e269a700ebd9c2ea9328574
+- package: github.com/mattn/go-isatty
+  version: c2a7a6ca930a4cd0bc33a3f298eb71960732a3a7
+- package: github.com/openshift/origin
+  version: 0b751606e93258614555c506f9b3aaffefc57723
+- package: github.com/sirupsen/logrus
+  version: 89742aefa4b206dcf400792f3bd35b542998eb3b
+- package: golang.org/x/sync
+  version: e225da77a7e68af35c70ccbf71af2b83e6acac3c
+- package: k8s.io/apiextensions-apiserver
+  version: a384d17938fe55d54a52d5668bf0ff40044daef0

@@ -108,7 +108,10 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 			}
 		}
 
-		storeOptions := storage.DefaultStoreOptions
+		storeOptions, err := storage.DefaultStoreOptions(false, 0)
+		if err != nil {
+			return nil, err
+		}
 		if driver, ok := os.LookupEnv("BUILD_STORAGE_DRIVER"); ok {
 			storeOptions.GraphDriverName = driver
 		}

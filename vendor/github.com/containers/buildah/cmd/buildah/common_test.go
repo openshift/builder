@@ -16,7 +16,7 @@ import (
 
 var (
 	signaturePolicyPath = ""
-	storeOptions        = storage.DefaultStoreOptions
+	storeOptions, _     = storage.DefaultStoreOptions(false, 0)
 	testSystemContext   = types.SystemContext{}
 )
 
@@ -58,6 +58,7 @@ func TestGetStore(t *testing.T) {
 	flags.String("runroot", storeOptions.RunRoot, "")
 	flags.String("storage-driver", storeOptions.GraphDriverName, "")
 	flags.String("signature-policy", "", "")
+	flags.MarkHidden("signature-policy")
 	// The following flags had to be added or we get panics in common.go when
 	// the lookups occur
 	flags.StringSlice("storage-opt", []string{}, "")
@@ -92,7 +93,7 @@ func TestGetSize(t *testing.T) {
 		t.Fatalf("Error reading images: %v", err)
 	}
 
-	_, _, _, err = getDateAndDigestAndSize(getContext(), images[0], store)
+	_, _, _, err = getDateAndDigestAndSize(getContext(), store, images[0])
 	if err != nil {
 		t.Error(err)
 	}

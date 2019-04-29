@@ -66,6 +66,7 @@ sudo yum module install -y buildah
 sudo apt-get update -qq
 sudo apt-get install -qq -y software-properties-common
 sudo add-apt-repository -y ppa:projectatomic/ppa
+sudo apt-get update -qq
 sudo apt-get -qq -y install buildah
 ```
 
@@ -289,7 +290,7 @@ sd
 The following configuration files are required in order for Buildah to run appropriately.  The
 majority of these files are commonly contained in the `containers-common` package.
 
-### [registries.conf](https://src.fedoraproject.org/rpms/skopeo/blob/master/f/registries.conf)
+### [registries.conf](https://github.com/containers/buildah/blob/master/docs/samples/registries.conf)
 
 #### Man Page: [registries.conf.5](https://github.com/containers/image/blob/master/docs/containers-registries.conf.5.md)
 
