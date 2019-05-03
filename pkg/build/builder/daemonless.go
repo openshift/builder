@@ -20,6 +20,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
 	"github.com/openshift/library-go/pkg/image/reference"
@@ -66,6 +67,26 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		BlobDirectory: blobCacheDirectory,
 	}
 	return buildah.Pull(context.TODO(), "docker://"+imageName, options)
+}
+
+func daemonlessProcessLimits() (defaultProcessLimits []string) {
+	rlim := unix.Rlimit{Cur: 1048576, Max: 1048576}
+	if err := unix.Setrlimit(unix.RLIMIT_NOFILE, &rlim); err == nil {
+		defaultProcessLimits = append(defaultProcessLimits, fmt.Sprintf("nofile=%d:%d", rlim.Cur, rlim.Max))
+	} else {
+		if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &rlim); err == nil {
+			defaultProcessLimits = append(defaultProcessLimits, fmt.Sprintf("nofile=%d:%d", rlim.Cur, rlim.Max))
+		}
+	}
+	rlim = unix.Rlimit{Cur: 1048576, Max: 1048576}
+	if err := unix.Setrlimit(unix.RLIMIT_NPROC, &rlim); err == nil {
+		defaultProcessLimits = append(defaultProcessLimits, fmt.Sprintf("nproc=%d:%d", rlim.Cur, rlim.Max))
+	} else {
+		if err := unix.Getrlimit(unix.RLIMIT_NPROC, &rlim); err == nil {
+			defaultProcessLimits = append(defaultProcessLimits, fmt.Sprintf("nproc=%d:%d", rlim.Cur, rlim.Max))
+		}
+	}
+	return defaultProcessLimits
 }
 
 func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation buildah.Isolation, contextDir string, optimization buildapiv1.ImageOptimizationPolicy, opts *docker.BuildImageOptions, blobCacheDirectory string) error {
@@ -141,6 +162,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 			Memory:       opts.Memory,
 			MemorySwap:   opts.Memswap,
 			CgroupParent: opts.CgroupParent,
+			Ulimit:       daemonlessProcessLimits(),
 		},
 		Layers:                  layers,
 		NoCache:                 opts.NoCache,
@@ -350,6 +372,7 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 			Memory:       createOpts.HostConfig.Memory,
 			MemorySwap:   createOpts.HostConfig.MemorySwap,
 			CgroupParent: createOpts.HostConfig.CgroupParent,
+			Ulimit:       daemonlessProcessLimits(),
 		},
 		PullBlobDirectory: blobCacheDirectory,
 	}
