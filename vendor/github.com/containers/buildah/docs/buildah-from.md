@@ -17,7 +17,7 @@ Multiple transports are supported:
   An existing local directory _path_ containing the manifest, layer tarballs, and signatures in individual files. This is a non-standardized format, primarily useful for debugging or noninvasive image inspection.
 
   **docker://**_docker-reference_ (Default)
-  An image in a registry implementing the "Docker Registry HTTP API V2". By default, uses the authorization state in `$XDG\_RUNTIME\_DIR/containers/auth.json`, which is set using `(podman login)`. If the authorization state is not found there, `$HOME/.docker/config.json` is checked, which is set using `(docker login)`.
+  An image in a registry implementing the "Docker Registry HTTP API V2". By default, uses the authorization state in `$XDG\_RUNTIME\_DIR/containers/auth.json`, which is set using `(buildah login)`. If the authorization state is not found there, `$HOME/.docker/config.json` is checked, which is set using `(docker login)`.
   If _docker-reference_ does not include a registry name, *localhost* will be consulted first, followed by any registries named in the registries configuration.
 
   **docker-archive:**_path_
@@ -54,7 +54,7 @@ Add a line to /etc/hosts. The format is hostname:ip. The **--add-host** option c
 
 **--authfile** *path*
 
-Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `podman login`.
+Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `buildah login`.
 If the authorization state is not found there, $HOME/.docker/config.json is checked, which is set using `docker login`.
 
 **--cap-add**=*CAP\_xxx*
@@ -171,6 +171,16 @@ The [username[:password]] to use to authenticate with the registry if required.
 If one or both values are not supplied, a command line prompt will appear and the
 value can be entered.  The password is entered without echo.
 
+**--http-proxy**
+
+By default proxy environment variables are passed into the container if set
+for the buildah process.  This can be disabled by setting the `--http-proxy`
+option to `false`.  The environment variables passed in include `http_proxy`,
+`https_proxy`, `ftp_proxy`, `no_proxy`, and also the upper case versions of
+those.
+
+Defaults to `true`
+
 **--ipc** *how*
 
 Sets the configuration for IPC namespaces when the container is subsequently
@@ -243,13 +253,21 @@ process.
 
 **--pull**
 
-Pull the image if it is not present.  If this flag is disabled (with
-*--pull=false*) and the image is not present, the image will not be pulled.
+When the flag is enabled, attempt to pull the latest image from the registries
+listed in registries.conf if a local image does not exist or the image is newer
+than the one in storage. Raise an error if the image is not in any listed
+registry and is not present locally.
+
+If the flag is disabled (with *--pull=false*), do not pull the image from the
+registry, use only the local version. Raise an error if the image is not
+present locally.
+
 Defaults to *true*.
 
 **--pull-always**
 
-Pull the image even if a version of the image is already present.
+Pull the image from the first registry it is found in as listed in registries.conf.
+Raise an error if not found in the registries, even if the image is present locally.
 
 **--quiet, -q**
 
@@ -277,12 +295,6 @@ Security Options
 Size of `/dev/shm`. The format is `<number><unit>`. `number` must be greater than `0`.
 Unit is optional and can be `b` (bytes), `k` (kilobytes), `m`(megabytes), or `g` (gigabytes).
 If you omit the unit, the system uses bytes. If you omit the size entirely, the system uses `64m`.
-
-**--signature-policy** *signaturepolicy*
-
-Pathname of a signature policy file to use.  It is not recommended that this
-option be used, as the default behavior of using the system-wide default policy
-(frequently */etc/containers/policy.json*) is most often preferred.
 
 **--tls-verify** *bool-value*
 
@@ -476,8 +488,6 @@ buildah from oci-archive:filename
 
 buildah from --name mycontainer dir:directoryname
 
-buildah from --signature-policy /etc/containers/policy.json imagename
-
 buildah from --pull-always --name "mycontainer" docker://myregistry.example.com/imagename
 
 buildah from --tls-verify=false myregistry/myrepository/imagename:imagetag
@@ -498,5 +508,9 @@ buildah from --volume /home/test:/myvol:ro,Z myregistry/myrepository/imagename:i
 
 registries.conf is the configuration file which specifies which container registries should be consulted when completing image names which do not include a registry or domain portion.
 
+**policy.json** (`/etc/containers/policy.json`)
+
+Signature policy file.  This defines the trust policy for container images.  Controls which container registries can be used for image, and whether or not the tool should trust the images.
+
 ## SEE ALSO
-buildah(1), buildah-pull(1), podman-login(1), docker-login(1), namespaces(7), pid\_namespaces(7), policy.json(5), registries.conf(5), user\_namespaces(7)
+buildah(1), buildah-pull(1), buildah-login(1), docker-login(1), namespaces(7), pid\_namespaces(7), policy.json(5), registries.conf(5), user\_namespaces(7)

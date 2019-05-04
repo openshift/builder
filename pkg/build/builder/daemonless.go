@@ -374,7 +374,7 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 			CgroupParent: createOpts.HostConfig.CgroupParent,
 			Ulimit:       daemonlessProcessLimits(),
 		},
-		PullBlobDirectory: blobCacheDirectory,
+		BlobDirectory: blobCacheDirectory,
 	}
 
 	builder, err := buildah.NewBuilder(ctx, store, builderOptions)
@@ -458,9 +458,9 @@ func (d *DaemonlessClient) RemoveImage(name string) error {
 
 func (d *DaemonlessClient) CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error) {
 	options := buildah.BuilderOptions{
-		FromImage:         opts.Config.Image,
-		Container:         opts.Name,
-		PullBlobDirectory: d.BlobCacheDirectory,
+		FromImage:     opts.Config.Image,
+		Container:     opts.Name,
+		BlobDirectory: d.BlobCacheDirectory,
 	}
 	builder, err := buildah.NewBuilder(opts.Context, d.Store, options)
 	if err != nil {

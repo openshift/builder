@@ -6,7 +6,6 @@ package parse
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"net"
 	"os"
 	"path/filepath"
@@ -21,8 +20,8 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -39,14 +38,9 @@ func CommonBuildOptions(c *cobra.Command) (*buildah.CommonBuildOptions, error) {
 		memorySwap  int64
 		err         error
 	)
-	rlim := unix.Rlimit{Cur: 1048576, Max: 1048576}
-	defaultLimits := []string{}
-	if err := unix.Setrlimit(unix.RLIMIT_NOFILE, &rlim); err == nil {
-		defaultLimits = append(defaultLimits, fmt.Sprintf("nofile=%d:%d", rlim.Cur, rlim.Max))
-	}
-	if err := unix.Setrlimit(unix.RLIMIT_NPROC, &rlim); err == nil {
-		defaultLimits = append(defaultLimits, fmt.Sprintf("nproc=%d:%d", rlim.Cur, rlim.Max))
-	}
+
+	defaultLimits := getDefaultProcessLimits()
+
 	memVal, _ := c.Flags().GetString("memory")
 	if memVal != "" {
 		memoryLimit, err = units.RAMInBytes(memVal)
@@ -71,6 +65,11 @@ func CommonBuildOptions(c *cobra.Command) (*buildah.CommonBuildOptions, error) {
 			}
 		}
 	}
+
+	dnsServers, _ := c.Flags().GetStringSlice("dns")
+	dnsSearch, _ := c.Flags().GetStringSlice("dns-search")
+	dnsOptions, _ := c.Flags().GetStringSlice("dns-option")
+
 	if _, err := units.FromHumanSize(c.Flag("shm-size").Value.String()); err != nil {
 		return nil, errors.Wrapf(err, "invalid --shm-size")
 	}
@@ -81,6 +80,7 @@ func CommonBuildOptions(c *cobra.Command) (*buildah.CommonBuildOptions, error) {
 	cpuPeriod, _ := c.Flags().GetUint64("cpu-period")
 	cpuQuota, _ := c.Flags().GetInt64("cpu-quota")
 	cpuShares, _ := c.Flags().GetUint64("cpu-shared")
+	httpProxy, _ := c.Flags().GetBool("http-proxy")
 	ulimit, _ := c.Flags().GetStringSlice("ulimit")
 	commonOpts := &buildah.CommonBuildOptions{
 		AddHost:      addHost,
@@ -90,13 +90,17 @@ func CommonBuildOptions(c *cobra.Command) (*buildah.CommonBuildOptions, error) {
 		CPUSetCPUs:   c.Flag("cpuset-cpus").Value.String(),
 		CPUSetMems:   c.Flag("cpuset-mems").Value.String(),
 		CPUShares:    cpuShares,
+		DNSSearch:    dnsSearch,
+		DNSServers:   dnsServers,
+		DNSOptions:   dnsOptions,
+		HTTPProxy:    httpProxy,
 		Memory:       memoryLimit,
 		MemorySwap:   memorySwap,
 		ShmSize:      c.Flag("shm-size").Value.String(),
 		Ulimit:       append(defaultLimits, ulimit...),
 		Volumes:      volumes,
 	}
-	securityOpts, _ := c.Flags().GetStringSlice("security-opt")
+	securityOpts, _ := c.Flags().GetStringArray("security-opt")
 	if err := parseSecurityOpts(securityOpts, commonOpts); err != nil {
 		return nil, err
 	}
@@ -145,26 +149,41 @@ func parseSecurityOpts(securityOpts []string, commonOpts *buildah.CommonBuildOpt
 	return nil
 }
 
+func ParseVolume(volume string) (specs.Mount, error) {
+	mount := specs.Mount{}
+	arr := strings.SplitN(volume, ":", 3)
+	if len(arr) < 2 {
+		return mount, errors.Errorf("incorrect volume format %q, should be host-dir:ctr-dir[:option]", volume)
+	}
+	if err := validateVolumeHostDir(arr[0]); err != nil {
+		return mount, err
+	}
+	if err := validateVolumeCtrDir(arr[1]); err != nil {
+		return mount, err
+	}
+	mountOptions := ""
+	if len(arr) > 2 {
+		mountOptions = arr[2]
+		if err := validateVolumeOpts(arr[2]); err != nil {
+			return mount, err
+		}
+	}
+	mountOpts := strings.Split(mountOptions, ",")
+	mount.Source = arr[0]
+	mount.Destination = arr[1]
+	mount.Type = "rbind"
+	mount.Options = mountOpts
+	return mount, nil
+}
+
 // ParseVolumes validates the host and container paths passed in to the --volume flag
 func ParseVolumes(volumes []string) error {
 	if len(volumes) == 0 {
 		return nil
 	}
 	for _, volume := range volumes {
-		arr := strings.SplitN(volume, ":", 3)
-		if len(arr) < 2 {
-			return errors.Errorf("incorrect volume format %q, should be host-dir:ctr-dir[:option]", volume)
-		}
-		if err := validateVolumeHostDir(arr[0]); err != nil {
+		if _, err := ParseVolume(volume); err != nil {
 			return err
-		}
-		if err := validateVolumeCtrDir(arr[1]); err != nil {
-			return err
-		}
-		if len(arr) > 2 {
-			if err := validateVolumeOpts(arr[2]); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
@@ -268,8 +287,8 @@ func SystemContextFromOptions(c *cobra.Command) (*types.SystemContext, error) {
 		ctx.SignaturePolicyPath = sigPolicy
 	}
 	authfile, err := c.Flags().GetString("authfile")
-	if err == nil && c.Flag("authfile").Changed {
-		ctx.AuthFilePath = authfile
+	if err == nil {
+		ctx.AuthFilePath = getAuthFile(authfile)
 	}
 	regConf, err := c.Flags().GetString("registries-conf")
 	if err == nil && c.Flag("registries-conf").Changed {
@@ -281,6 +300,13 @@ func SystemContextFromOptions(c *cobra.Command) (*types.SystemContext, error) {
 	}
 	ctx.DockerRegistryUserAgent = fmt.Sprintf("Buildah/%s", buildah.Version)
 	return ctx, nil
+}
+
+func getAuthFile(authfile string) string {
+	if authfile != "" {
+		return authfile
+	}
+	return os.Getenv("REGISTRY_AUTH_FILE")
 }
 
 func parseCreds(creds string) (string, string) {
@@ -319,7 +345,7 @@ func getDockerAuth(creds string) (*types.DockerAuthConfig, error) {
 }
 
 // IDMappingOptions parses the build options related to user namespaces and ID mapping.
-func IDMappingOptions(c *cobra.Command) (usernsOptions buildah.NamespaceOptions, idmapOptions *buildah.IDMappingOptions, err error) {
+func IDMappingOptions(c *cobra.Command, isolation buildah.Isolation) (usernsOptions buildah.NamespaceOptions, idmapOptions *buildah.IDMappingOptions, err error) {
 	user := c.Flag("userns-uid-map-user").Value.String()
 	group := c.Flag("userns-gid-map-group").Value.String()
 	// If only the user or group was specified, use the same value for the
@@ -391,6 +417,7 @@ func IDMappingOptions(c *cobra.Command) (usernsOptions buildah.NamespaceOptions,
 	if len(gidmap) == 0 && len(uidmap) != 0 {
 		gidmap = uidmap
 	}
+
 	// By default, having mappings configured means we use a user
 	// namespace.  Otherwise, we don't.
 	usernsOption := buildah.NamespaceOption{
@@ -555,4 +582,23 @@ func IsolationOption(c *cobra.Command) (buildah.Isolation, error) {
 		}
 	}
 	return defaultIsolation()
+}
+
+// ScrubServer removes 'http://' or 'https://' from the front of the
+// server/registry string if either is there.  This will be mostly used
+// for user input from 'buildah login' and 'buildah logout'.
+func ScrubServer(server string) string {
+	server = strings.TrimPrefix(server, "https://")
+	return strings.TrimPrefix(server, "http://")
+}
+
+// RegistryFromFullName gets the registry from the input. If the input is of the form
+// quay.io/myuser/myimage, it will parse it and just return quay.io
+// It also returns true if a full image name was given
+func RegistryFromFullName(input string) string {
+	split := strings.Split(input, "/")
+	if len(split) > 1 {
+		return split[0]
+	}
+	return split[0]
 }

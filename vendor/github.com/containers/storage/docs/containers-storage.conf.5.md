@@ -1,16 +1,16 @@
-% storage.conf(5) Container Storage Configuration File
+% containers-storage.conf(5) Container Storage Configuration File
 % Dan Walsh
 % May 2017
 
 # NAME
 storage.conf - Syntax of Container Storage configuration file
 
-# DESCRIPTION
+## DESCRIPTION
 The STORAGE configuration file specifies all of the available container storage options
 for tools using shared container storage, but in a TOML format that can be more easily modified
 and versioned.
 
-# FORMAT
+## FORMAT
 The [TOML format][toml] is used as the encoding of the configuration file.
 Every option and subtable listed here is nested under a global "storage" table.
 No bare options are used. The format of TOML can be simplified to:
@@ -53,11 +53,52 @@ The `storage.options` table supports the following options:
   Maximum size of a container image.   This flag can be used to set quota on the size of container images. (default: 10GB)
 
 **mount_program**=""
-  Specifies the path to a custom program to use instead for mounting the file system.
+  Specifies the path to a custom program to use instead of using kernel defaults for mounting the file system.
+
+      mount_program = "/usr/bin/fuse-overlayfs"
 
 **mountopt**=""
 
   Comma separated list of default options to be used to mount container images.  Suggested value "nodev".
+
+**remap-uids=**""
+**remap-gids=**""
+
+  Remap-UIDs/GIDs is the mapping from UIDs/GIDs as they should appear inside of
+a container, to the UIDs/GIDs outside of the container, and the length of the
+range of UIDs/GIDs.  Additional mapped sets can be listed and will be heeded by
+libraries, but there are limits to the number of mappings which the kernel will
+allow when you later attempt to run a container.
+
+     Example
+     remap-uids = 0:1668442479:65536
+     remap-gids = 0:1668442479:65536
+
+     These mappings tell the container engines to map UID 0 inside of the
+     container to UID 1668442479 outside.  UID 1 will be mapped to 1668442480.
+     UID 2 will be mapped to 1668442481, etc, for the next 65533 UIDs in
+     Succession.
+
+**remap-user**=""
+**remap-group**=""
+
+  Remap-User/Group is a user name which can be used to look up one or more UID/GID
+ranges in the /etc/subuid or /etc/subgid file.  Mappings are set up starting
+with an in-container ID of 0 and then a host-level ID taken from the lowest
+range that matches the specified name, and using the length of that range.
+Additional ranges are then assigned, using the ranges which specify the
+lowest host-level IDs first, to the lowest not-yet-mapped in-container ID,
+until all of the entries have been used for maps.
+
+      remap-user = "storage"
+      remap-group = "storage"
+
+ostree_repo = ""
+   If specified, use OSTree to deduplicate files with the overlay backend.
+
+skip_mount_home = "false"
+   Set to skip a PRIVATE bind mount on the storage home directory.
+Only supported by certain container storage drivers (overlay).
 
 [storage.options.thinpool]
 
@@ -129,8 +170,35 @@ Specifies the maximum number of retries XFS should attempt to complete IO when E
   Tell storage drivers to use the specified OSTree repository.  Some storage drivers, such as overlay, might use
 
 **skip_mount_home=""**
-  Tell storage drivers to not create a PRIVATE bind mount on their home directory.
+Tell storage drivers to not create a PRIVATE bind mount on their home directory.
 
-# HISTORY
+## SElinux labeling.
+
+When running on an SELinux system, if you move the containers storage graphroot directory, you must make sure the labeling is correct.
+
+Tell SELinux about the new containers storage by setting up an equivalence record.
+This tells SELinux to label content under the new path, as if it was stored
+under `/var/lib/containers/storage`.
+
+```
+semanage fcontext -a -e /var/lib/containers NEWSTORAGEPATH
+restorecon -R -v /src/containers
+```
+
+The semanage command above tells SELinux to setup the default labeling of
+`NEWSTORAGEPATH` to match `/var/lib/containers`.  The `restorecon` command
+tells SELinux to apply the labels to the actual content.
+
+Now all new content created in these directories will automatically be created
+with the correct label.
+
+## SEE ALSO
+`semanage(8)`, `restorecon(8)`
+
+## FILES
+
+Distributions often provide a /usr/share/containers/storage.conf file to define default storage configuration. Administrators can override this file by creating `/etc/containers/storage.conf` to specify their own configuration. The storage.conf file for rootless users is stored in the $HOME/.config/containers/storage.conf file.
+
+## HISTORY
 May 2017, Originally compiled by Dan Walsh <dwalsh@redhat.com>
 Format copied from crio.conf man page created by Aleksa Sarai <asarai@suse.de>

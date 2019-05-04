@@ -1,13 +1,11 @@
 package util
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -18,9 +16,8 @@ import (
 	"github.com/containers/image/transports"
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/idtools"
 	"github.com/docker/distribution/registry/api/errcode"
-	"github.com/opencontainers/runtime-spec/specs-go"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -47,6 +44,12 @@ var (
 // correspond to in the set of configured registries, the transport used to
 // pull the image, and a boolean which is true iff
 // 1) the list of search registries was used, and 2) it was empty.
+//
+// The returned image names never include a transport: prefix, and if transport != "",
+// (transport, image) should be a valid input to alltransports.ParseImageName.
+// transport == "" indicates that image that already exists in a local storage,
+// and the name is valid for store.Image() / storage.Transport.ParseStoreReference().
+//
 // NOTE: The "list of search registries is empty" check does not count blocked registries,
 // and neither the implied "localhost" nor a possible firstRegistry are counted
 func ResolveName(name string, firstRegistry string, sc *types.SystemContext, store storage.Store) ([]string, string, bool, error) {
@@ -162,15 +165,7 @@ func ExpandNames(names []string, firstRegistry string, systemContext *types.Syst
 			name = named
 		}
 		name = reference.TagNameOnly(name)
-		tag := ""
-		digest := ""
-		if tagged, ok := name.(reference.NamedTagged); ok {
-			tag = ":" + tagged.Tag()
-		}
-		if digested, ok := name.(reference.Digested); ok {
-			digest = "@" + digested.Digest().String()
-		}
-		expanded = append(expanded, name.Name()+tag+digest)
+		expanded = append(expanded, name.String())
 	}
 	return expanded, nil
 }
@@ -202,7 +197,7 @@ func FindImage(store storage.Store, firstRegistry string, systemContext *types.S
 		break
 	}
 	if ref == nil || img == nil {
-		return nil, nil, errors.Wrapf(err, "error locating image with name %q", image)
+		return nil, nil, errors.Wrapf(err, "error locating image with name %q (%v)", image, names)
 	}
 	return ref, img, nil
 }
@@ -299,92 +294,6 @@ func GetHostRootIDs(spec *specs.Spec) (uint32, uint32, error) {
 		return 0, 0, nil
 	}
 	return GetHostIDs(spec.Linux.UIDMappings, spec.Linux.GIDMappings, 0, 0)
-}
-
-// getHostIDMappings reads mappings from the named node under /proc.
-func getHostIDMappings(path string) ([]specs.LinuxIDMapping, error) {
-	var mappings []specs.LinuxIDMapping
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, errors.Wrapf(err, "error reading ID mappings from %q", path)
-	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) != 3 {
-			return nil, errors.Errorf("line %q from %q has %d fields, not 3", line, path, len(fields))
-		}
-		cid, err := strconv.ParseUint(fields[0], 10, 32)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error parsing container ID value %q from line %q in %q", fields[0], line, path)
-		}
-		hid, err := strconv.ParseUint(fields[1], 10, 32)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error parsing host ID value %q from line %q in %q", fields[1], line, path)
-		}
-		size, err := strconv.ParseUint(fields[2], 10, 32)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error parsing size value %q from line %q in %q", fields[2], line, path)
-		}
-		mappings = append(mappings, specs.LinuxIDMapping{ContainerID: uint32(cid), HostID: uint32(hid), Size: uint32(size)})
-	}
-	return mappings, nil
-}
-
-// GetHostIDMappings reads mappings for the specified process (or the current
-// process if pid is "self" or an empty string) from the kernel.
-func GetHostIDMappings(pid string) ([]specs.LinuxIDMapping, []specs.LinuxIDMapping, error) {
-	if pid == "" {
-		pid = "self"
-	}
-	uidmap, err := getHostIDMappings(fmt.Sprintf("/proc/%s/uid_map", pid))
-	if err != nil {
-		return nil, nil, err
-	}
-	gidmap, err := getHostIDMappings(fmt.Sprintf("/proc/%s/gid_map", pid))
-	if err != nil {
-		return nil, nil, err
-	}
-	return uidmap, gidmap, nil
-}
-
-// GetSubIDMappings reads mappings from /etc/subuid and /etc/subgid.
-func GetSubIDMappings(user, group string) ([]specs.LinuxIDMapping, []specs.LinuxIDMapping, error) {
-	mappings, err := idtools.NewIDMappings(user, group)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "error reading subuid mappings for user %q and subgid mappings for group %q", user, group)
-	}
-	var uidmap, gidmap []specs.LinuxIDMapping
-	for _, m := range mappings.UIDs() {
-		uidmap = append(uidmap, specs.LinuxIDMapping{
-			ContainerID: uint32(m.ContainerID),
-			HostID:      uint32(m.HostID),
-			Size:        uint32(m.Size),
-		})
-	}
-	for _, m := range mappings.GIDs() {
-		gidmap = append(gidmap, specs.LinuxIDMapping{
-			ContainerID: uint32(m.ContainerID),
-			HostID:      uint32(m.HostID),
-			Size:        uint32(m.Size),
-		})
-	}
-	return uidmap, gidmap, nil
-}
-
-// ParseIDMappings parses mapping triples.
-func ParseIDMappings(uidmap, gidmap []string) ([]idtools.IDMap, []idtools.IDMap, error) {
-	uid, err := idtools.ParseIDMap(uidmap, "userns-uid-map")
-	if err != nil {
-		return nil, nil, err
-	}
-	gid, err := idtools.ParseIDMap(gidmap, "userns-gid-map")
-	if err != nil {
-		return nil, nil, err
-	}
-	return uid, gid, nil
 }
 
 // GetPolicyContext sets up, initializes and returns a new context for the specified policy

@@ -107,6 +107,8 @@ Print the version
 | buildah-info(1)       | Display Buildah system information.                                                                  |
 | buildah-inspect(1)    | Inspects the configuration of a container or image                                                   |
 | buildah-mount(1)      | Mount the working container's root filesystem.                                                       |
+| buildah-login(1)      | Login to a container registry.                                                                       |
+| buildah-logout(1)     | Logout of a container registry                                                                       |
 | buildah-pull(1)       | Pull an image from the specified location.                                                           |
 | buildah-push(1)       | Push an image from local storage to elsewhere.                                                       |
 | buildah-rename(1)     | Rename a local container.                                                                            |
@@ -142,8 +144,12 @@ Print the version
 
 	registries.conf is the configuration file which specifies which container registries should be consulted when completing image names which do not include a registry or domain portion.
 
+**registries.d** (`/etc/containers/registries.d`)
+
+Directory which contains configuration snippets which specify registries which should be consulted when completing image names which do not include a registry or domain portion.
+
 ## SEE ALSO
-podman(1), mounts.conf(5), newuidmap(1), newgidmap(1), registries.conf(5), storage.conf(5)
+podman(1), containers-mounts.conf(5), newuidmap(1), newgidmap(1), containers-registries.conf(5), containers-storage.conf(5)
 
 ## HISTORY
 December 2017, Originally compiled by Tom Sweeney <tsweeney@redhat.com>

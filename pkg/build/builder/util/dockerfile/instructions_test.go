@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/builder/dockerfile/command"
+	"github.com/openshift/imagebuilder/dockerfile/command"
 )
 
 // TestKeyValueInstructions tests calling derivatives of keyValueInstruction

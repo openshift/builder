@@ -149,7 +149,7 @@ result, err := current.NewResultFromResult(ipamResult)
 ```
 
 Other examples of spec v0.3.0-compatible plugins are the
-[main plugins in this repo](https://github.com/containernetworking/cni/tree/master/plugins/main)
+[main plugins in this repo](https://github.com/containernetworking/plugins/)
 
 
 ## For Runtime Authors
@@ -249,7 +249,7 @@ work with the fields exposed by that struct:
 ```go
 // runtime invokes the plugin to get the opaque types.Result
 // this may conform to any CNI spec version
-resultInterface, err := libcni.AddNetwork(netConf, runtimeConf)
+resultInterface, err := libcni.AddNetwork(ctx, netConf, runtimeConf)
 
 // upconvert result to the current 0.3.0 spec
 result, err := current.NewResultFromResult(resultInterface)

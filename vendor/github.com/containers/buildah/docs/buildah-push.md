@@ -23,7 +23,7 @@ Image stored in local container/storage
   An existing local directory _path_ storing the manifest, layer tarballs and signatures as individual files. This is a non-standardized format, primarily useful for debugging or noninvasive container inspection.
 
   **docker://**_docker-reference_
-  An image in a registry implementing the "Docker Registry HTTP API V2". By default, uses the authorization state in `$XDG\_RUNTIME\_DIR/containers/auth.json`, which is set using `(podman login)`. If the authorization state is not found there, `$HOME/.docker/config.json` is checked, which is set using `(docker login)`.
+  An image in a registry implementing the "Docker Registry HTTP API V2". By default, uses the authorization state in `$XDG\_RUNTIME\_DIR/containers/auth.json`, which is set using `(buildah login)`. If the authorization state is not found there, `$HOME/.docker/config.json` is checked, which is set using `(docker login)`.
   If _docker-reference_ does not include a registry name, the image will be pushed to a registry running on *localhost*.
 
   **docker-archive:**_path_[**:**_docker-reference_]
@@ -47,7 +47,7 @@ If the transport part of DESTINATION is omitted, "docker://" is assumed.
 
 **--authfile** *path*
 
-Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `podman login`.
+Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `buildah login`.
 If the authorization state is not found there, $HOME/.docker/config.json is checked, which is set using `docker login`.
 
 **--cert-dir** *path*
@@ -72,12 +72,6 @@ Manifest Type (oci, v2s1, or v2s2) to use when saving image to directory using t
 **--quiet, -q**
 
 When writing the output image, suppress progress output.
-
-**--signature-policy**
-
-Pathname of a signature policy file to use.  It is not recommended that this
-option be used, as the default behavior of using the system-wide default policy
-(frequently */etc/containers/policy.json*) is most often preferred.
 
 **--tls-verify** *bool-value*
 
@@ -125,5 +119,9 @@ This example extracts the imageID image and puts it into the registry on the loc
 
 registries.conf is the configuration file which specifies which container registries should be consulted when completing image names which do not include a registry or domain portion.
 
+**policy.json** (`/etc/containers/policy.json`)
+
+Signature policy file.  This defines the trust policy for container images.  Controls which container registries can be used for image, and whether or not the tool should trust the images.
+
 ## SEE ALSO
-buildah(1), podman-login(1), docker-login(1), policy.json(5), registries.conf(5)
+buildah(1), buildah-login(1), policy.json(5), docker-login(1), registries.conf(5)

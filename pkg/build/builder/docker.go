@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	dockercmd "github.com/docker/docker/builder/dockerfile/command"
-	"github.com/docker/docker/builder/dockerfile/parser"
 	docker "github.com/fsouza/go-dockerclient"
+	dockercmd "github.com/openshift/imagebuilder/dockerfile/command"
+	"github.com/openshift/imagebuilder/dockerfile/parser"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 
 	corev1 "k8s.io/api/core/v1"

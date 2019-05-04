@@ -68,6 +68,7 @@ func init() {
 	flags.BoolVar(&opts.pullAlways, "pull-always", false, "pull the image even if named image is present in store (supersedes pull option)")
 	flags.BoolVarP(&opts.quiet, "quiet", "q", false, "don't output progress information when pulling images")
 	flags.StringVar(&opts.signaturePolicy, "signature-policy", "", "`pathname` of signature policy file (not usually used)")
+	flags.MarkHidden("signature-policy")
 	flags.BoolVar(&opts.tlsVerify, "tls-verify", true, "require HTTPS and verify certificates when accessing the registry")
 
 	// Add in the common flags
@@ -82,7 +83,7 @@ func onBuild(builder *buildah.Builder) error {
 	for _, onBuildSpec := range builder.OnBuild() {
 		ctr = ctr + 1
 		commands := strings.Split(onBuildSpec, " ")
-		command := commands[0]
+		command := strings.ToUpper(commands[0])
 		args := commands[1:]
 		fmt.Fprintf(os.Stderr, "STEP %d: %s\n", ctr, onBuildSpec)
 		switch command {
@@ -94,7 +95,7 @@ func onBuild(builder *buildah.Builder) error {
 				dest = args[size-1]
 				args = args[:size-1]
 			}
-			if err := builder.Add(dest, false, buildah.AddAndCopyOptions{}, args...); err != nil {
+			if err := builder.Add(dest, command == "ADD", buildah.AddAndCopyOptions{}, args...); err != nil {
 				return err
 			}
 		case "ANNOTATION":
@@ -197,7 +198,7 @@ func fromCmd(c *cobra.Command, args []string, iopts fromReply) error {
 	if err != nil {
 		return errors.Wrapf(err, "error parsing namespace-related options")
 	}
-	usernsOption, idmappingOptions, err := parse.IDMappingOptions(c)
+	usernsOption, idmappingOptions, err := parse.IDMappingOptions(c, isolation)
 	if err != nil {
 		return errors.Wrapf(err, "error parsing ID mapping options")
 	}
@@ -225,7 +226,7 @@ func fromCmd(c *cobra.Command, args []string, iopts fromReply) error {
 		DropCapabilities:      iopts.CapDrop,
 		CommonBuildOpts:       commonOpts,
 		Format:                format,
-		PullBlobDirectory:     iopts.BlobCache,
+		BlobDirectory:         iopts.BlobCache,
 	}
 
 	if !iopts.quiet {

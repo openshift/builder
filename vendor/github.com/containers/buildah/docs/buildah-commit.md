@@ -18,7 +18,7 @@ The image ID of the image that was created.  On error, 1 is returned and errno i
 
 **--authfile** *path*
 
-Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `podman login`.
+Path of the authentication file. Default is ${XDG\_RUNTIME\_DIR}/containers/auth.json, which is set using `buildah login`.
 If the authorization state is not found there, $HOME/.docker/config.json is checked, which is set using `docker login`.
 
 **--cert-dir** *path*
@@ -61,12 +61,6 @@ When writing the output image, suppress progress output.
 **--rm**
 Remove the container and its content after committing it to an image.
 Default leaves the container and its content in place.
-
-**--signature-policy**
-
-Pathname of a signature policy file to use.  It is not recommended that this
-option be used, as the default behavior of using the system-wide default policy
-(frequently */etc/containers/policy.json*) is most often preferred.
 
 **--squash**
 
@@ -112,6 +106,10 @@ This example commits the container to the image on the local registry using cred
 **registries.conf** (`/etc/containers/registries.conf`)
 
 registries.conf is the configuration file which specifies which container registries should be consulted when completing image names which do not include a registry or domain portion.
+
+**policy.json** (`/etc/containers/policy.json`)
+
+Signature policy file.  This defines the trust policy for container images.  Controls which container registries can be used for image, and whether or not the tool should trust the images.
 
 ## SEE ALSO
 buildah(1), policy.json(5), registries.conf(5)

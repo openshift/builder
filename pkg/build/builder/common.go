@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/docker/distribution/reference"
-	dockercmd "github.com/docker/docker/builder/dockerfile/command"
-	"github.com/docker/docker/builder/dockerfile/parser"
+	dockercmd "github.com/openshift/imagebuilder/dockerfile/command"
+	"github.com/openshift/imagebuilder/dockerfile/parser"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
