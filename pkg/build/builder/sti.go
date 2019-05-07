@@ -241,8 +241,11 @@ func (s *S2IBuilder) Build() error {
 
 	if config.Incremental {
 		if s.build.Spec.Strategy.SourceStrategy.ForcePull || !isImagePresent(s.dockerClient, config.IncrementalFromTag) {
+			// Per @bparees the dockercfg.PushTypeAuth is needed to use the same credentials/authentication that
+			// we used to push the image previously.
+			it, _ := dockercfg.NewHelper().GetDockerAuth(config.IncrementalFromTag, dockercfg.PushAuthType)
 			startTime := metav1.Now()
-			err = s.pullImage(config.IncrementalFromTag, t)
+			err = s.pullImage(config.IncrementalFromTag, it)
 			timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullInputImage, startTime, metav1.Now())
 			// If there was an error, the incremental image may not exist. Treat the build as a normal s2i build.
 			if err != nil {
