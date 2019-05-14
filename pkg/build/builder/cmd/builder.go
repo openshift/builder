@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -114,6 +115,12 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 		}
 		if driver, ok := os.LookupEnv("BUILD_STORAGE_DRIVER"); ok {
 			storeOptions.GraphDriverName = driver
+		}
+		if storageOptions, ok := os.LookupEnv("BUILD_STORAGE_OPTIONS"); ok {
+			if err := json.Unmarshal([]byte(storageOptions), &storeOptions.GraphDriverOptions); err != nil {
+				glog.V(0).Infof("Error parsing BUILD_STORAGE_OPTIONS (%q): %v", storageOptions, err)
+				return nil, err
+			}
 		}
 		if storageConfPath, ok := os.LookupEnv("BUILD_STORAGE_CONF_PATH"); ok && len(storageConfPath) > 0 {
 			if _, err := os.Stat(storageConfPath); err == nil {
