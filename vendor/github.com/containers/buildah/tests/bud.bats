@@ -28,6 +28,8 @@ load helpers
 
   run_buildah run myctr ls -l subdir/sub1.txt
 
+  run_buildah bud -t testbud2 --signature-policy ${TESTSDIR}/policy.json ${TESTSDIR}/bud/dockerignore2
+
   buildah rmi -a -f
 }
 
@@ -302,6 +304,16 @@ load helpers
   run_buildah --debug=false inspect --format '{{printf "%q" .ImageAnnotations}}' ${target}
   expect_output 'map["test":"annotation1,annotation2=z"]'
   buildah rmi ${target}
+}
+
+@test "bud-from-scratch-layers" {
+  target=scratch-image
+  run_buildah bud --signature-policy ${TESTSDIR}/policy.json -f  ${TESTSDIR}/bud/from-scratch/Dockerfile2 -t ${target} ${TESTSDIR}/bud/from-scratch
+  run_buildah bud --signature-policy ${TESTSDIR}/policy.json -f  ${TESTSDIR}/bud/from-scratch/Dockerfile2 -t ${target} ${TESTSDIR}/bud/from-scratch
+  cid=$(buildah from ${target})
+  run_buildah --debug=false images
+  run_buildah rm ${cid}
+  expect_line_count 2
 }
 
 @test "bud-from-multiple-files-one-from" {
@@ -1194,6 +1206,7 @@ load helpers
   run_buildah --debug=false bud --signature-policy ${TESTSDIR}/policy.json -v ${TESTSDIR}:/testdir ${TESTSDIR}/bud/mount
   expect_output --substring "/testdir"
 }
+
 @test "bud-copy-dot with --layers picks up changed file" {
   cp -a ${TESTSDIR}/bud/use-layers ${TESTDIR}/use-layers
 
@@ -1210,4 +1223,30 @@ load helpers
   fi
 
   buildah rmi -a -f
+}
+
+@test "buildah-bud-policy" {
+  target=foo
+
+  # A deny-all policy should prevent us from pulling the base image.
+  run_buildah '?' bud --signature-policy ${TESTSDIR}/deny.json -t ${target} -v ${TESTSDIR}:/testdir ${TESTSDIR}/bud/mount
+  [ "$status" -ne 0 ]
+  expect_output --substring 'Source image rejected: Running image .* rejected by policy.'
+  run_buildah rmi -a -f
+
+  # A docker-only policy should allow us to pull the base image and commit.
+  run_buildah bud --signature-policy ${TESTSDIR}/docker.json -t ${target} -v ${TESTSDIR}:/testdir ${TESTSDIR}/bud/mount
+  # A deny-all policy shouldn't break pushing.
+  run_buildah push --signature-policy ${TESTSDIR}/deny.json ${target} dir:${TESTDIR}/mount
+  run_buildah rmi -a -f
+
+  # A docker-only policy should allow us to pull the base image first...
+  run_buildah pull --signature-policy ${TESTSDIR}/docker.json alpine
+  # ... and since we don't need to pull the base image, a deny-all policy shouldn't break a build.
+  run_buildah bud --signature-policy ${TESTSDIR}/deny.json -t ${target} -v ${TESTSDIR}:/testdir ${TESTSDIR}/bud/mount
+  # A deny-all policy shouldn't break pushing.
+  run_buildah push --signature-policy ${TESTSDIR}/deny.json ${target} dir:${TESTDIR}/mount
+  # A deny-all policy shouldn't break committing directly to other storage.
+  run_buildah bud --signature-policy ${TESTSDIR}/deny.json -t dir:${TESTDIR}/mount -v ${TESTSDIR}:/testdir ${TESTSDIR}/bud/mount
+  run_buildah rmi -a -f
 }
