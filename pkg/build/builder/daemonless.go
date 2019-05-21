@@ -12,6 +12,7 @@ import (
 	"github.com/containers/buildah"
 	"github.com/containers/buildah/imagebuildah"
 	"github.com/containers/buildah/util"
+	ireference "github.com/containers/image/docker/reference"
 	"github.com/containers/image/pkg/docker/config"
 	"github.com/containers/image/transports/alltransports"
 	"github.com/containers/image/types"
@@ -269,6 +270,15 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 
 	// TODO - do something with the digest
 	_, digest, err := buildah.Push(context.TODO(), imageName, dest, options)
+	logName := imageName
+	if dref := dest.DockerReference(); dref != nil {
+		if named, ok := dref.(ireference.Named); ok {
+			if canonical, err := ireference.WithDigest(named, digest); err == nil {
+				logName = canonical.String()
+			}
+		}
+	}
+	glog.V(0).Infof("Successfully pushed %s", logName)
 	return string(digest), err
 }
 
