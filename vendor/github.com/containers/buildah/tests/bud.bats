@@ -149,6 +149,14 @@ load helpers
   buildah rmi -a -f
 }
 
+@test "bud-multistage-copy-final-slash" {
+  target=foo
+  run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} ${TESTSDIR}/bud/dest-final-slash
+  run_buildah --debug=false from --signature-policy ${TESTSDIR}/policy.json ${target}
+  cid="$output"
+  run_buildah run ${cid} /test/ls -lR /test/ls
+}
+
 @test "bud-multistage-reused" {
   target=foo
   run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/multi-stage-builds/Dockerfile.reused ${TESTSDIR}/bud/multi-stage-builds
@@ -156,6 +164,19 @@ load helpers
   run_buildah rmi -f ${target}
   run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} --layers -f ${TESTSDIR}/bud/multi-stage-builds/Dockerfile.reused ${TESTSDIR}/bud/multi-stage-builds
   run_buildah from --signature-policy ${TESTSDIR}/policy.json ${target}
+}
+
+@test "bud-multistage-cache" {
+  target=foo
+  run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/multi-stage-builds/Dockerfile.extended ${TESTSDIR}/bud/multi-stage-builds
+  run_buildah --debug=false from --signature-policy ${TESTSDIR}/policy.json ${target}
+  cid="$output"
+  run_buildah --debug=false mount "$cid"
+  root="$output"
+  # cache should have used this one
+  test -r "$root"/tmp/preCommit
+  # cache should not have used this one
+  ! test -r "$root"/tmp/postCommit
 }
 
 @test "bud with --layers and symlink file" {
@@ -647,6 +668,42 @@ load helpers
   expect_output ""
 }
 
+@test "bud-shell during build in Docker format" {
+  target=alpine-image
+  run_buildah bud --format docker --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/shell/Dockerfile.build-shell-default ${TESTSDIR}/bud/shell
+  expect_output --substring "SHELL=/bin/sh"
+  buildah rmi -a
+  run_buildah --debug=false images -q
+  expect_output ""
+}
+
+@test "bud-shell during build in OCI format" {
+  target=alpine-image
+  run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/shell/Dockerfile.build-shell-default ${TESTSDIR}/bud/shell
+  expect_output --substring "SHELL=/bin/sh"
+  buildah rmi -a
+  run_buildah --debug=false images -q
+  expect_output ""
+}
+
+@test "bud-shell changed during build in Docker format" {
+  target=ubuntu-image
+  run_buildah bud --format docker --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/shell/Dockerfile.build-shell-custom ${TESTSDIR}/bud/shell
+  expect_output --substring "SHELL=/bin/bash"
+  buildah rmi -a
+  run_buildah --debug=false images -q
+  expect_output ""
+}
+
+@test "bud-shell changed during build in OCI format" {
+  target=ubuntu-image
+  run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f ${TESTSDIR}/bud/shell/Dockerfile.build-shell-custom ${TESTSDIR}/bud/shell
+  expect_output --substring "SHELL=/bin/sh"
+  buildah rmi -a
+  run_buildah --debug=false images -q
+  expect_output ""
+}
+
 @test "bud with symlinks" {
   target=alpine-image
   run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${target} ${TESTSDIR}/bud/symlink
@@ -780,6 +837,16 @@ load helpers
   from_cid=$(buildah from ${from_target})
   cid=$(buildah from ${target})
   buildah rm ${from_cid} ${cid}
+  buildah rmi -a -f
+}
+
+@test "bud ENV preserves special characters after commit" {
+  from_target=special-chars
+  run_buildah bud --signature-policy ${TESTSDIR}/policy.json -t ${from_target} -f ${TESTSDIR}/bud/env/Dockerfile.special-chars ${TESTSDIR}/bud/env
+  cid=$(buildah from ${from_target})
+  run_buildah run ${cid} env
+  expect_output --substring "LIB=\\$\(PREFIX\)/lib"
+  buildah rm ${cid}
   buildah rmi -a -f
 }
 
@@ -1198,7 +1265,48 @@ load helpers
   run_buildah --debug=false run ${ctr} ls -alF /tempest
   expect_output --substring "/tempest -> /var/lib/tempest/"
 
-  run_buildah --debug=false run ${ctr} ls -alF /etc/notareal.conf 
+  run_buildah --debug=false run ${ctr} ls -alF /etc/notareal.conf
+  expect_output --substring "\-rw\-rw\-r\-\-"
+}
+
+@test "bud WORKDIR isa symlink no target dir" {
+  target=alpine-image
+  ctr=alpine-ctr
+  run_buildah --debug=false bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f Dockerfile-2 ${TESTSDIR}/bud/workdir-symlink
+  expect_output --substring "STEP 2: RUN ln -sf "
+
+  run_buildah --debug=false from --signature-policy ${TESTSDIR}/policy.json --name=${ctr} ${target}
+  expect_output --substring ${ctr}
+
+  run_buildah --debug=false run ${ctr} ls -alF /tempest
+  expect_output --substring "/tempest -> /var/lib/tempest/"
+
+  run_buildah --debug=false run ${ctr} ls /tempest
+  expect_output --substring "Dockerfile-2"
+
+  run_buildah --debug=false run ${ctr} ls -alF /etc/notareal.conf
+  expect_output --substring "\-rw\-rw\-r\-\-"
+}
+
+@test "bud WORKDIR isa symlink no target dir and follow on dir" {
+  target=alpine-image
+  ctr=alpine-ctr
+  run_buildah --debug=false bud --signature-policy ${TESTSDIR}/policy.json -t ${target} -f Dockerfile-3 ${TESTSDIR}/bud/workdir-symlink
+  expect_output --substring "STEP 2: RUN ln -sf "
+
+  run_buildah --debug=false from --signature-policy ${TESTSDIR}/policy.json --name=${ctr} ${target}
+  expect_output --substring ${ctr}
+
+  run_buildah --debug=false run ${ctr} ls -alF /tempest
+  expect_output --substring "/tempest -> /var/lib/tempest/"
+
+  run_buildah --debug=false run ${ctr} ls /tempest
+  expect_output --substring "Dockerfile-3"
+
+  run_buildah --debug=false run ${ctr} ls /tempest/lowerdir
+  expect_output --substring "Dockerfile-3"
+
+  run_buildah --debug=false run ${ctr} ls -alF /etc/notareal.conf
   expect_output --substring "\-rw\-rw\-r\-\-"
 }
 
