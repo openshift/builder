@@ -1,5 +1,5 @@
-hash: 70960d0fc71bf192302528dc43cd4724a0d754256915241d227c3bd685fc655c
-updated: 2019-05-13T09:59:20.399786933-04:00
+hash: 30af7d0179abea3b422322199334c2299ed096675d9615dd045f0b7cff204a4a
+updated: 2019-05-29T09:09:47.590821599-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -21,7 +21,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 7ae362bcedfed09eb5c644a94696fe59e16126dd
+  version: 2a962f177cb206dde5fc8e8d251bdfd80e2c9e52
   subpackages:
   - bind
   - chroot
@@ -29,6 +29,7 @@ imports:
   - imagebuildah
   - pkg/blobcache
   - pkg/chrootuser
+  - pkg/overlay
   - pkg/secrets
   - pkg/unshare
   - util
@@ -110,6 +111,8 @@ imports:
   - pkg/stringutils
   - pkg/system
   - pkg/truncindex
+- name: github.com/cyphar/filepath-securejoin
+  version: ae69057f2299fb9e5ba2df738607e6a505b74ab6
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
@@ -194,7 +197,7 @@ imports:
   subpackages:
   - spdy
 - name: github.com/etcd-io/bbolt
-  version: 4af6cfab7010371f25e79d9e104890c6377781ab
+  version: 2eb7227adea1d5cf85f0bc2a82b7059b13c2fa68
 - name: github.com/evanphx/json-patch
   version: 94e38aa1586e8a6c8a75770bddf5ff84c48a106b
 - name: github.com/exponent-io/jsonpath
@@ -376,7 +379,7 @@ imports:
   - pkg/api/apihelpers
   - pkg/build/apis/build
 - name: github.com/openshift/source-to-image
-  version: 2ba8a349386aff03c26729096b0225a691355fe9
+  version: dd167bbb4ee85924d9b864a424c43d598f5d4f30
   subpackages:
   - pkg/api
   - pkg/api/constants
@@ -416,7 +419,7 @@ imports:
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: 27936f6d90f9c8e1145f11ed52ffffbfdb9e0af7
+  version: 839d9e913e063e28dfd0e6c7b7512793e0a48be9
 - name: github.com/pkg/profile
   version: f6fe06335df110bcf1ed6d4e852b760bfc15beee
 - name: github.com/pquerna/ffjson
@@ -443,7 +446,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/cobra
-  version: 67fc4837d267bc9bfd6e47f77783fcc3dffc68de
+  version: 7c674d9e72017ed25f6d2b5e497a1368086b6a6f
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: github.com/syndtr/gocapability
@@ -473,7 +476,7 @@ imports:
   - decor
   - internal
 - name: github.com/VividCortex/ewma
-  version: 43880d236f695d39c62cf7aa4ebd4508c258e6c0
+  version: 0173b1dbcfaa7fec09eff3e32281ed08fa8f2a1c
 - name: github.com/xeipuuv/gojsonpointer
   version: 6fe8760cad3569743d51ddbb243b26f8456742dc
 - name: github.com/xeipuuv/gojsonreference
