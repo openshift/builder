@@ -141,7 +141,19 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 			cfg.blobCache = blobCacheDir
 		}
 
-		dockerClient, err := bld.GetDaemonlessClient(systemContext, store, os.Getenv("BUILD_ISOLATION"), cfg.blobCache)
+		imageOptimizationPolicy := buildapiv1.ImageOptimizationNone
+		if s := cfg.build.Spec.Strategy.DockerStrategy; s != nil {
+			// Default to possibly-multiple-layer builds for Dockerfile-based builds, unless something else was specified.
+			if policy := s.ImageOptimizationPolicy; policy != nil {
+				imageOptimizationPolicy = *policy
+			}
+		}
+		if s := cfg.build.Spec.Strategy.SourceStrategy; s != nil {
+			// Always use base-image+single-layer builds for S2I builds.
+			imageOptimizationPolicy = buildapiv1.ImageOptimizationSkipLayers
+		}
+
+		dockerClient, err := bld.GetDaemonlessClient(systemContext, store, os.Getenv("BUILD_ISOLATION"), cfg.blobCache, imageOptimizationPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("no daemonless store: %v", err)
 		}

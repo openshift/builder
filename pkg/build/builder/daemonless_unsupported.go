@@ -53,6 +53,6 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 }
 
 // GetDaemonlessClient returns an error.
-func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, isolationSpec, blobCacheDirectory string) (client DockerClient, err error) {
+func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, isolationSpec, blobCacheDirectory string, imageOptimizationPolicy buildapiv1.ImageOptimizationPolicy) (client DockerClient, err error) {
 	return nil, errors.New("building images without an engine not supported on this platform")
 }
