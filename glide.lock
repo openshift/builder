@@ -1,5 +1,5 @@
-hash: 30af7d0179abea3b422322199334c2299ed096675d9615dd045f0b7cff204a4a
-updated: 2019-05-29T09:09:47.590821599-04:00
+hash: 4e5cf94562f09cf14b9d0f4cf755f8c3d0cd0f3f40676d3b853348845f8f5f87
+updated: 2019-06-04T13:04:11.317674056-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -21,7 +21,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 2a962f177cb206dde5fc8e8d251bdfd80e2c9e52
+  version: 547bd9a5cb56441f8c006d17751968984830838e
   subpackages:
   - bind
   - chroot
@@ -72,7 +72,7 @@ imports:
   - types
   - version
 - name: github.com/containers/storage
-  version: fb65405c4a82300143a800a7891dd4b9987449b3
+  version: fcd10276b5ac33fe59dcb2aed73377816129af30
   subpackages:
   - drivers
   - drivers/aufs
@@ -379,7 +379,7 @@ imports:
   - pkg/api/apihelpers
   - pkg/build/apis/build
 - name: github.com/openshift/source-to-image
-  version: dd167bbb4ee85924d9b864a424c43d598f5d4f30
+  version: a5488fd69adefed0ce1dce45fb311c8e9666e09c
   subpackages:
   - pkg/api
   - pkg/api/constants
