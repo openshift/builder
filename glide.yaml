@@ -97,11 +97,11 @@ import:
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
 # Pins for buildah
 - package: github.com/containers/buildah
-  version: 2a962f177cb206dde5fc8e8d251bdfd80e2c9e52
+  version: v1.8.3
 - package: github.com/containers/image
   version: 9467ac9cfd92c545aa389f22f27e552de053c0f2
 - package: github.com/containers/storage
-  version: v1.12.7
+  version: v1.12.8
 - package: github.com/opencontainers/go-digest
   version: c9281466c8b2f606084ac71339773efd177436e7
 - package: github.com/containernetworking/cni
