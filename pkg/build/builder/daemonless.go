@@ -66,7 +66,8 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		SystemContext: &systemContext,
 		BlobDirectory: blobCacheDirectory,
 	}
-	return buildah.Pull(context.TODO(), "docker://"+imageName, options)
+	_, err = buildah.Pull(context.TODO(), "docker://"+imageName, options)
+	return err
 }
 
 func daemonlessProcessLimits() (defaultProcessLimits []string) {
