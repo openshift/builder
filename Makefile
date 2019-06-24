@@ -1,6 +1,7 @@
 IMAGE ?= docker.io/openshift/origin-docker-builder
 TAG ?= latest
 PROG  := openshift-builder
+CONTAINER_ENGINE := $(shell command -v podman 2> /dev/null || echo docker)
 
 .PHONY: all build build-image build-devel-image clean test verify
 
@@ -11,10 +12,10 @@ build:
 
 build-image:
 	rm -f "$(PROG)"
-	docker build -t "$(IMAGE):$(TAG)" .
+	${CONTAINER_ENGINE} build -t "$(IMAGE):$(TAG)" .
 
 build-devel-image: build
-	docker build -t "$(IMAGE):$(TAG)" -f Dockerfile-dev .
+	${CONTAINER_ENGINE} build -t "$(IMAGE):$(TAG)" -f Dockerfile-dev .
 
 test:
 	hack/test.sh
