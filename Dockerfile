@@ -5,9 +5,8 @@ RUN hack/build.sh
 
 FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
 RUN INSTALL_PKGS=" \
-      which tar wget hostname sysvinit-tools util-linux \
-      socat tree findutils lsof bind-utils \
-      git tar bsdtar \
+      bind-utils bsdtar findutils fuse-overlayfs git hostname lsof socat \
+      sysvinit-tools tar tree util-linux wget which \
       " && \
     yum install -y $INSTALL_PKGS && \
     yum clean all
@@ -15,7 +14,11 @@ COPY --from=builder /go/src/github.com/openshift/builder/openshift-builder /usr/
 COPY imagecontent/policy.json /etc/containers/
 COPY imagecontent/registries.conf /etc/containers/
 COPY imagecontent/storage.conf /etc/containers/
-RUN mkdir /var/cache/blobs
+RUN mkdir -p /var/cache/blobs \
+    /var/lib/shared/overlay-images \
+    /var/lib/shared/overlay-layers && \
+    touch /var/lib/shared/overlay-images/images.lock \
+    /var/lib/shared/overlay-layers/layers.lock
 
 RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-docker-build && \
