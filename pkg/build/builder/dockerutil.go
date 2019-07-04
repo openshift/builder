@@ -10,6 +10,7 @@ import (
 	"time"
 
 	idocker "github.com/containers/image/docker"
+	"github.com/docker/distribution/registry/api/errcode"
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/pkg/errors"
 
@@ -37,6 +38,16 @@ type DockerClient interface {
 	TagImage(name string, opts docker.TagImageOptions) error
 }
 
+func unwrapUnauthorizedError(err error) error {
+	switch cause := errors.Cause(err); cause {
+	case idocker.ErrUnauthorizedForCredentials:
+		// strip off wrappers that mainly add the image name as their added context,
+		// which just duplicates information that we're already logging
+		return cause
+	}
+	return err
+}
+
 func retryImageAction(actionName string, action func() error) error {
 	var err error
 
@@ -49,11 +60,25 @@ func retryImageAction(actionName string, action func() error) error {
 		time.Sleep(DefaultPushOrPullRetryDelay)
 	}
 
-	switch errors.Cause(err) {
-	case idocker.ErrUnauthorizedForCredentials:
-		// strip off wrappers that mainly add the image name as their added context
-		err = errors.Cause(err)
+	if errs, ok := errors.Cause(err).(errcode.Errors); ok {
+		// if this error is a group of errors, process them all in turn
+		var unwrap bool
+		for i := range errs {
+			if registryError, ok := errs[i].(errcode.Error); ok {
+				if registryError.Code == errcode.ErrorCodeUnauthorized {
+					// remove any Wrapf() wrapping, since we're
+					// already going to be providing context when we
+					// print the error
+					unwrap = true
+				}
+			}
+		}
+		if unwrap {
+			err = errors.Cause(err)
+		}
 	}
+
+	err = unwrapUnauthorizedError(err)
 
 	return fmt.Errorf("After retrying %d times, %s image still failed due to error: %v", DefaultPushOrPullRetryCount, actionName, err)
 }
