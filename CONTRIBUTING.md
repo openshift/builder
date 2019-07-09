@@ -35,7 +35,7 @@ $ oc patch clusterversion/version --patch '{"spec":{"overrides":[{"kind":"Config
 ```
 
 2. Make your code changes and build the binary with `make build`.
-3. Build the image using the `Dockerfile.dev` file, giving it a unique tag:
+3. Build the image using the `Dockerfile-dev` file, giving it a unique tag:
 
 ```
 $ make build-devel-image IMAGE=<MYREPO>/<MYIMAGE> TAG=<MYTAG> 
