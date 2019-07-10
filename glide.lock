@@ -1,5 +1,5 @@
-hash: 4e5cf94562f09cf14b9d0f4cf755f8c3d0cd0f3f40676d3b853348845f8f5f87
-updated: 2019-06-04T13:04:11.317674056-04:00
+hash: 4cb394a762984cf16813a2ecec09c4a6f75acc27e767d3670d8636de02935f07
+updated: 2019-07-10T16:28:51.028189513-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -197,7 +197,7 @@ imports:
   subpackages:
   - spdy
 - name: github.com/etcd-io/bbolt
-  version: 2eb7227adea1d5cf85f0bc2a82b7059b13c2fa68
+  version: 0362320deb373dd1824e0f170889ad0f50be41bf
 - name: github.com/evanphx/json-patch
   version: 94e38aa1586e8a6c8a75770bddf5ff84c48a106b
 - name: github.com/exponent-io/jsonpath
@@ -373,13 +373,8 @@ imports:
   - pkg/image/internal/reference
   - pkg/image/reference
   - pkg/serviceability
-- name: github.com/openshift/origin
-  version: 0b751606e93258614555c506f9b3aaffefc57723
-  subpackages:
-  - pkg/api/apihelpers
-  - pkg/build/apis/build
 - name: github.com/openshift/source-to-image
-  version: a5488fd69adefed0ce1dce45fb311c8e9666e09c
+  version: 3dee73c8b712954df879fc5d40f6bb66b4bc8ff5
   subpackages:
   - pkg/api
   - pkg/api/constants
@@ -410,7 +405,7 @@ imports:
   - pkg/util/status
   - pkg/util/user
 - name: github.com/ostreedev/ostree-go
-  version: d0388bd827cfac6fa8eec760246eb8375674b2a0
+  version: 759a8c1ac9139c5603b4324947bcc7d8127784ee
   subpackages:
   - pkg/glibobject
   - pkg/otbuiltin
@@ -419,11 +414,11 @@ imports:
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: 839d9e913e063e28dfd0e6c7b7512793e0a48be9
+  version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/pkg/profile
   version: f6fe06335df110bcf1ed6d4e852b760bfc15beee
 - name: github.com/pquerna/ffjson
-  version: e517b90714f7c0eabe6d2e570a5886ae077d6db6
+  version: af8b230fcd2007c7095168ca8ab94c68b60840c6
   subpackages:
   - fflib/v1
   - fflib/v1/internal
@@ -438,7 +433,7 @@ imports:
 - name: github.com/russross/blackfriday
   version: 300106c228d52c8941d4b3de6054a6062a86dda3
 - name: github.com/seccomp/containers-golang
-  version: 8ca8945ccf5ffe4eca696cac92423f93ea4b61a6
+  version: 8d1ed6a872a5b5605cd2e5fcf6bb10ff5ec8b288
 - name: github.com/seccomp/libseccomp-golang
   version: 1b506fc7c24eec5a3693cdcbed40d9c226cfc6a1
 - name: github.com/shurcooL/sanitized_anchor_name
@@ -446,7 +441,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/cobra
-  version: 7c674d9e72017ed25f6d2b5e497a1368086b6a6f
+  version: f2b07da1e2c38d5f12845a4f607e2e1018cbb1f5
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: github.com/syndtr/gocapability
@@ -596,7 +591,7 @@ imports:
   subpackages:
   - pkg/features
 - name: k8s.io/apimachinery
-  version: 5f1ab6ad9104144e43c7e477938fd278ade27eb2
+  version: 5c0e7e0ce91a8083e170765a544def530b8ee4f0
   repo: https://github.com/openshift/kubernetes-apimachinery.git
   subpackages:
   - pkg/api/equality
@@ -654,7 +649,7 @@ imports:
   - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/apiserver
-  version: 996cefeb14170756dc1626dde64fcfb63c8edb24
+  version: 6eafd6a7ccfb33517f1d852155d8862d8b5d3e93
   repo: https://github.com/openshift/kubernetes-apiserver.git
   subpackages:
   - pkg/apis/audit
@@ -751,7 +746,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 529644d9bc332d7c4b99ff2a17e25a976089c96e
+  version: fcb1645942c8887a6988744d728ab744bd85f590
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events

@@ -25,7 +25,7 @@ func TestLoadProfile(t *testing.T) {
 }
 
 func TestLoadDefaultProfile(t *testing.T) {
-	f, err := ioutil.ReadFile("default.json")
+	f, err := ioutil.ReadFile("seccomp.json")
 	if err != nil {
 		t.Fatal(err)
 	}
