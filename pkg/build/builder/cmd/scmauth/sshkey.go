@@ -25,7 +25,7 @@ func (_ SSHPrivateKey) Setup(baseDir string, context SCMAuthContext) error {
 		filepath.Join(baseDir, SSHPrivateKeyMethodName) +
 		" -o StrictHostKeyChecking=false \"$@\"\n"
 
-	glog.V(5).Infof("Adding Private SSH Auth:\n%s\n", content)
+	log.V(5).Infof("Adding Private SSH Auth:\n%s\n", content)
 
 	if _, err := script.WriteString(content); err != nil {
 		return err

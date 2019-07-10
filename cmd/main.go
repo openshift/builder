@@ -13,7 +13,7 @@ import (
 	"github.com/containers/storage/pkg/reexec"
 	"github.com/spf13/cobra"
 
-	"k8s.io/apiserver/pkg/util/logs"
+	"k8s.io/component-base/logs"
 
 	"github.com/openshift/builder/pkg/build/builder"
 	"github.com/openshift/builder/pkg/version"

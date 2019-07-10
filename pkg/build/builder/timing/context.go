@@ -8,10 +8,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
-	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
+	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )
 
-var glog = utilglog.ToFile(os.Stderr, 2)
+var log = utillog.ToFile(os.Stderr, 2)
 
 type key int
 
@@ -47,7 +47,7 @@ func RecordStageAndStepInfo(stages []buildapiv1.StageInfo, stageName buildapiv1.
 		if stageVal.Name == stageName {
 			for _, step := range stages[stageKey].Steps {
 				if step.Name == stepName {
-					glog.V(4).Infof("error recording build timing information, step %v already exists in stage %v", stepName, stageName)
+					log.V(4).Infof("error recording build timing information, step %v already exists in stage %v", stepName, stageName)
 				}
 			}
 			stages[stageKey].DurationMilliseconds = endTime.Time.Sub(stages[stageKey].StartTime.Time).Nanoseconds() / int64(time.Millisecond)

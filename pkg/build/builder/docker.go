@@ -67,7 +67,7 @@ func (d *DockerBuilder) Build() error {
 	// this is where the git-fetch container put the code during the clone operation
 	buildDir := d.inputDir
 
-	glog.V(4).Infof("Starting Docker build from build config %s ...", d.build.Name)
+	log.V(4).Infof("Starting Docker build from build config %s ...", d.build.Name)
 	// if there is no output target, set one up so the docker build logic
 	// (which requires a tag) will still work, but we won't push it at the end.
 	if d.build.Spec.Output.To == nil || len(d.build.Spec.Output.To.Name) == 0 {
@@ -88,7 +88,7 @@ func (d *DockerBuilder) Build() error {
 	}
 	for _, imageName := range imageNames {
 		if imageName == "scratch" {
-			glog.V(4).Infof("\nSkipping image \"scratch\"")
+			log.V(4).Infof("\nSkipping image \"scratch\"")
 			continue
 		}
 		imageExists := true
@@ -105,7 +105,7 @@ func (d *DockerBuilder) Build() error {
 				imageName,
 				dockercfg.PullAuthType,
 			)
-			glog.V(0).Infof("\nPulling image %s ...", imageName)
+			log.V(0).Infof("\nPulling image %s ...", imageName)
 			startTime := metav1.Now()
 			err = d.pullImage(imageName, pullAuthConfig)
 
@@ -142,7 +142,7 @@ func (d *DockerBuilder) Build() error {
 	}
 
 	if err := removeImage(d.dockerClient, buildTag); err != nil {
-		glog.V(0).Infof("warning: Failed to remove temporary build tag %v: %v", buildTag, err)
+		log.V(0).Infof("warning: Failed to remove temporary build tag %v: %v", buildTag, err)
 	}
 
 	if push && pushTag != "" {
@@ -152,9 +152,9 @@ func (d *DockerBuilder) Build() error {
 			dockercfg.PushAuthType,
 		)
 		if authPresent {
-			glog.V(4).Infof("Authenticating Docker push with user %q", pushAuthConfig.Username)
+			log.V(4).Infof("Authenticating Docker push with user %q", pushAuthConfig.Username)
 		}
-		glog.V(0).Infof("\nPushing image %s ...", pushTag)
+		log.V(0).Infof("\nPushing image %s ...", pushTag)
 		startTime = metav1.Now()
 		digest, err := d.pushImage(pushTag, pushAuthConfig)
 
@@ -174,7 +174,7 @@ func (d *DockerBuilder) Build() error {
 			}
 			HandleBuildStatusUpdate(d.build, d.client, nil)
 		}
-		glog.V(0).Infof("Push successful")
+		log.V(0).Infof("Push successful")
 	}
 	return nil
 }
@@ -243,7 +243,7 @@ func (d *DockerBuilder) copyLocalObject(s localObjectBuildSource, sourceDir, tar
 	if err := os.MkdirAll(dstDir, 0777); err != nil {
 		return err
 	}
-	glog.V(3).Infof("Copying files from the build source %q to %q", s.LocalObjectRef().Name, dstDir)
+	log.V(3).Infof("Copying files from the build source %q to %q", s.LocalObjectRef().Name, dstDir)
 
 	// Build sources contain nested directories and fairly baroque links. To prevent extra data being
 	// copied, perform the following steps:
@@ -278,11 +278,11 @@ func (d *DockerBuilder) copyLocalObject(s localObjectBuildSource, sourceDir, tar
 		}
 		out, err := exec.Command("cp", "-vLRf", path, dstDir+"/").Output()
 		if err != nil {
-			glog.V(4).Infof("Build source %q failed to copy: %q", s.LocalObjectRef().Name, string(out))
+			log.V(4).Infof("Build source %q failed to copy: %q", s.LocalObjectRef().Name, string(out))
 			return err
 		}
 		// See what is copied when debugging.
-		glog.V(5).Infof("Result of build source copy %s\n%s", s.LocalObjectRef().Name, string(out))
+		log.V(5).Infof("Result of build source copy %s\n%s", s.LocalObjectRef().Name, string(out))
 		return nil
 	}); err != nil {
 		return err
@@ -387,7 +387,7 @@ func replaceLastFrom(node *parser.Node, image string, alias string) error {
 				child.Next = &parser.Node{}
 			}
 
-			glog.Infof("Replaced Dockerfile FROM image %s", child.Next.Value)
+			log.Infof("Replaced Dockerfile FROM image %s", child.Next.Value)
 			child.Next.Value = image
 			if len(alias) != 0 {
 				if child.Next.Next == nil {

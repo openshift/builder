@@ -70,7 +70,7 @@ func newTestS2IBuilder(config testS2IBuilderConfig) *S2IBuilder {
 			errPushImage:     config.errPushImage,
 		},
 		"unix:///var/run/docker2.sock",
-		client.Build().Builds(""),
+		client.BuildV1().Builds(""),
 		makeBuild(),
 		testStiBuilderFactory{
 			getStrategyErr: config.getStrategyErr,

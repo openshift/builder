@@ -24,10 +24,10 @@ func GitAuths(sourceURL *s2igit.URL) SCMAuths {
 func (a SCMAuths) present(files []os.FileInfo) SCMAuths {
 	scmAuthsPresent := map[string]SCMAuth{}
 	for _, file := range files {
-		glog.V(4).Infof("Finding auth for %q", file.Name())
+		log.V(4).Infof("Finding auth for %q", file.Name())
 		for _, scmAuth := range a {
 			if scmAuth.Handles(file.Name()) {
-				glog.V(4).Infof("Found SCMAuth %q to handle %q", scmAuth.Name(), file.Name())
+				log.V(4).Infof("Found SCMAuth %q to handle %q", scmAuth.Name(), file.Name())
 				scmAuthsPresent[scmAuth.Name()] = scmAuth
 			}
 		}
@@ -42,7 +42,7 @@ func (a SCMAuths) present(files []os.FileInfo) SCMAuths {
 func (a SCMAuths) doSetup(secretsDir string) (*defaultSCMContext, error) {
 	context := NewDefaultSCMContext()
 	for _, auth := range a {
-		glog.V(4).Infof("Setting up SCMAuth %q", auth.Name())
+		log.V(4).Infof("Setting up SCMAuth %q", auth.Name())
 		err := auth.Setup(secretsDir, context)
 		if err != nil {
 			return nil, fmt.Errorf("cannot set up source authentication method %q: %v", auth.Name(), err)

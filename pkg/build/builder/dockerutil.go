@@ -56,7 +56,7 @@ func retryImageAction(actionName string, action func() error) error {
 		if err == nil {
 			return nil
 		}
-		glog.V(0).Infof("Warning: %s failed, retrying in %s ...", actionName, DefaultPushOrPullRetryDelay)
+		log.V(0).Infof("Warning: %s failed, retrying in %s ...", actionName, DefaultPushOrPullRetryDelay)
 		time.Sleep(DefaultPushOrPullRetryDelay)
 	}
 
@@ -132,7 +132,7 @@ func extractParentFromCgroupMap(cgMap map[string]string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("could not find memory cgroup subsystem in map %v", cgMap)
 	}
-	glog.V(6).Infof("cgroup memory subsystem value: %s", memory)
+	log.V(6).Infof("cgroup memory subsystem value: %s", memory)
 
 	parts := strings.Split(memory, "/")
 	if len(parts) < 2 {
@@ -147,19 +147,19 @@ func extractParentFromCgroupMap(cgMap map[string]string) (string, error) {
 		// non-systemd, take everything except the last segment.
 		cgroupParent = strings.Join(parts[:len(parts)-1], "/")
 	}
-	glog.V(5).Infof("found cgroup parent %v", cgroupParent)
+	log.V(5).Infof("found cgroup parent %v", cgroupParent)
 	return cgroupParent, nil
 }
 
 // GetDockerAuthConfiguration provides a Docker authentication configuration when the
 // PullSecret is specified.
 func GetDockerAuthConfiguration(path string) (*docker.AuthConfigurations, error) {
-	glog.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, path)
+	log.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, path)
 	dockercfgPath := dockercfg.GetDockercfgFile(path)
 	if len(dockercfgPath) == 0 {
 		return nil, fmt.Errorf("no docker config file found in '%s'", os.Getenv(dockercfg.PullAuthType))
 	}
-	glog.V(2).Infof("Using Docker config file %s", dockercfgPath)
+	log.V(2).Infof("Using Docker config file %s", dockercfgPath)
 	r, err := os.Open(dockercfgPath)
 	if err != nil {
 		return nil, fmt.Errorf("'%s': %s", dockercfgPath, err)
