@@ -7,8 +7,7 @@ install:
 script: make clean && make lint && make test && make test 
 
 go:
-  - "1.10.x"
-  - "1.11.x"
+  - "1.10"
 
 env:
   - GO15VENDOREXPERIMENT=1

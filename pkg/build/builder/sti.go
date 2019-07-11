@@ -33,7 +33,6 @@ import (
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/imagebuilder"
 	"github.com/openshift/library-go/pkg/git"
-	"github.com/openshift/origin/pkg/build/apis/build"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -335,7 +334,7 @@ func (s *S2IBuilder) Build() error {
 			)
 		} else {
 			s.build.Status.Reason = buildapiv1.StatusReasonGenericBuildFailed
-			s.build.Status.Message = build.StatusMessageGenericBuildFailed
+			s.build.Status.Message = "Generic Build failure - check logs for details."
 		}
 
 		HandleBuildStatusUpdate(s.build, s.client, nil)
