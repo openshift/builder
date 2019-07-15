@@ -1,5 +1,5 @@
-hash: 4cb394a762984cf16813a2ecec09c4a6f75acc27e767d3670d8636de02935f07
-updated: 2019-07-10T16:28:51.028189513-04:00
+hash: 5d9dc2a8f982d20c4ab58b813c81597d2b35253f04d21785c08aee653ee0a165
+updated: 2019-07-15T16:49:24.40618916-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -21,7 +21,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 547bd9a5cb56441f8c006d17751968984830838e
+  version: e5e054795b44b3af65d618ca04547c0061d9167e
   subpackages:
   - bind
   - chroot
@@ -34,7 +34,7 @@ imports:
   - pkg/unshare
   - util
 - name: github.com/containers/image
-  version: 9467ac9cfd92c545aa389f22f27e552de053c0f2
+  version: abf32c4ea589cb8e96bdca5a478dba68f11980e5
   subpackages:
   - copy
   - directory
@@ -72,7 +72,7 @@ imports:
   - types
   - version
 - name: github.com/containers/storage
-  version: fcd10276b5ac33fe59dcb2aed73377816129af30
+  version: 77484a28561346b09de2e2c0b0b9395d883f1ce9
   subpackages:
   - drivers
   - drivers/aufs
@@ -113,6 +113,8 @@ imports:
   - pkg/truncindex
 - name: github.com/cyphar/filepath-securejoin
   version: ae69057f2299fb9e5ba2df738607e6a505b74ab6
+- name: github.com/DataDog/zstd
+  version: 809b919c325d7887bff7bd876162af73db53e878
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
@@ -253,7 +255,7 @@ imports:
   - compiler
   - extensions
 - name: github.com/gorilla/mux
-  version: 08e7f807d38d6a870193019bb439056118661505
+  version: d83b6ffe499a29cc05fc977988d0392851779620
 - name: github.com/gregjones/httpcache
   version: 787624de3eb7bd915c329cba748687a3b22666a6
   subpackages:
@@ -414,11 +416,11 @@ imports:
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+  version: 27936f6d90f9c8e1145f11ed52ffffbfdb9e0af7
 - name: github.com/pkg/profile
   version: f6fe06335df110bcf1ed6d4e852b760bfc15beee
 - name: github.com/pquerna/ffjson
-  version: af8b230fcd2007c7095168ca8ab94c68b60840c6
+  version: e517b90714f7c0eabe6d2e570a5886ae077d6db6
   subpackages:
   - fflib/v1
   - fflib/v1/internal
@@ -441,7 +443,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/cobra
-  version: f2b07da1e2c38d5f12845a4f607e2e1018cbb1f5
+  version: 2d7544ebdeb5f926805c57af8dccc6c359de28d4
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: github.com/syndtr/gocapability

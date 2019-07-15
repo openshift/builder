@@ -220,7 +220,6 @@ func runUsingChrootMain() {
 	var stdout io.Writer
 	var stderr io.Writer
 	fdDesc := make(map[int]string)
-	deferred := func() {}
 	if options.Spec.Process.Terminal {
 		// Create a pseudo-terminal -- open a copy of the master side.
 		ptyMasterFd, err := unix.Open("/dev/ptmx", os.O_RDWR, 0600)
@@ -370,12 +369,16 @@ func runUsingChrootMain() {
 			return
 		}
 	}
+	if err := unix.SetNonblock(relays[unix.Stdin], true); err != nil {
+		logrus.Errorf("error setting %d to nonblocking: %v", relays[unix.Stdin], err)
+	}
 	go func() {
 		buffers := make(map[int]*bytes.Buffer)
 		for _, writeFd := range relays {
 			buffers[writeFd] = new(bytes.Buffer)
 		}
 		pollTimeout := -1
+		stdinClose := false
 		for len(relays) > 0 {
 			fds := make([]unix.PollFd, 0, len(relays))
 			for fd := range relays {
@@ -395,6 +398,9 @@ func runUsingChrootMain() {
 					removeFds[int(rfd.Fd)] = struct{}{}
 				}
 				if rfd.Revents&unix.POLLIN == 0 {
+					if stdinClose && stdinCopy == nil {
+						continue
+					}
 					continue
 				}
 				b := make([]byte, 8192)
@@ -449,8 +455,19 @@ func runUsingChrootMain() {
 				if buffer.Len() > 0 {
 					pollTimeout = 100
 				}
+				if wfd == relays[unix.Stdin] && stdinClose && buffer.Len() == 0 {
+					stdinCopy.Close()
+					delete(relays, unix.Stdin)
+				}
 			}
 			for rfd := range removeFds {
+				if rfd == unix.Stdin {
+					buffer, found := buffers[relays[unix.Stdin]]
+					if found && buffer.Len() > 0 {
+						stdinClose = true
+						continue
+					}
+				}
 				if !options.Spec.Process.Terminal && rfd == unix.Stdin {
 					stdinCopy.Close()
 				}
@@ -461,7 +478,6 @@ func runUsingChrootMain() {
 
 	// Set up mounts and namespaces, and run the parent subprocess.
 	status, err := runUsingChroot(options.Spec, options.BundlePath, ctty, stdin, stdout, stderr, closeOnceRunning)
-	deferred()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error running subprocess: %v\n", err)
 		os.Exit(1)
@@ -491,7 +507,9 @@ func runUsingChroot(spec *specs.Spec, bundlePath string, ctty *os.File, stdin io
 		return 1, err
 	}
 	defer func() {
-		undoIntermediates()
+		if undoErr := undoIntermediates(); undoErr != nil {
+			logrus.Debugf("error cleaning up intermediate mount NS: %v", err)
+		}
 	}()
 
 	// Bind mount in our filesystems.
@@ -500,7 +518,9 @@ func runUsingChroot(spec *specs.Spec, bundlePath string, ctty *os.File, stdin io
 		return 1, err
 	}
 	defer func() {
-		undoChroots()
+		if undoErr := undoChroots(); undoErr != nil {
+			logrus.Debugf("error cleaning up intermediate chroot bind mounts: %v", err)
+		}
 	}()
 
 	// Create a pipe for passing configuration down to the next process.
@@ -963,6 +983,21 @@ func makeReadOnly(mntpoint string, flags uintptr) error {
 	return nil
 }
 
+func isDevNull(dev os.FileInfo) bool {
+	if dev.Mode()&os.ModeCharDevice != 0 {
+		stat, _ := dev.Sys().(*syscall.Stat_t)
+		nullStat := syscall.Stat_t{}
+		if err := syscall.Stat(os.DevNull, &nullStat); err != nil {
+			logrus.Warnf("unable to stat /dev/null: %v", err)
+			return false
+		}
+		if stat.Rdev == nullStat.Rdev {
+			return true
+		}
+	}
+	return false
+}
+
 // setupChrootBindMounts actually bind mounts things under the rootfs, and returns a
 // callback that will clean up its work.
 func setupChrootBindMounts(spec *specs.Spec, bundlePath string) (undoBinds func() error, err error) {
@@ -1243,11 +1278,6 @@ func setupChrootBindMounts(spec *specs.Spec, bundlePath string) (undoBinds func(
 		if err != nil {
 			target = t
 		}
-		// Get some info about the null device.
-		nullinfo, err := os.Stat(os.DevNull)
-		if err != nil {
-			return undoBinds, errors.Wrapf(err, "error examining %q for masking in mount namespace", os.DevNull)
-		}
 		// Get some info about the target.
 		targetinfo, err := os.Stat(target)
 		if err != nil {
@@ -1265,12 +1295,11 @@ func setupChrootBindMounts(spec *specs.Spec, bundlePath string) (undoBinds func(
 			}
 			isReadOnly := statfs.Flags&unix.MS_RDONLY != 0
 			// Check if any of the IDs we're mapping could read it.
-			isAccessible := true
 			var stat unix.Stat_t
 			if err = unix.Stat(target, &stat); err != nil {
 				return undoBinds, errors.Wrapf(err, "error checking permissions on directory %q", target)
 			}
-			isAccessible = false
+			isAccessible := false
 			if stat.Mode&unix.S_IROTH|unix.S_IXOTH != 0 {
 				isAccessible = true
 			}
@@ -1336,8 +1365,8 @@ func setupChrootBindMounts(spec *specs.Spec, bundlePath string) (undoBinds func(
 				}
 			}
 		} else {
-			// The target's not a directory, so bind mount os.DevNull over it, unless it's already os.DevNull.
-			if !os.SameFile(nullinfo, targetinfo) {
+			// If the target's is not a directory or os.DevNull, bind mount os.DevNull over it.
+			if isDevNull(targetinfo) {
 				if err = unix.Mount(os.DevNull, target, "", uintptr(syscall.MS_BIND|syscall.MS_RDONLY|syscall.MS_PRIVATE), ""); err != nil {
 					return undoBinds, errors.Wrapf(err, "error masking non-directory %q in mount namespace", target)
 				}

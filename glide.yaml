@@ -89,11 +89,11 @@ import:
 - package: github.com/containernetworking/cni
   version: v0.7.0-rc2
 - package: github.com/containers/buildah
-  version: v1.8.3
+  version: v1.9.1
 - package: github.com/containers/image
-  version: 9467ac9cfd92c545aa389f22f27e552de053c0f2
+  version: v2.0.0
 - package: github.com/containers/storage
-  version: v1.12.8
+  version: v1.12.13
 # Pinned to avoid ERROR: logging before flag.Parse
 # same level origin uses currently.
 - package: github.com/golang/glog

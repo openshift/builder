@@ -26,7 +26,7 @@
 
 Name:           buildah
 # Bump version in buildah.go too
-Version:        1.8.3
+Version:        1.9.1
 Release:        1.git%{shortcommit}%{?dist}
 Summary:        A command line tool used to creating OCI Images
 License:        ASL 2.0
@@ -100,7 +100,102 @@ make DESTDIR=%{buildroot} PREFIX=%{_prefix} install install.completions
 %{_datadir}/bash-completion/completions/*
 
 %changelog
-* Tue Jun 04, 2019 Tom Sweeney <tsweeney@redhat.com> 1.8.3-1
+* Fri Jul 12, 2019 Dan Walsh <dwalsh@redhat.com> 1.9.1-1
+- add: fix slow copy with no excludes
+- Add errcheck linter and fix missing error check
+- Improve tests/tools/Makefile parallelism and abstraction
+- Fix response body not closed resource leak
+- Switch to golangci-lint
+- Add gomod instructions and mailing list links
+- On Masked path, check if /dev/null already mounted before mounting
+- Update to containers/storage v1.12.13
+- Refactor code in package imagebuildah
+- Add rootless podman with NFS issue in documentation
+- Add --mount  for buildah run
+- import method ValidateVolumeOpts from libpod
+- Fix typo
+- Makefile: set GO111MODULE=off
+- rootless: add the built-in slirp DNS server
+- Update docker/libnetwork to get rid of outdated sctp package
+- Update buildah-login.md
+- migrate to go modules
+- install.md: mention go modules
+- tests/tools: go module for test binaries
+- fix --volume splits comma delimited option
+- Add bud test for RUN with a priv'd command
+- vendor logrus v1.4.2
+- pkg/cli: panic when flags can't be hidden
+- pkg/unshare: check all errors
+- pull: check error during report write
+- run_linux.go: ignore unchecked errors
+- conformance test: catch copy error
+- chroot/run_test.go: export funcs to actually be executed
+- tests/imgtype: ignore error when shutting down the store
+- testreport: check json error
+- bind/util.go: remove unused func
+- rm chroot/util.go
+- imagebuildah: remove unused `dedupeStringSlice`
+- StageExecutor: EnsureContainerPath: catch error from SecureJoin()
+- imagebuildah/build.go: return <expr> instead of branching
+- rmi: avoid redundant branching
+- conformance tests: nilness: allocate map
+- imagebuildah/build.go: avoid redundant `filepath.Join()`
+- imagebuildah/build.go: avoid redundant `os.Stat()`
+- imagebuildah: omit comparison to bool
+- fix "ineffectual assignment" lint errors
+- docker: ignore "repeats json tag" lint error
+- pkg/unshare: use `...` instead of iterating a slice
+- conformance: bud test: use raw strings for regexes
+- conformance suite: remove unused func/var
+- buildah test suite: remove unused vars/funcs
+- testreport: fix golangci-lint errors
+- util: remove redundant `return` statement
+- chroot: only log clean-up errors
+- images_test: ignore golangci-lint error
+- blobcache: log error when draining the pipe
+- imagebuildah: check errors in deferred calls
+- chroot: fix error handling in deferred funcs
+- cmd: check all errors
+- chroot/run_test.go: check errors
+- chroot/run.go: check errors in deferred calls
+- imagebuildah.Executor: remove unused onbuild field
+- docker/types.go: remove unused struct fields
+- util: use strings.ContainsRune instead of index check
+- Cirrus: Initial implementation
+
+* Sat Jun 15, 2019 Dan Walsh <dwalsh@redhat.com> 1.9.0-1
+- Fix crash and bump major version
+
+* Thu Jun 13, 2019 Dan Walsh <dwalsh@redhat.com> 1.8.4
+- Update containers/image to v2.0.0
+- run: fix hang with run and --isolation=chroot
+- run: fix hang when using run
+- chroot: drop unused function call
+- remove --> before imgageID on build
+- Always close stdin pipe
+- Write deny to setgroups when doing single user mapping
+- Avoid including linux/memfd.h
+- Add a test for the symlink pointing to a directory
+- Add missing continue
+- Fix the handling of symlinks to absolute paths
+- Only set default network sysctls if not rootless
+- Support --dns=none like podman
+- fix bug --cpu-shares parsing typo
+- Fix validate complaint
+- Update vendor on containers/storage to v1.12.10
+- Create directory paths for COPY thereby ensuring correct perms
+- imagebuildah: use a stable sort for comparing build args
+- imagebuildah: tighten up cache checking
+- bud.bats: add a test verying the order of --build-args
+- add -t to podman run
+- imagebuildah: simplify screening by top layers
+- imagebuildah: handle ID mappings for COPY --from
+- imagebuildah: apply additionalTags ourselves
+- bud.bats: test additional tags with cached images
+- bud.bats: add a test for WORKDIR and COPY with absolute destinations
+- Cleanup Overlay Mounts content
+
+* Tue Jun 04, 2019 Tom Sweeney <tsweeney@redhat.com> 1.8.3
 - Add support for file secret mounts
 - Add ability to skip secrets in mounts file
 - allow 32bit builds
