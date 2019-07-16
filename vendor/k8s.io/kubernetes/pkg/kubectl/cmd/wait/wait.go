@@ -17,26 +17,57 @@ limitations under the License.
 package wait
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/printers"
+	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
+	watchtools "k8s.io/client-go/tools/watch"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions/printers"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions/resource"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 )
+
+var (
+	waitLong = templates.LongDesc(`
+		Experimental: Wait for a specific condition on one or many resources.
+
+		The command takes multiple resources and waits until the specified condition
+		is seen in the Status field of every given resource.
+
+		Alternatively, the command can wait for the given set of resources to be deleted
+		by providing the "delete" keyword as the value to the --for flag.
+
+		A successful message will be printed to stdout indicating when the specified
+        condition has been met. One can use -o option to change to output destination.`)
+
+	waitExample = templates.Examples(`
+		# Wait for the pod "busybox1" to contain the status condition of type "Ready".
+		kubectl wait --for=condition=Ready pod/busybox1
+
+		# Wait for the pod "busybox1" to be deleted, with a timeout of 60s, after having issued the "delete" command.
+		kubectl delete pod/busybox1
+		kubectl wait --for=delete pod/busybox1 --timeout=60s`)
+)
+
+// errNoMatchingResources is returned when there is no resources matching a query.
+var errNoMatchingResources = errors.New("no matching resources found")
 
 // WaitFlags directly reflect the information that CLI is gathering via flags.  They will be converted to Options, which
 // reflect the runtime requirements for the command.  This structure reduces the transformation to wiring and makes
@@ -59,7 +90,10 @@ func NewWaitFlags(restClientGetter genericclioptions.RESTClientGetter, streams g
 		PrintFlags:       genericclioptions.NewPrintFlags("condition met"),
 		ResourceBuilderFlags: genericclioptions.NewResourceBuilderFlags().
 			WithLabelSelector("").
+			WithFieldSelector("").
+			WithAll(false).
 			WithAllNamespaces(false).
+			WithAll(false).
 			WithLatest(),
 
 		Timeout: 30 * time.Second,
@@ -73,9 +107,12 @@ func NewCmdWait(restClientGetter genericclioptions.RESTClientGetter, streams gen
 	flags := NewWaitFlags(restClientGetter, streams)
 
 	cmd := &cobra.Command{
-		Use: "wait resource.group/name [--for=delete|--for condition=available]",
+		Use:     "wait ([-f FILENAME] | resource.group/resource.name | resource.group [(-l label | --all)]) [--for=delete|--for condition=available]",
+		Short:   "Experimental: Wait for a specific condition on one or many resources.",
+		Long:    waitLong,
+		Example: waitExample,
+
 		DisableFlagsInUseLine: true,
-		Short: "Experimental: Wait for one condition on one or many resources",
 		Run: func(cmd *cobra.Command, args []string) {
 			o, err := flags.ToOptions(args)
 			cmdutil.CheckErr(err)
@@ -114,7 +151,7 @@ func (flags *WaitFlags) ToOptions(args []string) (*WaitOptions, error) {
 	if err != nil {
 		return nil, err
 	}
-	conditionFn, err := conditionFuncFor(flags.ForCondition)
+	conditionFn, err := conditionFuncFor(flags.ForCondition, flags.ErrOut)
 	if err != nil {
 		return nil, err
 	}
@@ -137,28 +174,36 @@ func (flags *WaitFlags) ToOptions(args []string) (*WaitOptions, error) {
 	return o, nil
 }
 
-func conditionFuncFor(condition string) (ConditionFunc, error) {
+func conditionFuncFor(condition string, errOut io.Writer) (ConditionFunc, error) {
 	if strings.ToLower(condition) == "delete" {
 		return IsDeleted, nil
 	}
 	if strings.HasPrefix(condition, "condition=") {
 		conditionName := condition[len("condition="):]
+		conditionValue := "true"
+		if equalsIndex := strings.Index(conditionName, "="); equalsIndex != -1 {
+			conditionValue = conditionName[equalsIndex+1:]
+			conditionName = conditionName[0:equalsIndex]
+		}
+
 		return ConditionalWait{
-			conditionName: conditionName,
-			// TODO allow specifying a false
-			conditionStatus: "true",
+			conditionName:   conditionName,
+			conditionStatus: conditionValue,
+			errOut:          errOut,
 		}.IsConditionMet, nil
 	}
 
 	return nil, fmt.Errorf("unrecognized condition: %q", condition)
 }
 
+// ResourceLocation holds the location of a resource
 type ResourceLocation struct {
 	GroupResource schema.GroupResource
 	Namespace     string
 	Name          string
 }
 
+// UIDMap maps ResourceLocation with UID
 type UIDMap map[ResourceLocation]types.UID
 
 // WaitOptions is a set of options that allows you to wait.  This is the object reflects the runtime needs of a wait
@@ -181,11 +226,13 @@ type ConditionFunc func(info *resource.Info, o *WaitOptions) (finalObject runtim
 
 // RunWait runs the waiting logic
 func (o *WaitOptions) RunWait() error {
-	return o.ResourceFinder.Do().Visit(func(info *resource.Info, err error) error {
+	visitCount := 0
+	err := o.ResourceFinder.Do().Visit(func(info *resource.Info, err error) error {
 		if err != nil {
 			return err
 		}
 
+		visitCount++
 		finalObject, success, err := o.ConditionFn(info, o)
 		if success {
 			o.Printer.PrintObj(finalObject, o.Out)
@@ -196,20 +243,38 @@ func (o *WaitOptions) RunWait() error {
 		}
 		return err
 	})
+	if err != nil {
+		return err
+	}
+	if visitCount == 0 {
+		return errNoMatchingResources
+	}
+	return err
 }
 
 // IsDeleted is a condition func for waiting for something to be deleted
 func IsDeleted(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	endTime := time.Now().Add(o.Timeout)
 	for {
-		gottenObj, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).Get(info.Name, metav1.GetOptions{})
-		if errors.IsNotFound(err) {
+		if len(info.Name) == 0 {
+			return info.Object, false, fmt.Errorf("resource name must be provided")
+		}
+
+		nameSelector := fields.OneTermEqualSelector("metadata.name", info.Name).String()
+
+		// List with a name field selector to get the current resourceVersion to watch from (not the object's resourceVersion)
+		gottenObjList, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).List(metav1.ListOptions{FieldSelector: nameSelector})
+		if apierrors.IsNotFound(err) {
 			return info.Object, true, nil
 		}
 		if err != nil {
 			// TODO this could do something slightly fancier if we wish
 			return info.Object, false, err
 		}
+		if len(gottenObjList.Items) != 1 {
+			return info.Object, true, nil
+		}
+		gottenObj := &gottenObjList.Items[0]
 		resourceLocation := ResourceLocation{
 			GroupResource: info.Mapping.Resource.GroupResource(),
 			Namespace:     gottenObj.GetNamespace(),
@@ -222,57 +287,90 @@ func IsDeleted(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error
 		}
 
 		watchOptions := metav1.ListOptions{}
-		watchOptions.FieldSelector = "metadata.name=" + info.Name
-		watchOptions.ResourceVersion = gottenObj.GetResourceVersion()
+		watchOptions.FieldSelector = nameSelector
+		watchOptions.ResourceVersion = gottenObjList.GetResourceVersion()
 		objWatch, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).Watch(watchOptions)
 		if err != nil {
 			return gottenObj, false, err
 		}
 
 		timeout := endTime.Sub(time.Now())
+		errWaitTimeoutWithName := extendErrWaitTimeout(wait.ErrWaitTimeout, info)
 		if timeout < 0 {
 			// we're out of time
-			return gottenObj, false, wait.ErrWaitTimeout
+			return gottenObj, false, errWaitTimeoutWithName
 		}
-		watchEvent, err := watch.Until(o.Timeout, objWatch, isDeleted)
+
+		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), o.Timeout)
+		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, Wait{errOut: o.ErrOut}.IsDeleted)
+		cancel()
 		switch {
 		case err == nil:
 			return watchEvent.Object, true, nil
-		case err == watch.ErrWatchClosed:
+		case err == watchtools.ErrWatchClosed:
 			continue
 		case err == wait.ErrWaitTimeout:
 			if watchEvent != nil {
-				return watchEvent.Object, false, wait.ErrWaitTimeout
+				return watchEvent.Object, false, errWaitTimeoutWithName
 			}
-			return gottenObj, false, wait.ErrWaitTimeout
+			return gottenObj, false, errWaitTimeoutWithName
 		default:
 			return gottenObj, false, err
 		}
 	}
 }
 
-func isDeleted(event watch.Event) (bool, error) {
-	return event.Type == watch.Deleted, nil
+// Wait has helper methods for handling watches, including error handling.
+type Wait struct {
+	errOut io.Writer
+}
+
+// IsDeleted returns true if the object is deleted. It prints any errors it encounters.
+func (w Wait) IsDeleted(event watch.Event) (bool, error) {
+	switch event.Type {
+	case watch.Error:
+		// keep waiting in the event we see an error - we expect the watch to be closed by
+		// the server if the error is unrecoverable.
+		err := apierrors.FromObject(event.Object)
+		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the object to be deleted: %v", err)
+		return false, nil
+	case watch.Deleted:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 // ConditionalWait hold information to check an API status condition
 type ConditionalWait struct {
 	conditionName   string
 	conditionStatus string
+	// errOut is written to if an error occurs
+	errOut io.Writer
 }
 
 // IsConditionMet is a conditionfunc for waiting on an API condition to be met
 func (w ConditionalWait) IsConditionMet(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	endTime := time.Now().Add(o.Timeout)
 	for {
+		if len(info.Name) == 0 {
+			return info.Object, false, fmt.Errorf("resource name must be provided")
+		}
+
+		nameSelector := fields.OneTermEqualSelector("metadata.name", info.Name).String()
+
+		var gottenObj *unstructured.Unstructured
+		// List with a name field selector to get the current resourceVersion to watch from (not the object's resourceVersion)
+		gottenObjList, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).List(metav1.ListOptions{FieldSelector: nameSelector})
+
 		resourceVersion := ""
-		gottenObj, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).Get(info.Name, metav1.GetOptions{})
 		switch {
-		case errors.IsNotFound(err):
-			resourceVersion = "0"
 		case err != nil:
 			return info.Object, false, err
+		case len(gottenObjList.Items) != 1:
+			resourceVersion = gottenObjList.GetResourceVersion()
 		default:
+			gottenObj = &gottenObjList.Items[0]
 			conditionMet, err := w.checkCondition(gottenObj)
 			if conditionMet {
 				return gottenObj, true, nil
@@ -280,11 +378,11 @@ func (w ConditionalWait) IsConditionMet(info *resource.Info, o *WaitOptions) (ru
 			if err != nil {
 				return gottenObj, false, err
 			}
-			resourceVersion = gottenObj.GetResourceVersion()
+			resourceVersion = gottenObjList.GetResourceVersion()
 		}
 
 		watchOptions := metav1.ListOptions{}
-		watchOptions.FieldSelector = "metadata.name=" + info.Name
+		watchOptions.FieldSelector = nameSelector
 		watchOptions.ResourceVersion = resourceVersion
 		objWatch, err := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).Watch(watchOptions)
 		if err != nil {
@@ -292,21 +390,25 @@ func (w ConditionalWait) IsConditionMet(info *resource.Info, o *WaitOptions) (ru
 		}
 
 		timeout := endTime.Sub(time.Now())
+		errWaitTimeoutWithName := extendErrWaitTimeout(wait.ErrWaitTimeout, info)
 		if timeout < 0 {
 			// we're out of time
-			return gottenObj, false, wait.ErrWaitTimeout
+			return gottenObj, false, errWaitTimeoutWithName
 		}
-		watchEvent, err := watch.Until(o.Timeout, objWatch, w.isConditionMet)
+
+		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), o.Timeout)
+		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, w.isConditionMet)
+		cancel()
 		switch {
 		case err == nil:
 			return watchEvent.Object, true, nil
-		case err == watch.ErrWatchClosed:
+		case err == watchtools.ErrWatchClosed:
 			continue
 		case err == wait.ErrWaitTimeout:
 			if watchEvent != nil {
-				return watchEvent.Object, false, wait.ErrWaitTimeout
+				return watchEvent.Object, false, errWaitTimeoutWithName
 			}
-			return gottenObj, false, wait.ErrWaitTimeout
+			return gottenObj, false, errWaitTimeoutWithName
 		default:
 			return gottenObj, false, err
 		}
@@ -338,10 +440,21 @@ func (w ConditionalWait) checkCondition(obj *unstructured.Unstructured) (bool, e
 }
 
 func (w ConditionalWait) isConditionMet(event watch.Event) (bool, error) {
+	if event.Type == watch.Error {
+		// keep waiting in the event we see an error - we expect the watch to be closed by
+		// the server
+		err := apierrors.FromObject(event.Object)
+		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the condition to be satisfied: %v", err)
+		return false, nil
+	}
 	if event.Type == watch.Deleted {
 		// this will chain back out, result in another get and an return false back up the chain
 		return false, nil
 	}
 	obj := event.Object.(*unstructured.Unstructured)
 	return w.checkCondition(obj)
+}
+
+func extendErrWaitTimeout(err error, info *resource.Info) error {
+	return fmt.Errorf("%s on %s/%s", err.Error(), info.Mapping.Resource.Resource, info.Name)
 }

@@ -506,15 +506,20 @@ func TestMatchesSinceImageFalse(t *testing.T) {
 
 func captureOutputWithError(f func() error) (string, error) {
 	old := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		return "", err
+	}
 	os.Stdout = w
 
-	err := f()
+	if err := f(); err != nil {
+		return "", err
+	}
 
 	w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	io.Copy(&buf, r) //nolint
 	return buf.String(), err
 }
 
@@ -529,6 +534,6 @@ func captureOutput(f func()) string {
 	w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	io.Copy(&buf, r) //nolint
 	return buf.String()
 }

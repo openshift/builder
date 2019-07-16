@@ -43,19 +43,25 @@ func Test(t *testing.T) {
 		{
 			Name: to.StringPtr("foo"),
 			RegistryProperties: &containerregistry.RegistryProperties{
-				LoginServer: to.StringPtr("foo-microsoft.azurecr.io"),
+				LoginServer: to.StringPtr("*.azurecr.io"),
 			},
 		},
 		{
 			Name: to.StringPtr("bar"),
 			RegistryProperties: &containerregistry.RegistryProperties{
-				LoginServer: to.StringPtr("bar-microsoft.azurecr.io"),
+				LoginServer: to.StringPtr("*.azurecr.cn"),
 			},
 		},
 		{
 			Name: to.StringPtr("baz"),
 			RegistryProperties: &containerregistry.RegistryProperties{
-				LoginServer: to.StringPtr("baz-microsoft.azurecr.io"),
+				LoginServer: to.StringPtr("*.azurecr.de"),
+			},
+		},
+		{
+			Name: to.StringPtr("bus"),
+			RegistryProperties: &containerregistry.RegistryProperties{
+				LoginServer: to.StringPtr("*.azurecr.us"),
 			},
 		},
 	}
@@ -70,14 +76,14 @@ func Test(t *testing.T) {
 
 	creds := provider.Provide()
 
-	if len(creds) != len(result) {
-		t.Errorf("Unexpected list: %v, expected length %d", creds, len(result))
+	if len(creds) != len(result)+1 {
+		t.Errorf("Unexpected list: %v, expected length %d", creds, len(result)+1)
 	}
 	for _, cred := range creds {
-		if cred.Username != "foo" {
+		if cred.Username != "" && cred.Username != "foo" {
 			t.Errorf("expected 'foo' for username, saw: %v", cred.Username)
 		}
-		if cred.Password != "bar" {
+		if cred.Password != "" && cred.Password != "bar" {
 			t.Errorf("expected 'bar' for password, saw: %v", cred.Username)
 		}
 	}

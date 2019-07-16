@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -27,6 +28,7 @@ type runInputOptions struct {
 	securityOption []string
 	terminal       bool
 	volumes        []string
+	mounts         []string
 	*buildahcli.NameSpaceResults
 }
 
@@ -67,8 +69,11 @@ func init() {
 	// TODO add-third alias for tty
 	flags.BoolVarP(&opts.terminal, "terminal", "t", false, "allocate a pseudo-TTY in the container")
 	flags.BoolVar(&opts.terminal, "tty", false, "allocate a pseudo-TTY in the container")
-	flags.MarkHidden("tty")
-	flags.StringSliceVarP(&opts.volumes, "volume", "v", []string{}, "bind mount a host location into the container while running the command")
+	if err := flags.MarkHidden("tty"); err != nil {
+		panic(fmt.Sprintf("error marking tty flag as hidden: %v", err))
+	}
+	flags.StringArrayVarP(&opts.volumes, "volume", "v", []string{}, "bind mount a host location into the container while running the command")
+	flags.StringArrayVar(&opts.mounts, "mount", []string{}, "Attach a filesystem mount to the container (default [])")
 
 	userFlags := getUserFlags()
 	namespaceFlags := buildahcli.GetNameSpaceFlags(&namespaceResults)
@@ -143,18 +148,12 @@ func runCmd(c *cobra.Command, args []string, iopts runInputOptions) error {
 		}
 	}
 
-	// validate volume paths
-	if err := parse.ParseVolumes(iopts.volumes); err != nil {
+	mounts, err := parse.GetVolumes(iopts.volumes, iopts.mounts)
+	if err != nil {
 		return err
 	}
+	options.Mounts = mounts
 
-	for _, volumeSpec := range iopts.volumes {
-		mount, err := parse.ParseVolume(volumeSpec)
-		if err != nil {
-			return err
-		}
-		options.Mounts = append(options.Mounts, mount)
-	}
 	runerr := builder.Run(args, options)
 	if runerr != nil {
 		logrus.Debugf("error running %v in container %q: %v", args, builder.Container, runerr)

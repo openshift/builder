@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kubernetes/pkg/kubelet/apis/kubeletconfig"
+	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 	stats "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
 	kubemetrics "k8s.io/kubernetes/pkg/kubelet/metrics"
 	"k8s.io/kubernetes/test/e2e/framework"
@@ -49,7 +49,7 @@ const (
 var _ = framework.KubeDescribe("Density [Serial] [Slow]", func() {
 	const (
 		// The data collection time of resource collector and the standalone cadvisor
-		// is not synchronizated, so resource collector may miss data or
+		// is not synchronized, so resource collector may miss data or
 		// collect duplicated data
 		containerStatsPollingPeriod = 500 * time.Millisecond
 	)
@@ -454,17 +454,17 @@ func createBatchPodWithRateControl(f *framework.Framework, pods []*v1.Pod, inter
 // getPodStartLatency gets prometheus metric 'pod start latency' from kubelet
 func getPodStartLatency(node string) (framework.KubeletLatencyMetrics, error) {
 	latencyMetrics := framework.KubeletLatencyMetrics{}
-	ms, err := metrics.GrabKubeletMetricsWithoutProxy(node)
-	Expect(err).NotTo(HaveOccurred())
+	ms, err := metrics.GrabKubeletMetricsWithoutProxy(node, "/metrics")
+	Expect(err).NotTo(HaveOccurred(), "Failed to get kubelet metrics without proxy in node %s", node)
 
 	for _, samples := range ms {
 		for _, sample := range samples {
-			if sample.Metric["__name__"] == kubemetrics.KubeletSubsystem+"_"+kubemetrics.PodStartLatencyKey {
+			if sample.Metric["__name__"] == kubemetrics.KubeletSubsystem+"_"+kubemetrics.PodStartDurationKey {
 				quantile, _ := strconv.ParseFloat(string(sample.Metric["quantile"]), 64)
 				latencyMetrics = append(latencyMetrics,
 					framework.KubeletLatencyMetric{
 						Quantile: quantile,
-						Method:   kubemetrics.PodStartLatencyKey,
+						Method:   kubemetrics.PodStartDurationKey,
 						Latency:  time.Duration(int(sample.Value)) * time.Microsecond})
 			}
 		}

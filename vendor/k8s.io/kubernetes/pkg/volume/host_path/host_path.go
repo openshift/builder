@@ -83,6 +83,10 @@ func (plugin *hostPathPlugin) CanSupport(spec *volume.Spec) bool {
 		(spec.Volume != nil && spec.Volume.HostPath != nil)
 }
 
+func (plugin *hostPathPlugin) IsMigratedToCSI() bool {
+	return false
+}
+
 func (plugin *hostPathPlugin) RequiresRemount() bool {
 	return false
 }
@@ -132,7 +136,7 @@ func (plugin *hostPathPlugin) NewUnmounter(volName string, podUID types.UID) (vo
 // HostPath recycling only works in single node clusters and is meant for testing purposes only.
 func (plugin *hostPathPlugin) Recycle(pvName string, spec *volume.Spec, eventRecorder recyclerclient.RecycleEventRecorder) error {
 	if spec.PersistentVolume == nil || spec.PersistentVolume.Spec.HostPath == nil {
-		return fmt.Errorf("spec.PersistentVolumeSource.HostPath is nil")
+		return fmt.Errorf("spec.PersistentVolume.Spec.HostPath is nil")
 	}
 
 	pod := plugin.config.RecyclerPodTemplate

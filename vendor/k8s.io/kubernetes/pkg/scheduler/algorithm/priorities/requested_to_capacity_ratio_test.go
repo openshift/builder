@@ -25,7 +25,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
-	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 )
 
 func TestCreatingFunctionShapeErrorsIfEmptyPoints(t *testing.T) {
@@ -209,19 +209,19 @@ func TestRequestedToCapacityRatio(t *testing.T) {
 
 	for _, test := range tests {
 
-		nodeNames := make([]string, 0)
+		var nodeNames []string
 		for nodeName := range test.nodes {
 			nodeNames = append(nodeNames, nodeName)
 		}
 		sort.Strings(nodeNames)
 
-		nodes := make([]*v1.Node, 0)
+		var nodes []*v1.Node
 		for _, nodeName := range nodeNames {
 			node := test.nodes[nodeName]
 			nodes = append(nodes, makeNode(nodeName, node.capacity.cpu, node.capacity.mem))
 		}
 
-		scheduledPods := make([]*v1.Pod, 0)
+		var scheduledPods []*v1.Pod
 		for name, node := range test.nodes {
 			scheduledPods = append(scheduledPods,
 				buildResourcesPod(name, node.used))
@@ -229,7 +229,7 @@ func TestRequestedToCapacityRatio(t *testing.T) {
 
 		newPod := buildResourcesPod("", test.requested)
 
-		nodeNameToInfo := schedulercache.CreateNodeNameToInfoMap(scheduledPods, nodes)
+		nodeNameToInfo := schedulernodeinfo.CreateNodeNameToInfoMap(scheduledPods, nodes)
 		list, err := priorityFunction(RequestedToCapacityRatioResourceAllocationPriorityDefault().PriorityMap, nil, nil)(newPod, nodeNameToInfo, nodes)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)

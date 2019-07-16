@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -67,10 +67,11 @@ type ControllerBuilder struct {
 	fileObserver            fileobserver.Observer
 	fileObserverReactorFn   func(file string, action fileobserver.ActionType) error
 
-	startFunc        StartFunc
-	componentName    string
-	instanceIdentity string
-	observerInterval time.Duration
+	startFunc          StartFunc
+	componentName      string
+	componentNamespace string
+	instanceIdentity   string
+	observerInterval   time.Duration
 
 	servingInfo          *configv1.HTTPServingInfo
 	authenticationConfig *operatorv1alpha1.DelegatedAuthentication
@@ -104,13 +105,18 @@ func (b *ControllerBuilder) WithRestartOnChange(stopCh chan<- struct{}, starting
 
 	b.fileObserverReactorFn = func(filename string, action fileobserver.ActionType) error {
 		once.Do(func() {
-			glog.Warning(fmt.Sprintf("Restart triggered because of %s", action.String(filename)))
+			klog.Warning(fmt.Sprintf("Restart triggered because of %s", action.String(filename)))
 			close(stopCh)
 		})
 		return nil
 	}
 
 	b.fileObserver.AddReactor(b.fileObserverReactorFn, startingFileContent, files...)
+	return b
+}
+
+func (b *ControllerBuilder) WithComponentNamespace(ns string) *ControllerBuilder {
+	b.componentNamespace = ns
 	return b
 }
 
@@ -166,13 +172,13 @@ func (b *ControllerBuilder) Run(config *unstructured.Unstructured, ctx context.C
 	}
 
 	kubeClient := kubernetes.NewForConfigOrDie(clientConfig)
-	namespace, err := b.getNamespace()
+	namespace, err := b.getComponentNamespace()
 	if err != nil {
-		panic("unable to read the namespace")
+		klog.Warningf("unable to identify the current namespace for events: %v", err)
 	}
 	controllerRef, err := events.GetControllerReferenceForCurrentPod(kubeClient, namespace, nil)
 	if err != nil {
-		panic(fmt.Sprintf("unable to obtain replicaset reference for events: %v", err))
+		klog.Warningf("unable to get owner reference (falling back to namespace): %v", err)
 	}
 	eventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(namespace), b.componentName, controllerRef)
 
@@ -193,7 +199,7 @@ func (b *ControllerBuilder) Run(config *unstructured.Unstructured, ctx context.C
 	if b.kubeAPIServerConfigFile != nil {
 		kubeConfig = *b.kubeAPIServerConfigFile
 	}
-	serverConfig, err := serving.ToServerConfig(*b.servingInfo, *b.authenticationConfig, *b.authorizationConfig, kubeConfig)
+	serverConfig, err := serving.ToServerConfig(ctx, *b.servingInfo, *b.authenticationConfig, *b.authorizationConfig, kubeConfig)
 	if err != nil {
 		return err
 	}
@@ -206,9 +212,9 @@ func (b *ControllerBuilder) Run(config *unstructured.Unstructured, ctx context.C
 
 	go func() {
 		if err := server.PrepareRun().Run(ctx.Done()); err != nil {
-			glog.Error(err)
+			klog.Error(err)
 		}
-		glog.Fatal("server exited")
+		klog.Fatal("server exited")
 	}()
 
 	protoConfig := rest.CopyConfig(clientConfig)
@@ -239,19 +245,22 @@ func (b *ControllerBuilder) Run(config *unstructured.Unstructured, ctx context.C
 	leaderElection.Callbacks.OnStartedLeading = func(ctx context.Context) {
 		controllerContext.stopChan = ctx.Done()
 		if err := b.startFunc(controllerContext); err != nil {
-			glog.Fatal(err)
+			klog.Fatal(err)
 		}
 	}
 	leaderelection.RunOrDie(ctx, leaderElection)
 	return fmt.Errorf("exited")
 }
 
-func (b *ControllerBuilder) getNamespace() (string, error) {
+func (b *ControllerBuilder) getComponentNamespace() (string, error) {
+	if len(b.componentNamespace) > 0 {
+		return b.componentNamespace, nil
+	}
 	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
-		return "", err
+		return "openshift-config-managed", err
 	}
-	return string(nsBytes), err
+	return string(nsBytes), nil
 }
 
 func (b *ControllerBuilder) getClientConfig() (*rest.Config, error) {
