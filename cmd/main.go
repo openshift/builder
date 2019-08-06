@@ -46,25 +46,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Remove this once the config-map based mount approach lands after rebase
-	oldServiceCASrc := fmt.Sprintf("%s/service-ca.crt", builder.SecretCertsMountPath)
-	oldServiceCADst := fmt.Sprintf("%s/service.crt", tlsCertRoot)
-	err = CopyFileIfExists(oldServiceCASrc, oldServiceCADst)
-	if err != nil {
-		fmt.Printf("Error setting up service CA cert: %v", err)
-		os.Exit(1)
-	}
-
-	// TODO: Remove this once the build controller mounts the internal registry's CA
-	// in certs.d/<internal-registry-hostname>/
-	newServiceCASrc := fmt.Sprintf("%s/service-ca.crt", builder.ConfigMapCertsMountPath)
-	newServiceCADst := fmt.Sprintf("%s/openshift-service.crt", tlsCertRoot)
-	err = CopyFileIfExists(newServiceCASrc, newServiceCADst)
-	if err != nil {
-		fmt.Printf("Error setting up service CA cert: %v", err)
-		os.Exit(1)
-	}
-
 	runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
 	err = CopyDirIfExists(runtimeCASrc, runtimeCertRoot)
 	if err != nil {
