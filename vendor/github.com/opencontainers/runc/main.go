@@ -63,9 +63,8 @@ func main() {
 	app.Version = strings.Join(v, "\n")
 
 	root := "/run/runc"
-	if os.Geteuid() != 0 {
-		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-		if runtimeDir != "" {
+	if shouldHonorXDGRuntimeDir() {
+		if runtimeDir := os.Getenv("XDG_RUNTIME_DIR"); runtimeDir != "" {
 			root = runtimeDir + "/runc"
 			// According to the XDG specification, we need to set anything in
 			// XDG_RUNTIME_DIR to have a sticky bit if we don't want it to get
@@ -107,6 +106,11 @@ func main() {
 		cli.BoolFlag{
 			Name:  "systemd-cgroup",
 			Usage: "enable systemd cgroup support, expects cgroupsPath to be of form \"slice:prefix:name\" for e.g. \"system.slice:runc:434234\"",
+		},
+		cli.StringFlag{
+			Name:  "rootless",
+			Value: "auto",
+			Usage: "ignore cgroup permission errors ('true', 'false', or 'auto')",
 		},
 	}
 	app.Commands = []cli.Command{

@@ -46,7 +46,7 @@ func dropCapabilities() []string {
 }
 
 func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration, blobCacheDirectory string) error {
-	glog.V(2).Infof("Asked to pull fresh copy of %q.", imageName)
+	log.V(2).Infof("Asked to pull fresh copy of %q.", imageName)
 
 	if imageName == "" {
 		return fmt.Errorf("unable to pull using empty image name")
@@ -68,12 +68,12 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		return fmt.Errorf("error parsing image name %s: %v", ref, err)
 	}
 	if ref.Registry == "" {
-		glog.V(2).Infof("defaulting registry to docker.io for image %s", imageName)
+		log.V(2).Infof("defaulting registry to docker.io for image %s", imageName)
 		ref.Registry = "docker.io"
 	}
 
 	if authConfig.Username != "" && authConfig.Password != "" {
-		glog.V(5).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
+		log.V(5).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
 		if err := config.SetAuthentication(&systemContext, ref.Registry, authConfig.Username, authConfig.Password); err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func daemonlessProcessLimits() (defaultProcessLimits []string) {
 }
 
 func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation buildah.Isolation, contextDir string, optimization buildapiv1.ImageOptimizationPolicy, opts *docker.BuildImageOptions, blobCacheDirectory string) error {
-	glog.V(2).Infof("Building...")
+	log.V(2).Infof("Building...")
 
 	args := make(map[string]string)
 	for _, ev := range opts.BuildArgs {
@@ -119,7 +119,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 
 	pullPolicy := buildah.PullIfMissing
 	if opts.Pull {
-		glog.V(2).Infof("Forcing fresh pull of base image.")
+		log.V(2).Infof("Forcing fresh pull of base image.")
 		pullPolicy = buildah.PullAlways
 	}
 
@@ -140,7 +140,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 	systemContext.AuthFilePath = "/tmp/config.json"
 
 	for registry, ac := range opts.AuthConfigs.Configs {
-		glog.V(5).Infof("Setting authentication for registry %q at %q.", registry, ac.ServerAddress)
+		log.V(5).Infof("Setting authentication for registry %q at %q.", registry, ac.ServerAddress)
 		if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
 			return err
 		}
@@ -197,7 +197,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 }
 
 func tagDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag, pushTag string) error {
-	glog.V(2).Infof("Tagging local image %q with name %q.", buildTag, pushTag)
+	log.V(2).Infof("Tagging local image %q with name %q.", buildTag, pushTag)
 
 	if buildTag == "" {
 		return fmt.Errorf("unable to add tag to image with empty image name")
@@ -223,7 +223,7 @@ func tagDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag, p
 }
 
 func removeDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag string) error {
-	glog.V(2).Infof("Removing name %q from local image.", buildTag)
+	log.V(2).Infof("Removing name %q from local image.", buildTag)
 
 	if buildTag == "" {
 		return fmt.Errorf("unable to remove image using empty image name")
@@ -253,7 +253,7 @@ func removeDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag
 }
 
 func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration, blobCacheDirectory string) (string, error) {
-	glog.V(2).Infof("Pushing image %q from local storage.", imageName)
+	log.V(2).Infof("Pushing image %q from local storage.", imageName)
 
 	if imageName == "" {
 		return "", fmt.Errorf("unable to push using empty destination image name")
@@ -271,13 +271,13 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	systemContext.AuthFilePath = "/tmp/config.json"
 
 	if authConfig.Username != "" && authConfig.Password != "" {
-		glog.V(2).Infof("Setting authentication secret for %q.", authConfig.ServerAddress)
+		log.V(2).Infof("Setting authentication secret for %q.", authConfig.ServerAddress)
 		systemContext.DockerAuthConfig = &types.DockerAuthConfig{
 			Username: authConfig.Username,
 			Password: authConfig.Password,
 		}
 	} else {
-		glog.V(2).Infof("No authentication secret provided for pushing to registry.")
+		log.V(2).Infof("No authentication secret provided for pushing to registry.")
 	}
 
 	options := buildah.PushOptions{
@@ -298,7 +298,7 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 			}
 		}
 	}
-	glog.V(0).Infof("Successfully pushed %s", logName)
+	log.V(0).Infof("Successfully pushed %s", logName)
 	return string(digest), err
 }
 
@@ -309,7 +309,7 @@ func inspectDaemonlessImage(sc types.SystemContext, store storage.Store, name st
 	if err != nil {
 		switch errors.Cause(err) {
 		case storage.ErrImageUnknown, docker.ErrNoSuchImage:
-			glog.V(2).Infof("Local copy of %q is not present.", name)
+			log.V(2).Infof("Local copy of %q is not present.", name)
 			return nil, docker.ErrNoSuchImage
 		}
 		return nil, err
@@ -413,7 +413,7 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 	}
 	defer func() {
 		if err := builder.Delete(); err != nil {
-			glog.V(0).Infof("Error deleting container %q(%s): %v", builder.Container, builder.ContainerID, err)
+			log.V(0).Infof("Error deleting container %q(%s): %v", builder.Container, builder.ContainerID, err)
 		}
 	}()
 
@@ -460,7 +460,7 @@ func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store,
 	}
 
 	if blobCacheDirectory != "" {
-		glog.V(0).Infof("Caching blobs under %q.", blobCacheDirectory)
+		log.V(0).Infof("Caching blobs under %q.", blobCacheDirectory)
 	}
 
 	return &DaemonlessClient{

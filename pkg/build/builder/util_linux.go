@@ -52,6 +52,6 @@ func getCgroupParent() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	glog.V(6).Infof("found cgroup values map: %v", cgMap)
+	log.V(6).Infof("found cgroup values map: %v", cgMap)
 	return extractParentFromCgroupMap(cgMap)
 }

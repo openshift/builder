@@ -79,7 +79,7 @@ func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) error {
 
 		configContent := fmt.Sprintf(UserPassGitConfig, gitcredentials.Name())
 
-		glog.V(5).Infof("Adding username/password credentials to git config:\n%s\n", configContent)
+		log.V(5).Infof("Adding username/password credentials to git config:\n%s\n", configContent)
 
 		fmt.Fprintf(gitconfig, "%s", configContent)
 		fmt.Fprintf(gitcredentials, "%s", gitconfigURL.String())

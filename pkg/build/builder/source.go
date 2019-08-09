@@ -12,26 +12,20 @@ import (
 	"strings"
 	"time"
 
-	//"github.com/sirupsen/logrus"
-	realglog "github.com/golang/glog"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog"
 
+	"github.com/containers/buildah"
 	"github.com/containers/image/pkg/docker/config"
 	"github.com/containers/image/types"
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
 
-	//"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/containers/buildah"
-
-	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
-	//	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
-
 	buildapiv1 "github.com/openshift/api/build/v1"
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	"github.com/openshift/library-go/pkg/git"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 )
 
 const (
@@ -79,18 +73,18 @@ func GitClone(ctx context.Context, gitClient GitClient, gitSource *buildapiv1.Gi
 		sourceInfo, errs = gitClient.GetInfo(dir)
 		if len(errs) > 0 {
 			for _, e := range errs {
-				glog.V(0).Infof("error: Unable to retrieve Git info: %v", e)
+				log.V(0).Infof("error: Unable to retrieve Git info: %v", e)
 			}
 		}
 		if sourceInfo != nil {
 			sourceInfoJson, err := json.Marshal(*sourceInfo)
 			if err != nil {
-				glog.V(0).Infof("error: Unable to serialized git source info: %v", err)
+				log.V(0).Infof("error: Unable to serialized git source info: %v", err)
 				return sourceInfo, nil
 			}
 			err = ioutil.WriteFile(filepath.Join(buildWorkDirMount, "sourceinfo.json"), sourceInfoJson, 0644)
 			if err != nil {
-				glog.V(0).Infof("error: Unable to serialized git source info: %v", err)
+				log.V(0).Infof("error: Unable to serialized git source info: %v", err)
 				return sourceInfo, nil
 			}
 		}
@@ -107,7 +101,7 @@ func GitClone(ctx context.Context, gitClient GitClient, gitSource *buildapiv1.Gi
 // the build information.
 func ManageDockerfile(dir string, build *buildapiv1.Build) error {
 	os.MkdirAll(dir, 0777)
-	glog.V(5).Infof("Checking for presence of a Dockerfile")
+	log.V(5).Infof("Checking for presence of a Dockerfile")
 	// a Dockerfile has been specified, create or overwrite into the destination
 	if dockerfileSource := build.Spec.Source.Dockerfile; dockerfileSource != nil {
 		baseDir := dir
@@ -174,18 +168,18 @@ func checkRemoteGit(gitClient GitClient, url string, initialTimeout time.Duratio
 
 	timeout := initialTimeout
 	for {
-		glog.V(4).Infof("git ls-remote --heads %s", url)
+		log.V(4).Infof("git ls-remote --heads %s", url)
 		out, errOut, err = gitClient.TimedListRemote(timeout, url, "--heads")
 		if len(out) != 0 {
-			glog.V(4).Infof(out)
+			log.V(4).Infof(out)
 		}
 		if len(errOut) != 0 {
-			glog.V(4).Infof(errOut)
+			log.V(4).Infof(errOut)
 		}
 		if err != nil {
 			if _, ok := err.(*git.TimeoutError); ok {
 				timeout = timeout * timeoutIncrementFactor
-				glog.Infof("WARNING: timed out waiting for git server, will wait %s", timeout)
+				log.Infof("WARNING: timed out waiting for git server, will wait %s", timeout)
 				continue
 			}
 		}
@@ -223,7 +217,7 @@ func ExtractInputBinary(in io.Reader, source *buildapiv1.BinaryBuildSource, dir 
 
 	var path string
 	if len(source.AsFile) > 0 {
-		glog.V(0).Infof("Receiving source from STDIN as file %s", source.AsFile)
+		log.V(0).Infof("Receiving source from STDIN as file %s", source.AsFile)
 		path = filepath.Join(dir, source.AsFile)
 
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0664)
@@ -235,21 +229,21 @@ func ExtractInputBinary(in io.Reader, source *buildapiv1.BinaryBuildSource, dir 
 		if err != nil {
 			return err
 		}
-		glog.V(4).Infof("Received %d bytes into %s", n, path)
+		log.V(4).Infof("Received %d bytes into %s", n, path)
 		return nil
 	}
 
-	glog.V(0).Infof("Receiving source from STDIN as archive ...")
+	log.V(0).Infof("Receiving source from STDIN as archive ...")
 
 	args := []string{"-x", "-o", "-m", "-f", "-", "-C", dir}
-	if glog.Is(6) {
+	if log.Is(6) {
 		args = append(args, "-v")
 	}
 
 	cmd := exec.Command("bsdtar", args...)
 	cmd.Stdin = in
 	out, err := cmd.CombinedOutput()
-	glog.V(4).Infof("Extracting...\n%s", string(out))
+	log.V(4).Infof("Extracting...\n%s", string(out))
 	if err != nil {
 		return fmt.Errorf("unable to extract binary build input, must be a zip, tar, or gzipped tar, or specified as a file: %v", err)
 	}
@@ -262,7 +256,7 @@ func extractGitSource(ctx context.Context, gitClient GitClient, gitSource *build
 		return false, nil
 	}
 
-	glog.V(0).Infof("Cloning %q ...", gitSource.URI)
+	log.V(0).Infof("Cloning %q ...", gitSource.URI)
 
 	// Check source URI by trying to connect to the server
 	if err := checkSourceURI(gitClient, gitSource.URI, timeout); err != nil {
@@ -280,10 +274,10 @@ func extractGitSource(ctx context.Context, gitClient GitClient, gitSource *build
 		cloneOptions = append(cloneOptions, git.Shallow)
 	}
 
-	glog.V(3).Infof("Cloning source from %s", gitSource.URI)
+	log.V(3).Infof("Cloning source from %s", gitSource.URI)
 
 	// Only use the quiet flag if Verbosity is not 5 or greater
-	if !glog.Is(5) {
+	if !log.Is(5) {
 		cloneOptions = append(cloneOptions, "--quiet")
 	}
 	startTime := metav1.Now()
@@ -315,9 +309,9 @@ func extractGitSource(ctx context.Context, gitClient GitClient, gitSource *build
 	}
 
 	if information, gitErr := gitClient.GetInfo(dir); len(gitErr) == 0 {
-		glog.Infof("\tCommit:\t%s (%s)\n", information.CommitID, information.Message)
-		glog.Infof("\tAuthor:\t%s <%s>\n", information.AuthorName, information.AuthorEmail)
-		glog.Infof("\tDate:\t%s\n", information.Date)
+		log.Infof("\tCommit:\t%s (%s)\n", information.CommitID, information.Message)
+		log.Infof("\tAuthor:\t%s <%s>\n", information.AuthorName, information.AuthorEmail)
+		log.Infof("\tDate:\t%s\n", information.Date)
 	}
 
 	return true, nil
@@ -330,7 +324,7 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		glog.V(4).Infof("Creating image destination directory: %s", destDir)
+		log.V(4).Infof("Creating image destination directory: %s", destDir)
 		err := os.MkdirAll(destDir, 0755)
 		if err != nil {
 			return err
@@ -342,12 +336,12 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 	}
 
 	args := []string{"-r"}
-	if glog.Is(5) {
+	if log.Is(5) {
 		args = append(args, "-v")
 	}
 	args = append(args, sourceDir, destDir)
 	out, err := exec.Command("cp", args...).CombinedOutput()
-	glog.V(4).Infof("copying image content: %s", string(out))
+	log.V(4).Infof("copying image content: %s", string(out))
 	if err != nil {
 		return err
 	}
@@ -355,7 +349,7 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 }
 
 func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, store storage.Store, image, buildDir string, imageSecretIndex int, paths []buildapiv1.ImageSourcePath, forcePull bool, blobCacheDirectory string) error {
-	glog.V(4).Infof("Extracting image source from image %s", image)
+	log.V(4).Infof("Extracting image source from image %s", image)
 
 	pullPolicy := buildah.PullIfMissing
 	if forcePull {
@@ -392,7 +386,7 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 
 	if auths != nil {
 		for registry, ac := range auths.Configs {
-			glog.V(5).Infof("Setting authentication for registry %q using %q.", registry, ac.ServerAddress)
+			log.V(5).Infof("Setting authentication for registry %q using %q.", registry, ac.ServerAddress)
 			if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
 				return err
 			}
@@ -420,7 +414,7 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 	defer func() {
 		err := builder.Unmount()
 		if err != nil {
-			realglog.Errorf("failed to unmount: %v", err)
+			klog.Errorf("failed to unmount: %v", err)
 		}
 	}()
 	if err != nil {
@@ -436,7 +430,7 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 		if strings.HasSuffix(path.SourcePath, "/.") {
 			sourcePath = sourcePath + "/."
 		}
-		glog.V(4).Infof("Extracting path %s from image %s to %s", path.SourcePath, image, path.DestinationDir)
+		log.V(4).Infof("Extracting path %s from image %s to %s", path.SourcePath, image, path.DestinationDir)
 		err := copyImageSourceFromFilesytem(sourcePath, destPath)
 		if err != nil {
 			return fmt.Errorf("error copying source path %s to %s: %v", path.SourcePath, path.DestinationDir, err)

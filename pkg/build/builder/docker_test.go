@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/MakeNowJust/heredoc"
+	docker "github.com/fsouza/go-dockerclient"
 
-	"github.com/fsouza/go-dockerclient"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -510,7 +510,7 @@ func TestEmptySource(t *testing.T) {
 	client := buildfake.Clientset{}
 
 	dockerBuilder := &DockerBuilder{
-		client: client.Build().Builds(""),
+		client: client.BuildV1().Builds(""),
 		build:  build,
 	}
 
@@ -578,7 +578,7 @@ USER 1001`
 	}
 
 	dockerBuilder := &DockerBuilder{
-		client:       client.Build().Builds(""),
+		client:       client.BuildV1().Builds(""),
 		build:        build,
 		dockerClient: dockerClient,
 		inputDir:     buildDir,

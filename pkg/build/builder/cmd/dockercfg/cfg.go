@@ -6,15 +6,15 @@ import (
 	"path/filepath"
 
 	docker "github.com/fsouza/go-dockerclient"
-	glogreal "github.com/golang/glog"
 	"github.com/spf13/pflag"
 
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
-	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
+	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )
 
-var glog = utilglog.ToFile(os.Stderr, 2)
+var log = utillog.ToFile(os.Stderr, 2)
 
 const (
 	PushAuthType       = "PUSH_DOCKERCFG_PATH"
@@ -43,7 +43,7 @@ func (h *Helper) InstallFlags(flags *pflag.FlagSet) {
 // GetDockerAuth returns a valid Docker AuthConfiguration entry, and whether it was read
 // from the local dockercfg file
 func (h *Helper) GetDockerAuth(imageName, authType string) (docker.AuthConfiguration, bool) {
-	glog.V(3).Infof("Locating docker auth for image %s and type %s", imageName, authType)
+	log.V(3).Infof("Locating docker auth for image %s and type %s", imageName, authType)
 	var searchPaths []string
 	var cfg credentialprovider.DockerConfig
 	var err error
@@ -53,10 +53,10 @@ func (h *Helper) GetDockerAuth(imageName, authType string) (docker.AuthConfigura
 	} else {
 		searchPaths = getExtraSearchPaths()
 	}
-	glog.V(3).Infof("Getting docker auth in paths : %v", searchPaths)
+	log.V(3).Infof("Getting docker auth in paths : %v", searchPaths)
 	cfg, err = GetDockerConfig(searchPaths)
 	if err != nil {
-		glogreal.Errorf("Reading docker config from %v failed: %v", searchPaths, err)
+		klog.Errorf("Reading docker config from %v failed: %v", searchPaths, err)
 		return docker.AuthConfiguration{}, false
 	}
 
@@ -66,7 +66,7 @@ func (h *Helper) GetDockerAuth(imageName, authType string) (docker.AuthConfigura
 	if !found || len(authConfs) == 0 {
 		return docker.AuthConfiguration{}, false
 	}
-	glog.V(3).Infof("Using %s user for Docker authentication for image %s", authConfs[0].Username, imageName)
+	log.V(3).Infof("Using %s user for Docker authentication for image %s", authConfs[0].Username, imageName)
 	return docker.AuthConfiguration{
 		Username:      authConfs[0].Username,
 		Password:      authConfs[0].Password,
@@ -99,7 +99,7 @@ func GetDockercfgFile(path string) string {
 	} else if currentUser, err := user.Current(); err == nil {
 		cfgPath = filepath.Join(currentUser.HomeDir, ".docker", "config.json")
 	}
-	glog.V(5).Infof("Using Docker authentication configuration in '%s'", cfgPath)
+	log.V(5).Infof("Using Docker authentication configuration in '%s'", cfgPath)
 	return cfgPath
 }
 

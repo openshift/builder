@@ -26,8 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
 	clientset "k8s.io/client-go/kubernetes"
-	utilversion "k8s.io/kubernetes/pkg/util/version"
 	"k8s.io/kubernetes/test/e2e/common"
 	"k8s.io/kubernetes/test/e2e/framework"
 	testutils "k8s.io/kubernetes/test/utils"
@@ -56,17 +56,16 @@ type pausePodConfig struct {
 	Ports                             []v1.ContainerPort
 	OwnerReferences                   []metav1.OwnerReference
 	PriorityClassName                 string
+	DeletionGracePeriodSeconds        *int64
 }
 
 var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 	var cs clientset.Interface
 	var nodeList *v1.NodeList
-	var systemPodsNo int
 	var totalPodCapacity int64
 	var RCName string
 	var ns string
 	f := framework.NewDefaultFramework("sched-pred")
-	ignoreLabels := framework.ImagePullerLabels
 
 	AfterEach(func() {
 		rc, err := cs.CoreV1().ReplicationControllers(ns).Get(RCName, metav1.GetOptions{})
@@ -87,24 +86,6 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 
 		err := framework.CheckTestingNSDeletedExcept(cs, ns)
 		framework.ExpectNoError(err)
-
-		// Every test case in this suite assumes that cluster add-on pods stay stable and
-		// cannot be run in parallel with any other test that touches Nodes or Pods.
-		// It is so because we need to have precise control on what's running in the cluster.
-		systemPods, err := framework.GetPodsInNamespace(cs, ns, ignoreLabels)
-		Expect(err).NotTo(HaveOccurred())
-		systemPodsNo = 0
-		for _, pod := range systemPods {
-			if !masterNodes.Has(pod.Spec.NodeName) && pod.DeletionTimestamp == nil {
-				systemPodsNo++
-			}
-		}
-
-		// err = framework.WaitForPodsRunningReady(cs, metav1.NamespaceSystem, int32(systemPodsNo), 0, framework.PodReadyBeforeTimeout, ignoreLabels)
-		// Expect(err).NotTo(HaveOccurred())
-
-		// err = framework.WaitForPodsSuccess(cs, metav1.NamespaceSystem, framework.ImagePullerLabels, imagePrePullingTimeout)
-		// Expect(err).NotTo(HaveOccurred())
 
 		for _, node := range nodeList.Items {
 			framework.Logf("\nLogging pods the kubelet thinks is on node %v before test", node.Name)
@@ -239,9 +220,9 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 	// 4. Create another pod with no affinity to any node that need 50% of the largest node CPU.
 	// 5. Make sure this additional pod is not scheduled.
 	/*
-		    Testname: scheduler-resource-limits
-		    Description: Ensure that scheduler accounts node resources correctly
-			and respects pods' resource requirements during scheduling.
+		Release : v1.9
+		Testname: Scheduler, resource limits
+		Description: Scheduling Pods MUST fail if the resource limits exceed Machine capacity.
 	*/
 	framework.ConformanceIt("validates resource limits of pods that are allowed to run ", func() {
 		framework.WaitForStableCluster(cs, masterNodes)
@@ -345,9 +326,9 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 	// Test Nodes does not have any label, hence it should be impossible to schedule Pod with
 	// nonempty Selector set.
 	/*
-		    Testname: scheduler-node-selector-not-matching
-		    Description: Ensure that scheduler respects the NodeSelector field of
-			PodSpec during scheduling (when it does not match any node).
+		Release : v1.9
+		Testname: Scheduler, node selector not matching
+		Description: Create a Pod with a NodeSelector set to a value that does not match a node in the cluster. Since there are no nodes matching the criteria the Pod MUST not be scheduled.
 	*/
 	framework.ConformanceIt("validates that NodeSelector is respected if not matching ", func() {
 		By("Trying to schedule Pod with nonempty NodeSelector.")
@@ -368,9 +349,9 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 	})
 
 	/*
-		    Testname: scheduler-node-selector-matching
-		    Description: Ensure that scheduler respects the NodeSelector field
-			of PodSpec during scheduling (when it matches).
+		Release : v1.9
+		Testname: Scheduler, node selector matching
+		Description: Create a label on the node {k: v}. Then create a Pod with a NodeSelector set to {k: v}. Check to see if the Pod is scheduled. When the NodeSelector matches then Pod MUST be scheduled on that node.
 	*/
 	framework.ConformanceIt("validates that NodeSelector is respected if matching ", func() {
 		nodeName := GetNodeThatCanRunPod(f)
@@ -589,13 +570,13 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 
 		port := int32(54321)
 		By(fmt.Sprintf("Trying to create a pod(pod1) with hostport %v and hostIP 127.0.0.1 and expect scheduled", port))
-		creatHostPortPodOnNode(f, "pod1", ns, "127.0.0.1", port, v1.ProtocolTCP, nodeSelector, true)
+		createHostPortPodOnNode(f, "pod1", ns, "127.0.0.1", port, v1.ProtocolTCP, nodeSelector, true)
 
 		By(fmt.Sprintf("Trying to create another pod(pod2) with hostport %v but hostIP 127.0.0.2 on the node which pod1 resides and expect scheduled", port))
-		creatHostPortPodOnNode(f, "pod2", ns, "127.0.0.2", port, v1.ProtocolTCP, nodeSelector, true)
+		createHostPortPodOnNode(f, "pod2", ns, "127.0.0.2", port, v1.ProtocolTCP, nodeSelector, true)
 
 		By(fmt.Sprintf("Trying to create a third pod(pod3) with hostport %v, hostIP 127.0.0.2 but use UDP protocol on the node which pod2 resides", port))
-		creatHostPortPodOnNode(f, "pod3", ns, "127.0.0.2", port, v1.ProtocolUDP, nodeSelector, true)
+		createHostPortPodOnNode(f, "pod3", ns, "127.0.0.2", port, v1.ProtocolUDP, nodeSelector, true)
 	})
 
 	It("validates that there exists conflict between pods with same hostPort and protocol but one using 0.0.0.0 hostIP", func() {
@@ -615,10 +596,10 @@ var _ = SIGDescribe("SchedulerPredicates [Serial]", func() {
 
 		port := int32(54322)
 		By(fmt.Sprintf("Trying to create a pod(pod4) with hostport %v and hostIP 0.0.0.0(empty string here) and expect scheduled", port))
-		creatHostPortPodOnNode(f, "pod4", ns, "", port, v1.ProtocolTCP, nodeSelector, true)
+		createHostPortPodOnNode(f, "pod4", ns, "", port, v1.ProtocolTCP, nodeSelector, true)
 
 		By(fmt.Sprintf("Trying to create another pod(pod5) with hostport %v but hostIP 127.0.0.1 on the node which pod4 resides and expect not scheduled", port))
-		creatHostPortPodOnNode(f, "pod5", ns, "127.0.0.1", port, v1.ProtocolTCP, nodeSelector, false)
+		createHostPortPodOnNode(f, "pod5", ns, "127.0.0.1", port, v1.ProtocolTCP, nodeSelector, false)
 	})
 })
 
@@ -650,6 +631,9 @@ func initPausePod(f *framework.Framework, conf pausePodConfig) *v1.Pod {
 	}
 	if conf.Resources != nil {
 		pod.Spec.Containers[0].Resources = *conf.Resources
+	}
+	if conf.DeletionGracePeriodSeconds != nil {
+		pod.ObjectMeta.DeletionGracePeriodSeconds = conf.DeletionGracePeriodSeconds
 	}
 	return pod
 }
@@ -819,7 +803,7 @@ func CreateHostPortPods(f *framework.Framework, id string, replicas int, expectR
 }
 
 // create pod which using hostport on the specified node according to the nodeSelector
-func creatHostPortPodOnNode(f *framework.Framework, podName, ns, hostIP string, port int32, protocol v1.Protocol, nodeSelector map[string]string, expectScheduled bool) {
+func createHostPortPodOnNode(f *framework.Framework, podName, ns, hostIP string, port int32, protocol v1.Protocol, nodeSelector map[string]string, expectScheduled bool) {
 	createPausePod(f, pausePodConfig{
 		Name: podName,
 		Ports: []v1.ContainerPort{

@@ -174,8 +174,8 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 		bindFiles["/etc/hosts"] = hostFile
 	}
 
-	if !contains(volumes, "/etc/resolv.conf") {
-		resolvFile, err := b.addNetworkConfig(path, "/etc/resolv.conf", rootIDPair, b.CommonBuildOpts.DNSServers, b.CommonBuildOpts.DNSSearch, b.CommonBuildOpts.DNSOptions)
+	if !(contains(volumes, "/etc/resolv.conf") || (len(b.CommonBuildOpts.DNSServers) == 1 && strings.ToLower(b.CommonBuildOpts.DNSServers[0]) == "none")) {
+		resolvFile, err := b.addNetworkConfig(path, "/etc/resolv.conf", rootIDPair, b.CommonBuildOpts.DNSServers, b.CommonBuildOpts.DNSSearch, b.CommonBuildOpts.DNSOptions, namespaceOptions)
 		if err != nil {
 			return err
 		}
@@ -434,7 +434,7 @@ func (b *Builder) setupMounts(mountPoint string, spec *specs.Spec, bundlePath st
 
 	// Add temporary copies of the contents of volume locations at the
 	// volume locations, unless we already have something there.
-	copyWithTar := b.copyWithTar(nil, nil)
+	copyWithTar := b.copyWithTar(nil, nil, nil)
 	builtins, err := runSetupBuiltinVolumes(b.MountLabel, mountPoint, cdir, copyWithTar, builtinVolumes, int(rootUID), int(rootGID))
 	if err != nil {
 		return err
@@ -462,7 +462,7 @@ func (b *Builder) setupMounts(mountPoint string, spec *specs.Spec, bundlePath st
 }
 
 // addNetworkConfig copies files from host and sets them up to bind mount into container
-func (b *Builder) addNetworkConfig(rdir, hostPath string, chownOpts *idtools.IDPair, dnsServers, dnsSearch, dnsOptions []string) (string, error) {
+func (b *Builder) addNetworkConfig(rdir, hostPath string, chownOpts *idtools.IDPair, dnsServers, dnsSearch, dnsOptions []string, namespaceOptions NamespaceOptions) (string, error) {
 	stat, err := os.Stat(hostPath)
 	if err != nil {
 		return "", errors.Wrapf(err, "error statting %q for container %q", hostPath, b.ContainerID)
@@ -479,6 +479,16 @@ func (b *Builder) addNetworkConfig(rdir, hostPath string, chownOpts *idtools.IDP
 	if len(dnsSearch) > 0 {
 		search = dnsSearch
 	}
+
+	if b.Isolation == IsolationOCIRootless {
+		ns := namespaceOptions.Find(string(specs.NetworkNamespace))
+		if ns != nil && !ns.Host && ns.Path == "" {
+			// if we are using slirp4netns, also add the built-in DNS server.
+			logrus.Debugf("adding slirp4netns 10.0.2.3 built-in DNS server")
+			nameservers = append([]string{"10.0.2.3"}, nameservers...)
+		}
+	}
+
 	if len(dnsServers) != 0 {
 		dns, err := getDNSIP(dnsServers)
 		if err != nil {
@@ -944,8 +954,8 @@ func setupRootlessNetwork(pid int) (teardown func(), err error) {
 	}
 
 	return func() {
-		cmd.Process.Kill()
-		cmd.Wait()
+		cmd.Process.Kill() // nolint:errcheck
+		cmd.Wait()         // nolint:errcheck
 	}, nil
 }
 
@@ -1049,6 +1059,18 @@ func runConfigureNetwork(isolation Isolation, options RunOptions, configureNetwo
 	return teardown, nil
 }
 
+func setNonblock(fd int, description string, nonblocking bool) error {
+	err := unix.SetNonblock(fd, nonblocking)
+	if err != nil {
+		if nonblocking {
+			logrus.Errorf("error setting %s to nonblocking: %v", description, err)
+		} else {
+			logrus.Errorf("error setting descriptor %s blocking: %v", description, err)
+		}
+	}
+	return err
+}
+
 func runCopyStdio(stdio *sync.WaitGroup, copyPipes bool, stdioPipe [][]int, copyConsole bool, consoleListener *net.UnixListener, finishCopy []int, finishedCopy chan struct{}, spec *specs.Spec) {
 	defer func() {
 		unix.Close(finishCopy[0])
@@ -1116,14 +1138,22 @@ func runCopyStdio(stdio *sync.WaitGroup, copyPipes bool, stdioPipe [][]int, copy
 	}
 	// Set our reading descriptors to non-blocking.
 	for rfd, wfd := range relayMap {
-		if err := unix.SetNonblock(rfd, true); err != nil {
-			logrus.Errorf("error setting %s to nonblocking: %v", readDesc[rfd], err)
+		if err := setNonblock(rfd, readDesc[rfd], true); err != nil {
 			return
 		}
-		if err := unix.SetNonblock(wfd, false); err != nil {
-			logrus.Errorf("error setting descriptor %d (%s) blocking: %v", wfd, writeDesc[wfd], err)
-		}
+		setNonblock(wfd, writeDesc[wfd], false) // nolint:errcheck
 	}
+
+	if copyPipes {
+		setNonblock(stdioPipe[unix.Stdin][1], writeDesc[stdioPipe[unix.Stdin][1]], true) // nolint:errcheck
+	}
+
+	runCopyStdioPassData(stdio, copyPipes, stdioPipe, copyConsole, consoleListener, finishCopy, finishedCopy, spec, relayMap, relayBuffer, readDesc, writeDesc)
+}
+
+func runCopyStdioPassData(stdio *sync.WaitGroup, copyPipes bool, stdioPipe [][]int, copyConsole bool, consoleListener *net.UnixListener, finishCopy []int, finishedCopy chan struct{}, spec *specs.Spec, relayMap map[int]int, relayBuffer map[int]*bytes.Buffer, readDesc map[int]string, writeDesc map[int]string) {
+	closeStdin := false
+
 	// Pass data back and forth.
 	pollTimeout := -1
 	for len(relayMap) > 0 {
@@ -1155,12 +1185,6 @@ func runCopyStdio(stdio *sync.WaitGroup, copyPipes bool, stdioPipe [][]int, copy
 			}
 			// If the POLLIN flag isn't set, then there's no data to be read from this descriptor.
 			if pollFd.Revents&unix.POLLIN == 0 {
-				// If we're using pipes and it's our stdin and it's closed, close the writing
-				// end of the corresponding pipe.
-				if copyPipes && int(pollFd.Fd) == unix.Stdin && pollFd.Revents&unix.POLLHUP != 0 {
-					unix.Close(stdioPipe[unix.Stdin][1])
-					stdioPipe[unix.Stdin][1] = -1
-				}
 				continue
 			}
 			// Read whatever there is to be read.
@@ -1175,10 +1199,8 @@ func runCopyStdio(stdio *sync.WaitGroup, copyPipes bool, stdioPipe [][]int, copy
 				// using pipes, it's an EOF, so close the stdin
 				// pipe's writing end.
 				if n == 0 && copyPipes && int(pollFd.Fd) == unix.Stdin {
-					unix.Close(stdioPipe[unix.Stdin][1])
-					stdioPipe[unix.Stdin][1] = -1
-				}
-				if n > 0 {
+					removes[int(pollFd.Fd)] = struct{}{}
+				} else if n > 0 {
 					// Buffer the data in case we get blocked on where they need to go.
 					nwritten, err := relayBuffer[writeFD].Write(buf[:n])
 					if err != nil {
@@ -1222,6 +1244,11 @@ func runCopyStdio(stdio *sync.WaitGroup, copyPipes bool, stdioPipe [][]int, copy
 				if n > 0 {
 					relayBuffer[writeFD].Next(n)
 				}
+				if closeStdin && writeFD == stdioPipe[unix.Stdin][1] && stdioPipe[unix.Stdin][1] >= 0 && relayBuffer[stdioPipe[unix.Stdin][1]].Len() == 0 {
+					logrus.Debugf("closing stdin")
+					unix.Close(stdioPipe[unix.Stdin][1])
+					stdioPipe[unix.Stdin][1] = -1
+				}
 			}
 			if relayBuffer[writeFD].Len() > 0 {
 				pollTimeout = 100
@@ -1229,6 +1256,14 @@ func runCopyStdio(stdio *sync.WaitGroup, copyPipes bool, stdioPipe [][]int, copy
 		}
 		// Remove any descriptors which we don't need to poll any more from the poll descriptor list.
 		for remove := range removes {
+			if copyPipes && remove == unix.Stdin {
+				closeStdin = true
+				if relayBuffer[stdioPipe[unix.Stdin][1]].Len() == 0 {
+					logrus.Debugf("closing stdin")
+					unix.Close(stdioPipe[unix.Stdin][1])
+					stdioPipe[unix.Stdin][1] = -1
+				}
+			}
 			delete(relayMap, remove)
 		}
 		// If the we-can-return pipe had anything for us, we're done.
@@ -1453,7 +1488,7 @@ func setupNamespaces(g *generate.Generator, namespaceOptions NamespaceOptions, i
 			}
 		}
 	}
-	if configureNetwork {
+	if configureNetwork && !unshare.IsRootless() {
 		for name, val := range util.DefaultNetworkSysctl {
 			// Check that the sysctl we are adding is actually supported
 			// by the kernel
@@ -1564,7 +1599,16 @@ func (b *Builder) cleanupTempVolumes() {
 
 func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string, optionMounts []specs.Mount, rootUID, rootGID int) (mounts []specs.Mount, Err error) {
 
-	parseMount := func(host, container string, options []string) (specs.Mount, error) {
+	// Make sure the overlay directory is clean before running
+	containerDir, err := b.store.ContainerDirectory(b.ContainerID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error looking up container directory for %s", b.ContainerID)
+	}
+	if err := overlay.CleanupContent(containerDir); err != nil {
+		return nil, errors.Wrapf(err, "error cleaning up overlay content for %s", b.ContainerID)
+	}
+
+	parseMount := func(mountType, host, container string, options []string) (specs.Mount, error) {
 		var foundrw, foundro, foundz, foundZ, foundO bool
 		var rootProp string
 		for _, opt := range options {
@@ -1607,18 +1651,22 @@ func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string,
 		if rootProp == "" {
 			options = append(options, "private")
 		}
+		if mountType != "tmpfs" {
+			mountType = "bind"
+			options = append(options, "rbind")
+		}
 		return specs.Mount{
 			Destination: container,
-			Type:        "bind",
+			Type:        mountType,
 			Source:      host,
-			Options:     append(options, "rbind"),
+			Options:     options,
 		}, nil
 	}
 
 	// Bind mount volumes specified for this particular Run() invocation
 	for _, i := range optionMounts {
 		logrus.Debugf("setting up mounted volume at %q", i.Destination)
-		mount, err := parseMount(i.Source, i.Destination, i.Options)
+		mount, err := parseMount(i.Type, i.Source, i.Destination, i.Options)
 		if err != nil {
 			return nil, err
 		}
@@ -1632,7 +1680,7 @@ func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string,
 			options = strings.Split(spliti[2], ",")
 		}
 		options = append(options, "rbind")
-		mount, err := parseMount(spliti[0], spliti[1], options)
+		mount, err := parseMount("bind", spliti[0], spliti[1], options)
 		if err != nil {
 			return nil, err
 		}

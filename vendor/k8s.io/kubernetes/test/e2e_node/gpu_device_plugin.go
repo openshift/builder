@@ -32,16 +32,13 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-const (
-	testPodNamePrefix = "nvidia-gpu-"
-)
-
 // Serial because the test restarts Kubelet
 var _ = framework.KubeDescribe("NVIDIA GPU Device Plugin [Feature:GPUDevicePlugin][NodeFeature:GPUDevicePlugin][Serial] [Disruptive]", func() {
 	f := framework.NewDefaultFramework("device-plugin-gpus-errors")
 
 	Context("DevicePlugin", func() {
 		var devicePluginPod *v1.Pod
+		var err error
 		BeforeEach(func() {
 			By("Ensuring that Nvidia GPUs exists on the node")
 			if !checkIfNvidiaGPUsExistOnNode() {
@@ -49,12 +46,13 @@ var _ = framework.KubeDescribe("NVIDIA GPU Device Plugin [Feature:GPUDevicePlugi
 			}
 
 			By("Creating the Google Device Plugin pod for NVIDIA GPU in GKE")
-			devicePluginPod = f.PodClient().CreateSync(framework.NVIDIADevicePlugin(f.Namespace.Name))
+			devicePluginPod, err = f.ClientSet.CoreV1().Pods(metav1.NamespaceSystem).Create(framework.NVIDIADevicePlugin())
+			framework.ExpectNoError(err)
 
 			By("Waiting for GPUs to become available on the local node")
 			Eventually(func() bool {
 				return framework.NumberOfNVIDIAGPUs(getLocalNode(f)) > 0
-			}, 10*time.Second, framework.Poll).Should(BeTrue())
+			}, 5*time.Minute, framework.Poll).Should(BeTrue())
 
 			if framework.NumberOfNVIDIAGPUs(getLocalNode(f)) < 2 {
 				Skip("Not enough GPUs to execute this test (at least two needed)")
@@ -87,7 +85,7 @@ var _ = framework.KubeDescribe("NVIDIA GPU Device Plugin [Feature:GPUDevicePlugi
 			By("Restarting Kubelet and waiting for the current running pod to restart")
 			restartKubelet()
 
-			By("Confirming that after a kubelet and pod restart, GPU assignement is kept")
+			By("Confirming that after a kubelet and pod restart, GPU assignment is kept")
 			ensurePodContainerRestart(f, p1.Name, p1.Name)
 			devIdRestart1 := parseLog(f, p1.Name, p1.Name, deviceIDRE)
 			Expect(devIdRestart1).To(Equal(devId1))
@@ -97,7 +95,7 @@ var _ = framework.KubeDescribe("NVIDIA GPU Device Plugin [Feature:GPUDevicePlugi
 			framework.WaitForAllNodesSchedulable(f.ClientSet, framework.TestContext.NodeSchedulableTimeout)
 			Eventually(func() bool {
 				return framework.NumberOfNVIDIAGPUs(getLocalNode(f)) > 0
-			}, 10*time.Second, framework.Poll).Should(BeTrue())
+			}, 5*time.Minute, framework.Poll).Should(BeTrue())
 			p2 := f.PodClient().CreateSync(makeBusyboxPod(framework.NVIDIAGPUResourceName, podRECMD))
 
 			By("Checking that pods got a different GPU")
@@ -106,7 +104,7 @@ var _ = framework.KubeDescribe("NVIDIA GPU Device Plugin [Feature:GPUDevicePlugi
 			Expect(devId1).To(Not(Equal(devId2)))
 
 			By("Deleting device plugin.")
-			f.PodClient().Delete(devicePluginPod.Name, &metav1.DeleteOptions{})
+			f.ClientSet.CoreV1().Pods(metav1.NamespaceSystem).Delete(devicePluginPod.Name, &metav1.DeleteOptions{})
 			By("Waiting for GPUs to become unavailable on the local node")
 			Eventually(func() bool {
 				node, err := f.ClientSet.CoreV1().Nodes().Get(framework.TestContext.NodeName, metav1.GetOptions{})
@@ -150,11 +148,11 @@ func checkIfNvidiaGPUsExistOnNode() bool {
 }
 
 func logDevicePluginMetrics() {
-	ms, err := metrics.GrabKubeletMetricsWithoutProxy(framework.TestContext.NodeName + ":10255")
+	ms, err := metrics.GrabKubeletMetricsWithoutProxy(framework.TestContext.NodeName+":10255", "/metrics")
 	framework.ExpectNoError(err)
 	for msKey, samples := range ms {
 		switch msKey {
-		case kubeletmetrics.KubeletSubsystem + "_" + kubeletmetrics.DevicePluginAllocationLatencyKey:
+		case kubeletmetrics.KubeletSubsystem + "_" + kubeletmetrics.DevicePluginAllocationDurationKey:
 			for _, sample := range samples {
 				latency := sample.Value
 				resource := string(sample.Metric["resource_name"])

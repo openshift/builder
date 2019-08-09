@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -17,26 +17,24 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/openshift/library-go/pkg/operator/condition"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/management"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 )
 
 const (
-	unsupportedConfigOverridesControllerUpgradeable = "UnsupportedConfigOverridesUpgradeable"
-	controllerWorkQueueKey                          = "key"
+	controllerWorkQueueKey = "key"
 )
 
 // UnsupportedConfigOverridesController is a controller that will copy source configmaps and secrets to their destinations.
 // It will also mirror deletions by deleting destinations.
 type UnsupportedConfigOverridesController struct {
-	preRunCachesSynced []cache.InformerSynced
-
-	// queue only ever has one item, but it has nice error handling backoff/retry semantics
-	queue workqueue.RateLimitingInterface
-
 	operatorClient v1helpers.OperatorClient
-	eventRecorder  events.Recorder
+
+	cachesToSync  []cache.InformerSynced
+	queue         workqueue.RateLimitingInterface
+	eventRecorder events.Recorder
 }
 
 // NewUnsupportedConfigOverridesController creates UnsupportedConfigOverridesController.
@@ -46,15 +44,14 @@ func NewUnsupportedConfigOverridesController(
 ) *UnsupportedConfigOverridesController {
 	c := &UnsupportedConfigOverridesController{
 		operatorClient: operatorClient,
-		eventRecorder:  eventRecorder.WithComponentSuffix("unsupported-config-overrides-controller"),
 
-		preRunCachesSynced: []cache.InformerSynced{
-			operatorClient.Informer().HasSynced,
-		},
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "UnsupportedConfigOverridesController"),
+		queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "UnsupportedConfigOverridesController"),
+		eventRecorder: eventRecorder.WithComponentSuffix("unsupported-config-overrides-controller"),
 	}
 
 	operatorClient.Informer().AddEventHandler(c.eventHandler())
+
+	c.cachesToSync = append(c.cachesToSync, operatorClient.Informer().HasSynced)
 
 	return c
 }
@@ -70,7 +67,7 @@ func (c *UnsupportedConfigOverridesController) sync() error {
 	}
 
 	cond := operatorv1.OperatorCondition{
-		Type:   unsupportedConfigOverridesControllerUpgradeable,
+		Type:   condition.UnsupportedConfigOverridesUpgradeableConditionType,
 		Status: operatorv1.ConditionTrue,
 		Reason: "NoUnsupportedConfigOverrides",
 	}
@@ -96,7 +93,7 @@ func (c *UnsupportedConfigOverridesController) sync() error {
 func keysSetInUnsupportedConfig(configYaml []byte) (sets.String, error) {
 	configJson, err := kyaml.ToJSON(configYaml)
 	if err != nil {
-		glog.Warning(err)
+		klog.Warning(err)
 		// maybe it's just json
 		configJson = configYaml
 	}
@@ -151,9 +148,9 @@ func (c *UnsupportedConfigOverridesController) Run(workers int, stopCh <-chan st
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	glog.Infof("Starting UnsupportedConfigOverridesController")
-	defer glog.Infof("Shutting down UnsupportedConfigOverridesController")
-	if !cache.WaitForCacheSync(stopCh, c.preRunCachesSynced...) {
+	klog.Infof("Starting UnsupportedConfigOverridesController")
+	defer klog.Infof("Shutting down UnsupportedConfigOverridesController")
+	if !cache.WaitForCacheSync(stopCh, c.cachesToSync...) {
 		return
 	}
 

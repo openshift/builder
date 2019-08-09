@@ -32,7 +32,7 @@ func (s CACert) Setup(baseDir string, context SCMAuthContext) error {
 	}
 	defer gitconfig.Close()
 	content := fmt.Sprintf(CACertConfig, filepath.Join(baseDir, CACertName))
-	glog.V(5).Infof("Adding CACert Auth to %s:\n%s\n", gitconfig.Name(), content)
+	log.V(5).Infof("Adding CACert Auth to %s:\n%s\n", gitconfig.Name(), content)
 	gitconfig.WriteString(content)
 
 	return ensureGitConfigIncludes(gitconfig.Name(), context)

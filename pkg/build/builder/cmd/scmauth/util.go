@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	builder "github.com/openshift/builder/pkg/build/builder"
-	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
+	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )
 
-var glog = utilglog.ToFile(os.Stderr, 2)
+var log = utillog.ToFile(os.Stderr, 2)
 
 func createGitConfig(includePath string, context SCMAuthContext) error {
 	tempDir, err := ioutil.TempDir("", "git")

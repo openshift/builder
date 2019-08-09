@@ -13,7 +13,19 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
-
+* July 15, 2019 (v1.7.4): Fix double EOF block in rare cases on zstd encoder.
+* July 15, 2019 (v1.7.3): Minor speedup/compression increase in default zstd encoder.
+* July 14, 2019: zstd decoder: Fix decompression error on multiple uses with mixed content.
+* July 7, 2019 (v1.7.2): Snappy update, zstd decoder potential race fix.
+* June 17, 2019: zstd decompression bugfix.
+* June 17, 2019: fix 32 bit builds.
+* June 17, 2019: Easier use in modules (less dependencies).
+* June 9, 2019: New stronger "default" [zstd](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression mode. Matches zstd default compression ratio.
+* June 5, 2019: 20-40% throughput in [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and better compression.
+* June 5, 2019: deflate/gzip compression: Reduce memory usage of lower compression levels.
+* June 2, 2019: Added [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression!
+* May 25, 2019: deflate/gzip: 10% faster bit writer, mostly visible in lower levels.
+* Apr 22, 2019: [zstd](https://github.com/klauspost/compress/tree/master/zstd#zstd) decompression added.
 * Aug 1, 2018: Added [huff0 README](https://github.com/klauspost/compress/tree/master/huff0#huff0-entropy-compression).
 * Jul 8, 2018: Added [Performance Update 2018](#performance-update-2018) below.
 * Jun 23, 2018: Merged [Go 1.11 inflate optimizations](https://go-review.googlesource.com/c/go/+/102235). Go 1.9 is now required. Backwards compatible version tagged with [v1.3.0](https://github.com/klauspost/compress/releases/tag/v1.3.0).

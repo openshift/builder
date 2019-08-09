@@ -92,14 +92,13 @@ func report() {
 		logrus.Errorf("error reading current ID mappings: %v", err)
 		os.Exit(1)
 	}
-	for _, m := range uidmap {
-		report.UIDMappings = append(report.UIDMappings, m)
-	}
-	for _, m := range gidmap {
-		report.GIDMappings = append(report.GIDMappings, m)
-	}
+	report.UIDMappings = append(report.UIDMappings, uidmap...)
+	report.GIDMappings = append(report.GIDMappings, gidmap...)
 
-	json.NewEncoder(os.Stdout).Encode(report)
+	if err := json.NewEncoder(os.Stdout).Encode(report); err != nil {
+		logrus.Error(err.Error())
+		os.Exit(1)
+	}
 }
 
 func TestUnshareNamespaces(t *testing.T) {

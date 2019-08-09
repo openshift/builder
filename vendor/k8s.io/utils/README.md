@@ -45,6 +45,14 @@ an existing package to this repository.
 
 - [Clock](/clock) provides an interface for time-based operations.  It allows
   mocking time for testing.
+  
+- [Pointers](/pointers) provides some functions for pointer-based operations.
+
+- [Io](/io) provides interfaces for working with file IO. Currently it provides
+  functionality for consistently reading a file.
+
+- [NSEnter](/nsenter) provies interfaces for executing and interacting with
+  processes running within a namespace.
 
 [Build Status]: https://travis-ci.org/kubernetes/utils.svg?branch=master
 [Go standard libs]: https://golang.org/pkg/#stdlib
@@ -55,3 +63,7 @@ an existing package to this repository.
 [kubeadm]: https://github.com/kubernetes/kubeadm
 [kubectl]: https://github.com/kubernetes/kubectl
 [instructions for moving]: ./HOWTOMOVE.md
+
+## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for instructions on how to contribute.

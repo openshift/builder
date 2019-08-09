@@ -122,7 +122,7 @@ func injectSecrets(secrets []buildapiv1.SecretBuildSource) []s2iapi.VolumeSpec {
 }
 
 func makeVolumeSpec(src localObjectBuildSource, mountPath string) s2iapi.VolumeSpec {
-	glog.V(3).Infof("Injecting build source %q into a build into %q", src.LocalObjectRef().Name, filepath.Clean(src.DestinationPath()))
+	log.V(3).Infof("Injecting build source %q into a build into %q", src.LocalObjectRef().Name, filepath.Clean(src.DestinationPath()))
 	return s2iapi.VolumeSpec{
 		Source:      filepath.Join(mountPath, src.LocalObjectRef().Name),
 		Destination: src.DestinationPath(),
@@ -172,7 +172,7 @@ func (s *S2IBuilder) Build() error {
 		return err
 	}
 	if scriptDownloadProxyConfig != nil {
-		glog.V(0).Infof("Using HTTP proxy %v and HTTPS proxy %v for script download",
+		log.V(0).Infof("Using HTTP proxy %v and HTTPS proxy %v for script download",
 			builderutil.SafeForLoggingURL(scriptDownloadProxyConfig.HTTPProxy),
 			builderutil.SafeForLoggingURL(scriptDownloadProxyConfig.HTTPSProxy),
 		)
@@ -248,8 +248,8 @@ func (s *S2IBuilder) Build() error {
 			timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullInputImage, startTime, metav1.Now())
 			// If there was an error, the incremental image may not exist. Treat the build as a normal s2i build.
 			if err != nil {
-				glog.V(2).Infof("Failed to pull incremental builder image %s - executing normal s2i build instead.", config.IncrementalFromTag)
-				glog.V(5).Infof("Incremental image pull failure: %v", err)
+				log.V(2).Infof("Failed to pull incremental builder image %s - executing normal s2i build instead.", config.IncrementalFromTag)
+				log.V(5).Infof("Incremental image pull failure: %v", err)
 				config.Incremental = false
 				config.IncrementalFromTag = ""
 			}
@@ -261,7 +261,7 @@ func (s *S2IBuilder) Build() error {
 		return err
 	}
 	if len(assembleUser) > 0 {
-		glog.V(4).Infof("Using builder image assemble user %s", assembleUser)
+		log.V(4).Infof("Using builder image assemble user %s", assembleUser)
 		config.AssembleUser = assembleUser
 	}
 
@@ -271,19 +271,19 @@ func (s *S2IBuilder) Build() error {
 	}
 	destination := labels[s2iconstants.DestinationLabel]
 	if len(destination) > 0 {
-		glog.V(4).Infof("Using builder image destination %s", destination)
+		log.V(4).Infof("Using builder image destination %s", destination)
 		config.Destination = destination
 	}
 	if len(config.ScriptsURL) == 0 {
 		scriptsURL := labels[s2iconstants.ScriptsURLLabel]
 		if len(scriptsURL) > 0 {
-			glog.V(4).Infof("Using builder scripts URL %s", destination)
+			log.V(4).Infof("Using builder scripts URL %s", destination)
 			config.ImageScriptsURL = scriptsURL
 		}
 	}
 
 	allowedUIDs := os.Getenv(builderutil.AllowedUIDs)
-	glog.V(4).Infof("The value of %s is [%s]", builderutil.AllowedUIDs, allowedUIDs)
+	log.V(4).Infof("The value of %s is [%s]", builderutil.AllowedUIDs, allowedUIDs)
 	if len(allowedUIDs) > 0 {
 		err = config.AllowedUIDs.Set(allowedUIDs)
 		if err != nil {
@@ -300,9 +300,9 @@ func (s *S2IBuilder) Build() error {
 		return errors.New(buffer.String())
 	}
 
-	if glog.Is(4) {
+	if log.Is(4) {
 		redactedConfig := SafeForLoggingS2IConfig(config)
-		glog.V(4).Infof("Creating a new S2I builder with config: %#v\n", describe.Config(nil, redactedConfig))
+		log.V(4).Infof("Creating a new S2I builder with config: %#v\n", describe.Config(nil, redactedConfig))
 	}
 	builder, buildInfo, err := s.builder.Builder(config, s2ibuild.Overrides{Downloader: nil})
 	if err != nil {
@@ -315,8 +315,8 @@ func (s *S2IBuilder) Build() error {
 		return err
 	}
 
-	glog.V(4).Infof("Starting S2I build from %s/%s BuildConfig ...", s.build.Namespace, s.build.Name)
-	glog.Infof("Generating dockerfile with builder image %s", s.build.Spec.Strategy.SourceStrategy.From.Name)
+	log.V(4).Infof("Starting S2I build from %s/%s BuildConfig ...", s.build.Namespace, s.build.Name)
+	log.Infof("Generating dockerfile with builder image %s", s.build.Spec.Strategy.SourceStrategy.From.Name)
 	result, err := builder.Build(config)
 
 	for _, stage := range result.BuildInfo.Stages {
@@ -388,7 +388,7 @@ func (s *S2IBuilder) Build() error {
 			return err
 		}
 		out := dockerfile.Write(node)
-		glog.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
+		log.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
 		overwriteFile(config.AsDockerfile, out)
 	}
 	// TODO pass ImageOptimization policy to the build?
@@ -411,11 +411,11 @@ func (s *S2IBuilder) Build() error {
 			dockercfg.PushAuthType,
 		)
 		if authPresent {
-			glog.V(3).Infof("Using provided push secret for pushing %s image", pushTag)
+			log.V(3).Infof("Using provided push secret for pushing %s image", pushTag)
 		} else {
-			glog.V(3).Infof("No push secret provided")
+			log.V(3).Infof("No push secret provided")
 		}
-		glog.V(0).Infof("\nPushing image %s ...", pushTag)
+		log.V(0).Infof("\nPushing image %s ...", pushTag)
 		startTime := metav1.Now()
 		digest, err := s.pushImage(pushTag, pushAuthConfig)
 
@@ -435,7 +435,7 @@ func (s *S2IBuilder) Build() error {
 			}
 			HandleBuildStatusUpdate(s.build, s.client, nil)
 		}
-		glog.V(0).Infof("Push successful")
+		log.V(0).Infof("Push successful")
 	}
 	return nil
 }
@@ -446,12 +446,12 @@ func (s *S2IBuilder) setupPullSecret() (*dockerclient.AuthConfigurations, error)
 	if len(os.Getenv(dockercfg.PullAuthType)) == 0 {
 		return nil, nil
 	}
-	glog.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, os.Getenv(dockercfg.PullAuthType))
+	log.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, os.Getenv(dockercfg.PullAuthType))
 	dockercfgPath := dockercfg.GetDockercfgFile(os.Getenv(dockercfg.PullAuthType))
 	if len(dockercfgPath) == 0 {
 		return nil, fmt.Errorf("no docker config file found in '%s'", os.Getenv(dockercfg.PullAuthType))
 	}
-	glog.V(2).Infof("Using Docker config file %s", dockercfgPath)
+	log.V(2).Infof("Using Docker config file %s", dockercfgPath)
 	r, err := os.Open(dockercfgPath)
 	if err != nil {
 		return nil, fmt.Errorf("'%s': %s", dockercfgPath, err)
@@ -460,7 +460,7 @@ func (s *S2IBuilder) setupPullSecret() (*dockerclient.AuthConfigurations, error)
 }
 
 func (s *S2IBuilder) pullImage(name string, authConfig dockerclient.AuthConfiguration) error {
-	glog.V(2).Infof("Explicitly pulling image %s", name)
+	log.V(2).Infof("Explicitly pulling image %s", name)
 	repository, tag := dockerclient.ParseRepositoryTag(name)
 	options := dockerclient.PullImageOptions{
 		Repository: repository,

@@ -4,6 +4,7 @@ package specconv
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/runc/libcontainer/configs"
@@ -395,6 +396,9 @@ func TestSpecconvExampleValidate(t *testing.T) {
 
 func TestDupNamespaces(t *testing.T) {
 	spec := &specs.Spec{
+		Root: &specs.Root{
+			Path: "rootfs",
+		},
 		Linux: &specs.Linux{
 			Namespaces: []specs.LinuxNamespace{
 				{
@@ -412,12 +416,12 @@ func TestDupNamespaces(t *testing.T) {
 		Spec: spec,
 	})
 
-	if err == nil {
+	if !strings.Contains(err.Error(), "malformed spec file: duplicated ns") {
 		t.Errorf("Duplicated namespaces should be forbidden")
 	}
 }
 
-func TestRootlessSpecconvValidate(t *testing.T) {
+func TestNonZeroEUIDCompatibleSpecconvValidate(t *testing.T) {
 	if _, err := os.Stat("/proc/self/ns/user"); os.IsNotExist(err) {
 		t.Skip("userns is unsupported")
 	}
@@ -430,7 +434,8 @@ func TestRootlessSpecconvValidate(t *testing.T) {
 		CgroupName:       "ContainerID",
 		UseSystemdCgroup: false,
 		Spec:             spec,
-		Rootless:         true,
+		RootlessEUID:     true,
+		RootlessCgroups:  true,
 	}
 
 	config, err := CreateLibcontainerConfig(opts)

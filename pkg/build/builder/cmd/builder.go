@@ -21,7 +21,7 @@ import (
 	"github.com/openshift/builder/pkg/build/builder/cmd/scmauth"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
-	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
+	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 	"github.com/openshift/builder/pkg/version"
 	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	glog = utilglog.ToFile(os.Stderr, 2)
+	log = utillog.ToFile(os.Stderr, 2)
 
 	buildScheme       = runtime.NewScheme()
 	buildCodecFactory = serializer.NewCodecFactory(buildscheme.Scheme)
@@ -78,13 +78,13 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 	if !ok {
 		return nil, fmt.Errorf("build string %s is not a build: %#v", buildStr, obj)
 	}
-	if glog.Is(4) {
+	if log.Is(4) {
 		redactedBuild := builderutil.SafeForLoggingBuild(cfg.build)
 		bytes, err := runtime.Encode(buildJSONCodec, redactedBuild)
 		if err != nil {
-			glog.V(4).Infof("unable to print debug line: %v", err)
+			log.V(4).Infof("unable to print debug line: %v", err)
 		} else {
-			glog.V(4).Infof("redacted build: %v", string(bytes))
+			log.V(4).Infof("redacted build: %v", string(bytes))
 		}
 	}
 
@@ -118,7 +118,7 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 		}
 		if storageOptions, ok := os.LookupEnv("BUILD_STORAGE_OPTIONS"); ok {
 			if err := json.Unmarshal([]byte(storageOptions), &storeOptions.GraphDriverOptions); err != nil {
-				glog.V(0).Infof("Error parsing BUILD_STORAGE_OPTIONS (%q): %v", storageOptions, err)
+				log.V(0).Infof("Error parsing BUILD_STORAGE_OPTIONS (%q): %v", storageOptions, err)
 				return nil, err
 			}
 		}
@@ -135,7 +135,7 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 		}
 		cfg.cleanup = func() {
 			if _, err := store.Shutdown(false); err != nil {
-				glog.V(0).Infof("Error shutting down storage: %v", err)
+				log.V(0).Infof("Error shutting down storage: %v", err)
 			}
 		}
 		istorage.Transport.SetStore(store)
@@ -298,7 +298,7 @@ func (c *builderConfig) execute(b builder) error {
 	if err != nil {
 		return fmt.Errorf("failed to retrieve cgroup limits: %v", err)
 	}
-	glog.V(4).Infof("Running build with cgroup limits: %#v", *cgLimits)
+	log.V(4).Infof("Running build with cgroup limits: %#v", *cgLimits)
 
 	if err := b.Build(c.dockerClient, c.dockerEndpoint, c.buildsClient, c.build, cgLimits); err != nil {
 		return fmt.Errorf("build error: %v", err)
@@ -340,11 +340,11 @@ func runBuild(out io.Writer, builder builder) error {
 // RunDockerBuild creates a docker builder and runs its build
 func RunDockerBuild(out io.Writer) error {
 	switch {
-	case glog.Is(6):
+	case log.Is(6):
 		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
+	case log.Is(2):
 		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
+	case log.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
 	return runBuild(out, dockerBuilder{})
@@ -353,11 +353,11 @@ func RunDockerBuild(out io.Writer) error {
 // RunS2IBuild creates a S2I builder and runs its build
 func RunS2IBuild(out io.Writer) error {
 	switch {
-	case glog.Is(6):
+	case log.Is(6):
 		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
+	case log.Is(2):
 		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
+	case log.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
 	return runBuild(out, s2iBuilder{})
@@ -366,11 +366,11 @@ func RunS2IBuild(out io.Writer) error {
 // RunGitClone performs a git clone using the build defined in the environment
 func RunGitClone(out io.Writer) error {
 	switch {
-	case glog.Is(6):
+	case log.Is(6):
 		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
+	case log.Is(2):
 		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
+	case log.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
 	logVersion()
@@ -393,11 +393,11 @@ func RunGitClone(out io.Writer) error {
 // the build information.
 func RunManageDockerfile(out io.Writer) error {
 	switch {
-	case glog.Is(6):
+	case log.Is(6):
 		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
+	case log.Is(2):
 		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
+	case log.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
 	logVersion()
@@ -415,11 +415,11 @@ func RunManageDockerfile(out io.Writer) error {
 // into the build working directory.
 func RunExtractImageContent(out io.Writer) error {
 	switch {
-	case glog.Is(6):
+	case log.Is(6):
 		serviceability.InitLogrus("DEBUG")
-	case glog.Is(2):
+	case log.Is(2):
 		serviceability.InitLogrus("INFO")
-	case glog.Is(0):
+	case log.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
 	logVersion()
@@ -435,5 +435,5 @@ func RunExtractImageContent(out io.Writer) error {
 
 // logVersion logs the version of openshift-builder.
 func logVersion() {
-	glog.V(5).Infof("openshift-builder %v", version.Get())
+	log.V(5).Infof("openshift-builder %v", version.Get())
 }

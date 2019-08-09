@@ -253,7 +253,7 @@ func outputImages(ctx context.Context, systemContext *types.SystemContext, store
 		inspectedTime, digest, size, _ := getDateAndDigestAndSize(ctx, store, image)
 		if !inspectedTime.IsZero() {
 			if createdTime != inspectedTime {
-				logrus.Debugf("image record and configuration disagree on the image's creation time for %q, using the one from the configuration", image)
+				logrus.Debugf("image record and configuration disagree on the image's creation time for %q, using the configuration creation time: %s", image.ID, inspectedTime)
 				createdTime = inspectedTime
 			}
 		}
@@ -325,8 +325,7 @@ func outputImages(ctx context.Context, systemContext *types.SystemContext, store
 	}
 	imagesParams = sortImagesOutput(imagesParams)
 	out := formats.StdoutTemplateArray{Output: imagesToGeneric(imagesParams), Template: outputHeader(opts), Fields: imagesHeader}
-	formats.Writer(out).Out()
-	return nil
+	return formats.Writer(out).Out()
 }
 
 func shortID(id string) string {

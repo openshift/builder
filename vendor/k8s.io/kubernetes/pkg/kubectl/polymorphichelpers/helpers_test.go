@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	fakeexternal "k8s.io/client-go/kubernetes/fake"
 	testcore "k8s.io/client-go/testing"
-	"k8s.io/kubernetes/pkg/controller"
+	"k8s.io/kubernetes/pkg/kubectl/util/podutils"
 )
 
 func TestGetFirstPod(t *testing.T) {
@@ -48,7 +48,7 @@ func TestGetFirstPod(t *testing.T) {
 		{
 			name:    "kubectl logs - two ready pods",
 			podList: newPodList(2, -1, -1, labelSet),
-			sortBy:  func(pods []*corev1.Pod) sort.Interface { return controller.ByLogging(pods) },
+			sortBy:  func(pods []*corev1.Pod) sort.Interface { return podutils.ByLogging(pods) },
 			expected: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "pod-1",
@@ -70,7 +70,7 @@ func TestGetFirstPod(t *testing.T) {
 		{
 			name:    "kubectl logs - one unhealthy, one healthy",
 			podList: newPodList(2, -1, 1, labelSet),
-			sortBy:  func(pods []*corev1.Pod) sort.Interface { return controller.ByLogging(pods) },
+			sortBy:  func(pods []*corev1.Pod) sort.Interface { return podutils.ByLogging(pods) },
 			expected: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "pod-2",
@@ -93,7 +93,7 @@ func TestGetFirstPod(t *testing.T) {
 		{
 			name:    "kubectl attach - two ready pods",
 			podList: newPodList(2, -1, -1, labelSet),
-			sortBy:  func(pods []*corev1.Pod) sort.Interface { return sort.Reverse(controller.ActivePods(pods)) },
+			sortBy:  func(pods []*corev1.Pod) sort.Interface { return sort.Reverse(podutils.ActivePods(pods)) },
 			expected: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "pod-1",
@@ -136,7 +136,7 @@ func TestGetFirstPod(t *testing.T) {
 					},
 				},
 			},
-			sortBy: func(pods []*corev1.Pod) sort.Interface { return sort.Reverse(controller.ActivePods(pods)) },
+			sortBy: func(pods []*corev1.Pod) sort.Interface { return sort.Reverse(podutils.ActivePods(pods)) },
 			expected: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "pod-1",
@@ -174,7 +174,7 @@ func TestGetFirstPod(t *testing.T) {
 		}
 		selector := labels.Set(labelSet).AsSelector()
 
-		pod, numPods, err := GetFirstPod(fake.Core(), metav1.NamespaceDefault, selector.String(), 1*time.Minute, test.sortBy)
+		pod, numPods, err := GetFirstPod(fake.CoreV1(), metav1.NamespaceDefault, selector.String(), 1*time.Minute, test.sortBy)
 		pod.Spec.SecurityContext = nil
 		if !test.expectedErr && err != nil {
 			t.Errorf("%s: unexpected error: %v", test.name, err)

@@ -16,6 +16,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/cgroups/systemd"
 	"github.com/opencontainers/runc/libcontainer/configs"
+	"github.com/opencontainers/runtime-spec/specs-go"
 
 	"golang.org/x/sys/unix"
 )
@@ -231,6 +232,7 @@ func TestEnter(t *testing.T) {
 		Env:    standardEnvironment,
 		Stdin:  stdinR,
 		Stdout: &stdout,
+		Init:   true,
 	}
 	err = container.Run(&pconfig)
 	stdinR.Close()
@@ -320,6 +322,7 @@ func TestProcessEnv(t *testing.T) {
 		},
 		Stdin:  nil,
 		Stdout: &stdout,
+		Init:   true,
 	}
 	err = container.Run(&pconfig)
 	ok(t, err)
@@ -366,6 +369,7 @@ func TestProcessEmptyCaps(t *testing.T) {
 		Env:    standardEnvironment,
 		Stdin:  nil,
 		Stdout: &stdout,
+		Init:   true,
 	}
 	err = container.Run(&pconfig)
 	ok(t, err)
@@ -417,6 +421,7 @@ func TestProcessCaps(t *testing.T) {
 		Stdin:        nil,
 		Stdout:       &stdout,
 		Capabilities: &configs.Capabilities{},
+		Init:         true,
 	}
 	pconfig.Capabilities.Bounding = append(config.Capabilities.Bounding, "CAP_NET_ADMIN")
 	pconfig.Capabilities.Permitted = append(config.Capabilities.Permitted, "CAP_NET_ADMIN")
@@ -491,6 +496,7 @@ func TestAdditionalGroups(t *testing.T) {
 		Stdin:            nil,
 		Stdout:           &stdout,
 		AdditionalGroups: []string{"plugdev", "audio"},
+		Init:             true,
 	}
 	err = container.Run(&pconfig)
 	ok(t, err)
@@ -551,6 +557,7 @@ func testFreeze(t *testing.T, systemd bool) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR,
+		Init:  true,
 	}
 	err = container.Run(pconfig)
 	stdinR.Close()
@@ -762,6 +769,7 @@ func TestContainerState(t *testing.T) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR,
+		Init:  true,
 	}
 	err = container.Run(p)
 	if err != nil {
@@ -821,6 +829,7 @@ func TestPassExtraFiles(t *testing.T) {
 		ExtraFiles: []*os.File{pipein1, pipein2},
 		Stdin:      nil,
 		Stdout:     &stdout,
+		Init:       true,
 	}
 	err = container.Run(&process)
 	if err != nil {
@@ -902,6 +911,7 @@ func TestMountCmds(t *testing.T) {
 		Cwd:  "/",
 		Args: []string{"sh", "-c", "env"},
 		Env:  standardEnvironment,
+		Init: true,
 	}
 	err = container.Run(&pconfig)
 	if err != nil {
@@ -951,6 +961,7 @@ func TestSysctl(t *testing.T) {
 		Env:    standardEnvironment,
 		Stdin:  nil,
 		Stdout: &stdout,
+		Init:   true,
 	}
 	err = container.Run(&pconfig)
 	ok(t, err)
@@ -1075,7 +1086,7 @@ func TestOomScoreAdj(t *testing.T) {
 	defer remove(rootfs)
 
 	config := newTemplateConfig(rootfs)
-	config.OomScoreAdj = 200
+	config.OomScoreAdj = ptrInt(200)
 
 	factory, err := libcontainer.New(root, libcontainer.Cgroupfs)
 	ok(t, err)
@@ -1091,6 +1102,7 @@ func TestOomScoreAdj(t *testing.T) {
 		Env:    standardEnvironment,
 		Stdin:  nil,
 		Stdout: &stdout,
+		Init:   true,
 	}
 	err = container.Run(&pconfig)
 	ok(t, err)
@@ -1100,8 +1112,8 @@ func TestOomScoreAdj(t *testing.T) {
 	outputOomScoreAdj := strings.TrimSpace(string(stdout.Bytes()))
 
 	// Check that the oom_score_adj matches the value that was set as part of config.
-	if outputOomScoreAdj != strconv.Itoa(config.OomScoreAdj) {
-		t.Fatalf("Expected oom_score_adj %d; got %q", config.OomScoreAdj, outputOomScoreAdj)
+	if outputOomScoreAdj != strconv.Itoa(*config.OomScoreAdj) {
+		t.Fatalf("Expected oom_score_adj %d; got %q", *config.OomScoreAdj, outputOomScoreAdj)
 	}
 }
 
@@ -1137,7 +1149,7 @@ func TestHook(t *testing.T) {
 
 	config.Hooks = &configs.Hooks{
 		Prestart: []configs.Hook{
-			configs.NewFunctionHook(func(s configs.HookState) error {
+			configs.NewFunctionHook(func(s *specs.State) error {
 				if s.Bundle != expectedBundle {
 					t.Fatalf("Expected prestart hook bundlePath '%s'; got '%s'", expectedBundle, s.Bundle)
 				}
@@ -1154,7 +1166,7 @@ func TestHook(t *testing.T) {
 			}),
 		},
 		Poststart: []configs.Hook{
-			configs.NewFunctionHook(func(s configs.HookState) error {
+			configs.NewFunctionHook(func(s *specs.State) error {
 				if s.Bundle != expectedBundle {
 					t.Fatalf("Expected poststart hook bundlePath '%s'; got '%s'", expectedBundle, s.Bundle)
 				}
@@ -1167,7 +1179,7 @@ func TestHook(t *testing.T) {
 			}),
 		},
 		Poststop: []configs.Hook{
-			configs.NewFunctionHook(func(s configs.HookState) error {
+			configs.NewFunctionHook(func(s *specs.State) error {
 				if s.Bundle != expectedBundle {
 					t.Fatalf("Expected poststop hook bundlePath '%s'; got '%s'", expectedBundle, s.Bundle)
 				}
@@ -1196,6 +1208,7 @@ func TestHook(t *testing.T) {
 		Env:    standardEnvironment,
 		Stdin:  nil,
 		Stdout: &stdout,
+		Init:   true,
 	}
 	err = container.Run(&pconfig)
 	ok(t, err)
@@ -1251,10 +1264,7 @@ func TestSTDIOPermissions(t *testing.T) {
 }
 
 func unmountOp(path string) error {
-	if err := unix.Unmount(path, unix.MNT_DETACH); err != nil {
-		return err
-	}
-	return nil
+	return unix.Unmount(path, unix.MNT_DETACH)
 }
 
 // Launch container with rootfsPropagation in rslave mode. Also
@@ -1312,6 +1322,7 @@ func TestRootfsPropagationSlaveMount(t *testing.T) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR,
+		Init:  true,
 	}
 
 	err = container.Run(pconfig)
@@ -1429,6 +1440,7 @@ func TestRootfsPropagationSharedMount(t *testing.T) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR,
+		Init:  true,
 	}
 
 	err = container.Run(pconfig)
@@ -1537,6 +1549,7 @@ func TestInitJoinPID(t *testing.T) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR1,
+		Init:  true,
 	}
 	err = container1.Run(init1)
 	stdinR1.Close()
@@ -1563,6 +1576,7 @@ func TestInitJoinPID(t *testing.T) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR2,
+		Init:  true,
 	}
 	err = container2.Run(init2)
 	stdinR2.Close()
@@ -1642,6 +1656,7 @@ func TestInitJoinNetworkAndUser(t *testing.T) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR1,
+		Init:  true,
 	}
 	err = container1.Run(init1)
 	stdinR1.Close()
@@ -1676,6 +1691,7 @@ func TestInitJoinNetworkAndUser(t *testing.T) {
 		Args:  []string{"cat"},
 		Env:   standardEnvironment,
 		Stdin: stdinR2,
+		Init:  true,
 	}
 	err = container2.Run(init2)
 	stdinR2.Close()
@@ -1743,6 +1759,7 @@ func TestTmpfsCopyUp(t *testing.T) {
 		Env:    standardEnvironment,
 		Stdin:  nil,
 		Stdout: &stdout,
+		Init:   true,
 	}
 	err = container.Run(&pconfig)
 	ok(t, err)
@@ -1755,5 +1772,62 @@ func TestTmpfsCopyUp(t *testing.T) {
 	// Check that the ls output has /etc/passwd
 	if !strings.Contains(outputLs, "/etc/passwd") {
 		t.Fatalf("/etc/passwd not copied up as expected: %v", outputLs)
+	}
+}
+
+func TestCGROUPPrivate(t *testing.T) {
+	if _, err := os.Stat("/proc/self/ns/cgroup"); os.IsNotExist(err) {
+		t.Skip("cgroupns is unsupported")
+	}
+	if testing.Short() {
+		return
+	}
+
+	rootfs, err := newRootfs()
+	ok(t, err)
+	defer remove(rootfs)
+
+	l, err := os.Readlink("/proc/1/ns/cgroup")
+	ok(t, err)
+
+	config := newTemplateConfig(rootfs)
+	config.Namespaces.Add(configs.NEWCGROUP, "")
+	buffers, exitCode, err := runContainer(config, "", "readlink", "/proc/self/ns/cgroup")
+	ok(t, err)
+
+	if exitCode != 0 {
+		t.Fatalf("exit code not 0. code %d stderr %q", exitCode, buffers.Stderr)
+	}
+
+	if actual := strings.Trim(buffers.Stdout.String(), "\n"); actual == l {
+		t.Fatalf("cgroup link should be private to the container but equals host %q %q", actual, l)
+	}
+}
+
+func TestCGROUPHost(t *testing.T) {
+	if _, err := os.Stat("/proc/self/ns/cgroup"); os.IsNotExist(err) {
+		t.Skip("cgroupns is unsupported")
+	}
+	if testing.Short() {
+		return
+	}
+
+	rootfs, err := newRootfs()
+	ok(t, err)
+	defer remove(rootfs)
+
+	l, err := os.Readlink("/proc/1/ns/cgroup")
+	ok(t, err)
+
+	config := newTemplateConfig(rootfs)
+	buffers, exitCode, err := runContainer(config, "", "readlink", "/proc/self/ns/cgroup")
+	ok(t, err)
+
+	if exitCode != 0 {
+		t.Fatalf("exit code not 0. code %d stderr %q", exitCode, buffers.Stderr)
+	}
+
+	if actual := strings.Trim(buffers.Stdout.String(), "\n"); actual != l {
+		t.Fatalf("cgroup link not equal to host link %q %q", actual, l)
 	}
 }

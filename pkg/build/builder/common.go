@@ -33,7 +33,7 @@ import (
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
-	utilglog "github.com/openshift/builder/pkg/build/builder/util/glog"
+	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/library-go/pkg/git"
 )
@@ -58,9 +58,9 @@ const (
 )
 
 var (
-	// glog is a placeholder until the builders pass an output stream down
-	// client facing libraries should not be using glog
-	glog = utilglog.ToFile(os.Stderr, 2)
+	// log is a placeholder until the builders pass an output stream down
+	// client facing libraries should not be using log
+	log = utillog.ToFile(os.Stderr, 2)
 
 	// InputContentPath is the path at which the build inputs will be available
 	// to all the build containers.
@@ -194,7 +194,7 @@ func buildPostCommit(postCommitSpec buildapiv1.BuildPostCommitSpec) string {
 		return ""
 	}
 
-	glog.V(4).Infof("Post commit hook spec: %+v", postCommitSpec)
+	log.V(4).Infof("Post commit hook spec: %+v", postCommitSpec)
 
 	if script != "" {
 		// The `-i` flag is needed to support CentOS and RHEL images
@@ -281,14 +281,14 @@ func HandleBuildStatusUpdate(build *buildapiv1.Build, client buildclientv1.Build
 			latestBuild = nil
 		}
 
-		glog.V(4).Infof("Retryable error occurred, retrying.  error: %v", err)
+		log.V(4).Infof("Retryable error occurred, retrying.  error: %v", err)
 
 		return false, nil
 
 	})
 
 	if err != nil {
-		glog.Infof("error: Unable to update build status: %v", err)
+		log.Infof("error: Unable to update build status: %v", err)
 	}
 }
 
@@ -373,7 +373,7 @@ func readSourceInfo() (*git.SourceInfo, error) {
 		return nil, err
 	}
 
-	glog.V(4).Infof("Found git source info: %#v", *sourceInfo)
+	log.V(4).Infof("Found git source info: %#v", *sourceInfo)
 	return sourceInfo, nil
 }
 
@@ -430,7 +430,7 @@ func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.Sou
 	}
 
 	out := dockerfile.Write(node)
-	glog.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
+	log.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
 	return overwriteFile(dockerfilePath, out)
 }
 

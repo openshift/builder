@@ -19,24 +19,24 @@ package set
 import (
 	"fmt"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"k8s.io/klog"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/printers"
+	"k8s.io/cli-runtime/pkg/resource"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions/printers"
-	"k8s.io/kubernetes/pkg/kubectl/genericclioptions/resource"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
 	"k8s.io/kubernetes/pkg/kubectl/util/i18n"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 )
 
-// SelectorOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
+// SetSelectorOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
 // referencing the cmd.Flags()
 type SetSelectorOptions struct {
 	// Bound
@@ -73,13 +73,13 @@ var (
         kubectl create deployment my-dep -o yaml --dry-run | kubectl label --local -f - environment=qa -o yaml | kubectl create -f -`)
 )
 
+// NewSelectorOptions returns an initialized SelectorOptions instance
 func NewSelectorOptions(streams genericclioptions.IOStreams) *SetSelectorOptions {
 	return &SetSelectorOptions{
 		ResourceBuilderFlags: genericclioptions.NewResourceBuilderFlags().
 			WithScheme(scheme.Scheme).
 			WithAll(false).
 			WithLocal(false).
-			WithUninitialized(false).
 			WithLatest(),
 		PrintFlags:  genericclioptions.NewPrintFlags("selector updated").WithTypeSetter(scheme.Scheme),
 		RecordFlags: genericclioptions.NewRecordFlags(),
@@ -95,11 +95,11 @@ func NewCmdSelector(f cmdutil.Factory, streams genericclioptions.IOStreams) *cob
 	o := NewSelectorOptions(streams)
 
 	cmd := &cobra.Command{
-		Use: "selector (-f FILENAME | TYPE NAME) EXPRESSIONS [--resource-version=version]",
+		Use:                   "selector (-f FILENAME | TYPE NAME) EXPRESSIONS [--resource-version=version]",
 		DisableFlagsInUseLine: true,
-		Short:   i18n.T("Set the selector on a resource"),
-		Long:    fmt.Sprintf(selectorLong, validation.LabelValueMaxLength),
-		Example: selectorExample,
+		Short:                 i18n.T("Set the selector on a resource"),
+		Long:                  fmt.Sprintf(selectorLong, validation.LabelValueMaxLength),
+		Example:               selectorExample,
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())
@@ -171,7 +171,7 @@ func (o *SetSelectorOptions) RunSelector() error {
 
 			// record this change (for rollout history)
 			if err := o.Recorder.Record(patch.Info.Object); err != nil {
-				glog.V(4).Infof("error recording current command: %v", err)
+				klog.V(4).Infof("error recording current command: %v", err)
 			}
 
 			return runtime.Encode(scheme.DefaultJSONEncoder(), info.Object)
@@ -184,7 +184,7 @@ func (o *SetSelectorOptions) RunSelector() error {
 			return o.PrintObj(info.Object, o.Out)
 		}
 
-		actual, err := resource.NewHelper(info.Client, info.Mapping).Patch(info.Namespace, info.Name, types.StrategicMergePatchType, patch.Patch)
+		actual, err := resource.NewHelper(info.Client, info.Mapping).Patch(info.Namespace, info.Name, types.StrategicMergePatchType, patch.Patch, nil)
 		if err != nil {
 			return err
 		}
