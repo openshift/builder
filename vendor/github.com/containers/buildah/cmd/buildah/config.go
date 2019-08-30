@@ -194,8 +194,11 @@ func updateConfig(builder *buildah.Builder, c *cobra.Command, iopts configResult
 				}
 				env[1] = os.Expand(env[1], getenv)
 				builder.SetEnv(env[0], env[1])
-			} else {
+			} else if strings.HasSuffix(env[0], "-") {
+				env[0] = strings.TrimSuffix(env[0], "-")
 				builder.UnsetEnv(env[0])
+			} else {
+				logrus.Errorf("error setting variable %q: no value given.", env[0])
 			}
 		}
 		conditionallyAddHistory(builder, c, "/bin/sh -c #(nop) ENV %s", strings.Join(iopts.env, " "))
@@ -217,9 +220,19 @@ func updateConfig(builder *buildah.Builder, c *cobra.Command, iopts configResult
 	}
 	if c.Flag("volume").Changed {
 		if volSpec := iopts.volume; len(volSpec) > 0 {
-			for _, spec := range volSpec {
-				builder.AddVolume(spec)
-				conditionallyAddHistory(builder, c, "/bin/sh -c #(nop) VOLUME %s", spec)
+			for _, volVal := range volSpec {
+				if strings.HasSuffix(volVal, "-") {
+					rmVol := strings.TrimSuffix(volVal, "-")
+					if builder.CheckVolume(rmVol) {
+						builder.RemoveVolume(rmVol)
+					} else {
+						fmt.Printf("volume %s cannot be removed because it does not exist, adding volume %s\n", rmVol, volVal)
+						builder.AddVolume(volVal)
+					}
+				} else {
+					builder.AddVolume(volVal)
+				}
+				conditionallyAddHistory(builder, c, "/bin/sh -c #(nop) VOLUME %s", volVal)
 			}
 		}
 	}
@@ -229,8 +242,11 @@ func updateConfig(builder *buildah.Builder, c *cobra.Command, iopts configResult
 			label := strings.SplitN(labelSpec, "=", 2)
 			if len(label) > 1 {
 				builder.SetLabel(label[0], label[1])
-			} else {
+			} else if strings.HasSuffix(label[0], "-") {
+				label[0] = strings.TrimSuffix(label[0], "-")
 				builder.UnsetLabel(label[0])
+			} else {
+				logrus.Errorf("error adding label %q: no value given", label[0])
 			}
 		}
 		conditionallyAddHistory(builder, c, "/bin/sh -c #(nop) LABEL %s", strings.Join(iopts.label, " "))
@@ -262,13 +278,17 @@ func updateConfig(builder *buildah.Builder, c *cobra.Command, iopts configResult
 			conditionallyAddHistory(builder, c, "/bin/sh -c #(nop) ONBUILD %s", onbuild)
 		}
 	}
+
 	if c.Flag("annotation").Changed {
 		for _, annotationSpec := range iopts.annotation {
 			annotation := strings.SplitN(annotationSpec, "=", 2)
 			if len(annotation) > 1 {
 				builder.SetAnnotation(annotation[0], annotation[1])
-			} else {
+			} else if strings.HasSuffix(annotation[0], "-") {
+				annotation[0] = strings.TrimSuffix(annotation[0], "-")
 				builder.UnsetAnnotation(annotation[0])
+			} else {
+				logrus.Errorf("error adding annotation %q: no value given", annotation[0])
 			}
 		}
 	}

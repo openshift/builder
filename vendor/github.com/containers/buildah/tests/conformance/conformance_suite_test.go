@@ -20,7 +20,7 @@ import (
 
 var (
 	defaultWaitTimeout = 240
-	GLOBALOPTIONS      = []string{"--root",
+	options            = []string{"--root",
 		"--runroot",
 		"--registries-conf",
 		"--registries-conf-dir",
@@ -29,7 +29,7 @@ var (
 		"--userns-uid-map",
 		"--userns-gid-map",
 	}
-	BUILDAH_SUBCMD = []string{"add",
+	subcommands = []string{"add",
 		"bud",
 		"commit",
 		"config",
@@ -47,7 +47,7 @@ var (
 		"umount",
 		"unshare",
 	}
-	ERR_MSG = `The test Dockerfile:
+	errorMessage = `The test Dockerfile:
 	DOCKERFILECONTENT
 The Buildah bud command:
 	BUILDAHCMD
@@ -120,7 +120,7 @@ func BuildahCreate(tempDir string) BuildAhTest {
 	globalOptions := make(map[string]string)
 	cwd, _ := os.Getwd()
 
-	for _, n := range GLOBALOPTIONS {
+	for _, n := range options {
 		option = strings.Replace(strings.Title(strings.Trim(n, " ")), " ", "", -1)
 		envKey = strings.Replace(strings.ToUpper(strings.Trim(n, "-")), "-", "_", -1)
 		if envSeted(envKey) {
@@ -128,7 +128,7 @@ func BuildahCreate(tempDir string) BuildAhTest {
 		}
 	}
 
-	for _, n := range BUILDAH_SUBCMD {
+	for _, n := range subcommands {
 		envKey = strings.Replace("BUILDAH_SUBCMD_OPTIONS", "SUBCMD", strings.ToUpper(n), -1)
 		if envSeted(envKey) {
 			buildahCmdOptions[n] = strings.Split(os.Getenv(envKey), " ")
@@ -162,7 +162,7 @@ func BuildahCreate(tempDir string) BuildAhTest {
 func (p *BuildAhTest) MakeOptions(args []string) []string {
 	var addOptions, subArgs []string
 	var option string
-	for _, n := range GLOBALOPTIONS {
+	for _, n := range options {
 		option = strings.Replace(strings.Title(strings.Trim(n, " ")), " ", "", -1)
 		if p.GlobalOptions[option] != "" {
 			addOptions = append(addOptions, n, p.GlobalOptions[option])
@@ -411,7 +411,7 @@ func diffDebug(k string, a, b interface{}) string {
 	return fmt.Sprintf("%v\t\t%v\t\t%v\n", k, a, b)
 }
 
-// InspectCompareResult give the compare results from inpsect.
+// InspectCompareResult give the compare results from inspect.
 func InspectCompareResult(miss, left, diff []string) string {
 	msg := `Inspect Error Messages:
 	Item missing in buildah output: MISSKEYS

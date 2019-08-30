@@ -39,6 +39,9 @@ type frameDec struct {
 
 	rawInput byteBuffer
 
+	// Byte buffer that can be reused for small input blocks.
+	bBuf byteBuf
+
 	// asyncRunning indicates whether the async routine processes input on 'decoding'.
 	asyncRunning   bool
 	asyncRunningMu sync.Mutex
@@ -58,6 +61,9 @@ func newFrameDec(o decoderOptions) *frameDec {
 	d := frameDec{
 		o:             o,
 		maxWindowSize: 1 << 30,
+	}
+	if d.maxWindowSize > o.maxDecodedSize {
+		d.maxWindowSize = o.maxDecodedSize
 	}
 	return &d
 }

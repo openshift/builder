@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	. "github.com/vbauerster/mpb"
 	"github.com/vbauerster/mpb/decor"
@@ -60,11 +61,11 @@ func TestBarSetRefill(t *testing.T) {
 
 	total := 100
 	till := 30
-	refillRune := '+'
+	refillRune, _ := utf8.DecodeLastRuneInString(DefaultBarStyle)
 
-	bar := p.AddBar(int64(total), BarTrim())
+	bar := p.AddBar(int64(total), TrimSpace())
 
-	bar.SetRefill(till, refillRune)
+	bar.SetRefill(int64(till))
 	bar.IncrBy(till)
 
 	for i := 0; i < total-till; i++ {
@@ -76,10 +77,93 @@ func TestBarSetRefill(t *testing.T) {
 
 	wantBar := fmt.Sprintf("[%s%s]",
 		strings.Repeat(string(refillRune), till-1),
-		strings.Repeat("=", total-till-1))
+		strings.Repeat("=", total-till-1),
+	)
 
-	if !strings.Contains(buf.String(), wantBar) {
-		t.Errorf("Want bar: %s, got bar: %s\n", wantBar, buf.String())
+	got := string(getLastLine(buf.Bytes()))
+
+	if !strings.Contains(got, wantBar) {
+		t.Errorf("Want bar: %q, got bar: %q\n", wantBar, got)
+	}
+}
+
+func TestBarHas100PercentWithOnCompleteDecorator(t *testing.T) {
+	var buf bytes.Buffer
+
+	p := New(WithOutput(&buf))
+
+	total := 50
+
+	bar := p.AddBar(int64(total),
+		AppendDecorators(
+			decor.OnComplete(
+				decor.Percentage(), "done",
+			),
+		),
+	)
+
+	for i := 0; i < total; i++ {
+		bar.Increment()
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	p.Wait()
+
+	hundred := "100 %"
+	if !bytes.Contains(buf.Bytes(), []byte(hundred)) {
+		t.Errorf("Bar's buffer does not contain: %q\n", hundred)
+	}
+}
+
+func TestBarHas100PercentWithBarRemoveOnComplete(t *testing.T) {
+	var buf bytes.Buffer
+
+	p := New(WithOutput(&buf))
+
+	total := 50
+
+	bar := p.AddBar(int64(total),
+		BarRemoveOnComplete(),
+		AppendDecorators(decor.Percentage()),
+	)
+
+	for i := 0; i < total; i++ {
+		bar.Increment()
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	p.Wait()
+
+	hundred := "100 %"
+	if !bytes.Contains(buf.Bytes(), []byte(hundred)) {
+		t.Errorf("Bar's buffer does not contain: %q\n", hundred)
+	}
+}
+
+func TestBarStyle(t *testing.T) {
+	var buf bytes.Buffer
+	customFormat := "╢▌▌░╟"
+	p := New(WithOutput(&buf))
+	total := 80
+	bar := p.AddBar(int64(total), BarStyle(customFormat), TrimSpace())
+
+	for i := 0; i < total; i++ {
+		bar.Increment()
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	p.Wait()
+
+	runes := []rune(customFormat)
+	wantBar := fmt.Sprintf("%s%s%s",
+		string(runes[0]),
+		strings.Repeat(string(runes[1]), total-2),
+		string(runes[len(runes)-1]),
+	)
+	got := string(getLastLine(buf.Bytes()))
+
+	if got != wantBar {
+		t.Errorf("Want bar: %q:%d, got bar: %q:%d\n", wantBar, utf8.RuneCountInString(wantBar), got, utf8.RuneCountInString(got))
 	}
 }
 

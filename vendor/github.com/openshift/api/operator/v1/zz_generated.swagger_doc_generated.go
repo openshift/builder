@@ -401,9 +401,10 @@ func (IPAMConfig) SwaggerDoc() map[string]string {
 }
 
 var map_KuryrConfig = map[string]string{
-	"":                     "KuryrConfig configures the Kuryr-Kubernetes SDN",
-	"daemonProbesPort":     "The port kuryr-daemon will listen for readiness and liveness requests.",
-	"controllerProbesPort": "The port kuryr-controller will listen for readiness and liveness requests.",
+	"":                        "KuryrConfig configures the Kuryr-Kubernetes SDN",
+	"daemonProbesPort":        "The port kuryr-daemon will listen for readiness and liveness requests.",
+	"controllerProbesPort":    "The port kuryr-controller will listen for readiness and liveness requests.",
+	"openStackServiceNetwork": "openStackServiceNetwork contains the CIDR of network from which to allocate IPs for OpenStack Octavia's Amphora VMs. Please note that with Amphora driver Octavia uses two IPs from that network for each loadbalancer - one given by OpenShift and second for VRRP connections. As the first one is managed by OpenShift's and second by Neutron's IPAMs, those need to come from different pools. Therefore `openStackServiceNetwork` needs to be at least twice the size of `serviceNetwork`, and whole `serviceNetwork` must be overlapping with `openStackServiceNetwork`. cluster-network-operator will then make sure VRRP IPs are taken from the ranges inside `openStackServiceNetwork` that are not overlapping with `serviceNetwork`, effectivly preventing conflicts. If not set cluster-network-operator will use `serviceNetwork` expanded by decrementing the prefix size by 1.",
 }
 
 func (KuryrConfig) SwaggerDoc() map[string]string {
@@ -464,6 +465,7 @@ var map_OpenShiftSDNConfig = map[string]string{
 	"vxlanPort":              "vxlanPort is the port to use for all vxlan packets. The default is 4789.",
 	"mtu":                    "mtu is the mtu to use for the tunnel interface. Defaults to 1450 if unset. This must be 50 bytes smaller than the machine's uplink.",
 	"useExternalOpenvswitch": "useExternalOpenvswitch tells the operator not to install openvswitch, because it will be provided separately. If set, you must provide it yourself.",
+	"enableUnidling":         "enableUnidling controls whether or not the service proxy will support idling and unidling of services. By default, unidling is enabled.",
 }
 
 func (OpenShiftSDNConfig) SwaggerDoc() map[string]string {
