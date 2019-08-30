@@ -215,9 +215,10 @@ func tagDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag, p
 	if img == nil {
 		return storage.ErrImageUnknown
 	}
-	if err := store.SetNames(img.ID, append(img.Names, pushTag)); err != nil {
+	if err := util.AddImageNames(store, "", &systemContext, img, []string{pushTag}); err != nil {
 		return err
 	}
+	log.V(2).Infof("Added name %q to local image.", pushTag)
 
 	return nil
 }
