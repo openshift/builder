@@ -1,8 +1,7 @@
-export GO111MODULE=off
-
 SELINUXTAG := $(shell ./selinux_tag.sh)
+APPARMORTAG := $(shell hack/apparmor_tag.sh)
 STORAGETAGS := $(shell ./btrfs_tag.sh) $(shell ./btrfs_installed_tag.sh) $(shell ./libdm_tag.sh) $(shell ./ostree_tag.sh)
-SECURITYTAGS ?= seccomp $(SELINUXTAG)
+SECURITYTAGS ?= seccomp $(SELINUXTAG) $(APPARMORTAG)
 TAGS ?= $(SECURITYTAGS) $(STORAGETAGS)
 BUILDTAGS += $(TAGS)
 PREFIX := /usr/local
@@ -10,15 +9,23 @@ BINDIR := $(PREFIX)/bin
 BASHINSTALLDIR = $(PREFIX)/share/bash-completion/completions
 BUILDFLAGS := -tags "$(BUILDTAGS)"
 BUILDAH := buildah
+
 GO := go
 GO110 := 1.10
 GOVERSION := $(findstring $(GO110),$(shell go version))
+# test for go module support
+ifeq ($(shell go help mod >/dev/null 2>&1 && echo true), true)
+export GO_BUILD=GO111MODULE=on $(GO) build -mod=vendor
+else
+export GO_BUILD=$(GO) build
+endif
+
 GIT_COMMIT ?= $(if $(shell git rev-parse --short HEAD),$(shell git rev-parse --short HEAD),$(error "git failed"))
 BUILD_INFO := $(if $(shell date +%s),$(shell date +%s),$(error "date failed"))
-CNI_COMMIT := $(shell GO111MODULE=on go list -m github.com/containernetworking/cni | awk '{ print $$2 }')
 STATIC_STORAGETAGS = "containers_image_ostree_stub containers_image_openpgp exclude_graphdriver_devicemapper $(STORAGE_TAGS)"
 
-RUNC_COMMIT := 2c632d1a2de0192c3f18a2542ccb6f30a8719b1f
+CNI_COMMIT := $(shell sed -n 's;\tgithub.com/containernetworking/cni \([^ \n]*\).*$\;\1;p' go.mod)
+RUNC_COMMIT := $(shell sed -n 's;\tgithub.com/opencontainers/runc \([^ \n]*\).*$\;\1;p' go.mod)
 LIBSECCOMP_COMMIT := release-2.3
 
 EXTRALDFLAGS :=
@@ -33,15 +40,15 @@ static: $(SOURCES)
 
 .PHONY: binary
 binary:  $(SOURCES)
-	$(GO) build $(LDFLAGS) -o $(BUILDAH) $(BUILDFLAGS) ./cmd/buildah
+	$(GO_BUILD) $(LDFLAGS) -o $(BUILDAH) $(BUILDFLAGS) ./cmd/buildah
 
 buildah: binary
 
 darwin:
-	GOOS=darwin $(GO) build $(LDFLAGS) -o buildah.darwin -tags "containers_image_openpgp" ./cmd/buildah
+	GOOS=darwin $(GO_BUILD) $(LDFLAGS) -o buildah.darwin -tags "containers_image_openpgp" ./cmd/buildah
 
 imgtype: *.go docker/*.go util/*.go tests/imgtype/imgtype.go
-	$(GO) build $(LDFLAGS) -o imgtype $(BUILDFLAGS) ./tests/imgtype/imgtype.go
+	$(GO_BUILD) $(LDFLAGS) -o imgtype $(BUILDFLAGS) ./tests/imgtype/imgtype.go
 
 .PHONY: clean
 clean:
@@ -117,11 +124,11 @@ install.runc:
 
 .PHONY: test-integration
 test-integration: install.tools
-	./tests/tools/ginkgo -v tests/e2e/.
+	./tests/tools/ginkgo $(BUILDFLAGS) -v tests/e2e/.
 	cd tests; ./test_runner.sh
 
 tests/testreport/testreport: tests/testreport/testreport.go
-	$(GO) build -ldflags "-linkmode external -extldflags -static" -tags "$(STORAGETAGS) $(SECURITYTAGS)" -o tests/testreport/testreport ./tests/testreport
+	$(GO_BUILD) -ldflags "-linkmode external -extldflags -static" -tags "$(STORAGETAGS) $(SECURITYTAGS)" -o tests/testreport/testreport ./tests/testreport
 
 .PHONY: test-unit
 test-unit: tests/testreport/testreport

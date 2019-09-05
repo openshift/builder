@@ -115,7 +115,7 @@ func TestRefMatchesPrefix(t *testing.T) {
 	}
 }
 
-func TestGetConfigPath(t *testing.T) {
+func TestConfigPath(t *testing.T) {
 	const nondefaultPath = "/this/is/not/the/default/registries.conf"
 	const variableReference = "$HOME"
 	const rootPrefix = "/root/prefix"
@@ -146,7 +146,7 @@ func TestGetConfigPath(t *testing.T) {
 		// No environment expansion happens in the overridden paths
 		{&types.SystemContext{SystemRegistriesConfPath: variableReference}, variableReference},
 	} {
-		path := getConfigPath(c.sys)
+		path := ConfigPath(c.sys)
 		assert.Equal(t, c.expected, path)
 	}
 }
@@ -444,4 +444,23 @@ func TestPullSourcesFromReference(t *testing.T) {
 	pullSources, err = registryB.PullSourcesFromReference(referenceBTag)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(pullSources))
+}
+
+func TestTryUpdatingCache(t *testing.T) {
+	ctx := &types.SystemContext{
+		SystemRegistriesConfPath: "testdata/try-update-cache-valid.conf",
+	}
+	configCache = make(map[string]*V2RegistriesConf)
+	registries, err := TryUpdatingCache(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(registries.Registries))
+	assert.Equal(t, 1, len(configCache))
+
+	ctxInvalid := &types.SystemContext{
+		SystemRegistriesConfPath: "testdata/try-update-cache-invalid.conf",
+	}
+	registries, err = TryUpdatingCache(ctxInvalid)
+	assert.NotNil(t, err)
+	assert.Nil(t, registries)
+	assert.Equal(t, 1, len(configCache))
 }

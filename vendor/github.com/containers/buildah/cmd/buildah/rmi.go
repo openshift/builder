@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"syscall"
 
 	buildahcli "github.com/containers/buildah/pkg/cli"
 	"github.com/containers/buildah/pkg/parse"
@@ -78,7 +79,7 @@ func rmiCmd(c *cobra.Command, args []string, iopts rmiResults) error {
 	imagesToDelete := args[:]
 
 	if iopts.all {
-		imagesToDelete, err = findAllImages(store)
+		imagesToDelete, err = findAllRWImages(store)
 		if err != nil {
 			return err
 		}
@@ -114,7 +115,13 @@ func deleteImages(ctx context.Context, systemContext *types.SystemContext, store
 			lastError = errors.Wrapf(err, "could not get image %q", id)
 			continue
 		}
-
+		if image.ReadOnly {
+			if lastError != nil {
+				fmt.Fprintln(os.Stderr, lastError)
+			}
+			lastError = errors.Wrapf(syscall.EINVAL, "can not remove readonly image %q", id)
+			continue
+		}
 		ctrIDs, err := runningContainers(store, image)
 		if err != nil {
 			if lastError != nil {
@@ -218,7 +225,7 @@ func getImage(ctx context.Context, systemContext *types.SystemContext, store sto
 		logrus.Debug(err)
 	}
 	if ref == nil {
-		if ref, err = storageImageRef(ctx, systemContext, store, id); err != nil {
+		if ref, err = storageImageRef(systemContext, store, id); err != nil {
 			logrus.Debug(err)
 		}
 	}
@@ -328,7 +335,7 @@ func properImageRef(ctx context.Context, id string) (types.ImageReference, error
 
 // If it's looks like an image reference that's relative to our storage, parse
 // it and check if it corresponds to an image that actually exists.
-func storageImageRef(ctx context.Context, systemContext *types.SystemContext, store storage.Store, id string) (types.ImageReference, error) {
+func storageImageRef(systemContext *types.SystemContext, store storage.Store, id string) (types.ImageReference, error) {
 	ref, _, err := util.FindImage(store, "", systemContext, id)
 	if err != nil {
 		if ref != nil {
@@ -359,7 +366,7 @@ func storageImageID(ctx context.Context, store storage.Store, id string) (types.
 }
 
 // Returns a list of all existing images
-func findAllImages(store storage.Store) ([]string, error) {
+func findAllRWImages(store storage.Store) ([]string, error) {
 	imagesToDelete := []string{}
 
 	images, err := store.Images()
@@ -367,6 +374,9 @@ func findAllImages(store storage.Store) ([]string, error) {
 		return nil, errors.Wrapf(err, "error reading images")
 	}
 	for _, image := range images {
+		if image.ReadOnly {
+			continue
+		}
 		imagesToDelete = append(imagesToDelete, image.ID)
 	}
 
