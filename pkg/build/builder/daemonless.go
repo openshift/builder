@@ -294,7 +294,7 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	logName := imageName
 	if dref := dest.DockerReference(); dref != nil {
 		if named, ok := dref.(ireference.Named); ok {
-			if canonical, err := ireference.WithDigest(named, digest); err == nil {
+			if canonical, err := ireference.WithDigest(ireference.TrimNamed(named), digest); err == nil {
 				logName = canonical.String()
 			}
 		}
