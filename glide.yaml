@@ -40,6 +40,7 @@ import:
   - pkg/git
   - pkg/serviceability
 - package: github.com/openshift/source-to-image
+  version: dd167bbb4ee85924d9b864a424c43d598f5d4f30
   subpackages:
   - pkg/api
   - pkg/api/describe
@@ -56,6 +57,7 @@ import:
   subpackages:
   - prometheus
 - package: github.com/spf13/cobra
+  version: 7c674d9e72017ed25f6d2b5e497a1368086b6a6f
 - package: github.com/spf13/pflag
 - package: k8s.io/api
   repo:    https://github.com/openshift/kubernetes-api.git
@@ -97,11 +99,11 @@ import:
   version: d641721ec2dead6fe5ca284096fe4b1fcd49e427
 # Pins for buildah
 - package: github.com/containers/buildah
-  version: 2a962f177cb206dde5fc8e8d251bdfd80e2c9e52
+  version: release-1.8
 - package: github.com/containers/image
-  version: 9467ac9cfd92c545aa389f22f27e552de053c0f2
+  version: v3.0.2
 - package: github.com/containers/storage
-  version: v1.12.7
+  version: v1.13.2
 - package: github.com/opencontainers/go-digest
   version: c9281466c8b2f606084ac71339773efd177436e7
 - package: github.com/containernetworking/cni
@@ -114,7 +116,7 @@ import:
   version: v1.0.0
 # mpb needs pin to fix resolution errors
 - package: github.com/vbauerster/mpb
-  version: v3.3.4
+  version: v3.4.0
 # pinned to fix sirupsen issues
 - package: github.com/klauspost/cpuid
   version: 0da02118eaa37aa89aea6776b464a4ad00990af1
@@ -124,7 +126,7 @@ import:
 - package: github.com/docker/docker-credential-helpers
   version: 123ba1b7cd646aaee13ba2e028b7c268db72e2b2
 - package: github.com/klauspost/compress
-  version: 30be6041bed523c18e269a700ebd9c2ea9328574
+  version: v1.8.1
 - package: github.com/mattn/go-isatty
   version: c2a7a6ca930a4cd0bc33a3f298eb71960732a3a7
 - package: github.com/openshift/origin
@@ -135,3 +137,16 @@ import:
   version: e225da77a7e68af35c70ccbf71af2b83e6acac3c
 - package: k8s.io/apiextensions-apiserver
   version: a384d17938fe55d54a52d5668bf0ff40044daef0
+# pinned because we're post-release, so the only bumps should be intentional
+- package: github.com/etcd-io/bbolt
+  version: 2eb7227adea1d5cf85f0bc2a82b7059b13c2fa68
+- package: github.com/hashicorp/go-multierror
+  version: 886a7fbe3eb1c874d46f623bfa70af45f425b3d1
+- package: github.com/ostreedev/ostree-go
+  version: d0388bd827cfac6fa8eec760246eb8375674b2a0
+- package: github.com/pkg/errors
+  version: 839d9e913e063e28dfd0e6c7b7512793e0a48be9
+- package: github.com/pquerna/ffjson
+  version: e517b90714f7c0eabe6d2e570a5886ae077d6db6
+- package: github.com/seccomp/containers-golang
+  version: 8ca8945ccf5ffe4eca696cac92423f93ea4b61a6
