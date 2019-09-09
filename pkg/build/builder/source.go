@@ -401,8 +401,10 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 		PullPolicy:       pullPolicy,
 		ReportWriter:     os.Stdout,
 		SystemContext:    &systemContext,
-		CommonBuildOpts:  &buildah.CommonBuildOptions{},
 		DropCapabilities: dropCapabilities(),
+		CommonBuildOpts: &buildah.CommonBuildOptions{
+			HTTPProxy: true,
+		},
 	}
 
 	builder, err := buildah.NewBuilder(ctx, store, builderOptions)
