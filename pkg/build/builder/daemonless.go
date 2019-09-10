@@ -179,6 +179,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 			{Name: string(specs.NetworkNamespace), Host: true},
 		},
 		CommonBuildOpts: &buildah.CommonBuildOptions{
+			HTTPProxy:    true,
 			Memory:       opts.Memory,
 			MemorySwap:   opts.Memswap,
 			CgroupParent: opts.CgroupParent,
@@ -400,6 +401,7 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 		Container: createOpts.Name,
 		FromImage: createOpts.Config.Image,
 		CommonBuildOpts: &buildah.CommonBuildOptions{
+			HTTPProxy:    true,
 			Memory:       createOpts.HostConfig.Memory,
 			MemorySwap:   createOpts.HostConfig.MemorySwap,
 			CgroupParent: createOpts.HostConfig.CgroupParent,
