@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -215,6 +216,12 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 			gitSource.URI = overrideURL.String()
 		}
 		gitEnv = append(gitEnv, secretsEnv...)
+		// in addition to secrets injecting SCM Auth content, the global CA injection support
+		// introduced in 4.2 can also provide an sslCAPath that we want to include
+		if !alreadyProvidedCertInGitConfig(gitEnv) {
+			gitCAEnv, _, _ := scmAuths.Setup("/etc/pki/ca-trust/extracted/pem")
+			gitEnv = append(gitEnv, gitCAEnv...)
+		}
 	}
 	if gitSource.HTTPProxy != nil && len(*gitSource.HTTPProxy) > 0 {
 		gitEnv = append(gitEnv, fmt.Sprintf("HTTP_PROXY=%s", *gitSource.HTTPProxy))
@@ -229,6 +236,28 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 		gitEnv = append(gitEnv, fmt.Sprintf("no_proxy=%s", *gitSource.NoProxy))
 	}
 	return c.sourceSecretDir, bld.MergeEnv(os.Environ(), gitEnv), nil
+}
+
+func alreadyProvidedCertInGitConfig(gitEnv []string) bool {
+	for _, genv := range gitEnv {
+		if strings.HasPrefix(genv, "GIT_CONFIG") {
+			envParts := strings.Split(genv, "=")
+			if len(envParts) == 1 {
+				return false
+			}
+			lines, err := bld.ReadLines(envParts[1])
+			if err != nil {
+				return false
+			}
+			for _, line := range lines {
+				if strings.Contains(line, "sslCAInfo") {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
 }
 
 // clone is responsible for cloning the source referenced in the buildconfig

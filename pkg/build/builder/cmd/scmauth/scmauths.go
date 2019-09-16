@@ -17,6 +17,7 @@ func GitAuths(sourceURL *s2igit.URL) SCMAuths {
 		&UsernamePassword{SourceURL: *sourceURL},
 		&CACert{SourceURL: *sourceURL},
 		&GitConfig{},
+		&InjectedPem{SourceURL: *sourceURL},
 	}
 	return auths
 }
