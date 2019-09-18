@@ -423,7 +423,8 @@ func timedCommand(timeout time.Duration, name, dir string, env []string, args ..
 
 	klog.V(4).Infof("Executing %s %s", name, strings.Join(args, " "))
 
-	cmd := exec.Command(name, args...)
+	allInOne := name + " " + strings.Join(args, " ")
+	cmd := exec.Command("/bin/bash", "-c", "scl_source enable rh-git29 && "+allInOne)
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.Stdout = &stdoutBuffer

@@ -8,7 +8,8 @@ FROM registry.svc.ci.openshift.org/ocp/4.0:base
 
 ENV BASH_ENV=/usr/local/bin/scl_enable \
     ENV=/usr/local/bin/scl_enable \
-    PROMPT_COMMAND=". /usr/local/bin/scl_enable"
+    PROMPT_COMMAND=". /usr/local/bin/scl_enable" \
+    PATH=/opt/rh/rh-git29/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN INSTALL_PKGS=" \
       bind-utils bsdtar findutils rh-git29 hostname lsof socat \
@@ -32,8 +33,7 @@ RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-docker-build && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-git-clone && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-manage-dockerfile && \
-    ln -s /usr/bin/openshift-builder /usr/bin/openshift-extract-image-content && \
-    ln -f /opt/rh/rh-git29/root/usr/bin/git /usr/bin/git
+    ln -s /usr/bin/openshift-builder /usr/bin/openshift-extract-image-content
 LABEL io.k8s.display-name="OpenShift Builder" \
       io.k8s.description="This is a component of OpenShift and is responsible for executing image builds." \
       io.openshift.tags="openshift,builder"
