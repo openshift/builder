@@ -421,7 +421,7 @@ func command(name, dir string, env []string, args ...string) (stdout, stderr str
 func timedCommand(timeout time.Duration, name, dir string, env []string, args ...string) (stdout, stderr string, err error) {
 	var stdoutBuffer, stderrBuffer bytes.Buffer
 
-	klog.V(4).Infof("Executing %s %s", name, strings.Join(args, " "))
+	klog.V(0).Infof("GGM Executing %s %s", name, strings.Join(args, " "))
 
 	allInOne := name + " " + strings.Join(args, " ")
 	cmd := exec.Command("/bin/bash", "-c", "scl_source enable rh-git29 && "+allInOne)

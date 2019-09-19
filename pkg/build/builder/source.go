@@ -168,13 +168,13 @@ func checkRemoteGit(gitClient GitClient, url string, initialTimeout time.Duratio
 
 	timeout := initialTimeout
 	for {
-		log.V(4).Infof("git ls-remote --heads %s", url)
+		log.V(0).Infof("GGM git ls-remote --heads %s", url)
 		out, errOut, err = gitClient.TimedListRemote(timeout, url, "--heads")
 		if len(out) != 0 {
-			log.V(4).Infof(out)
+			log.V(0).Infof(out)
 		}
 		if len(errOut) != 0 {
-			log.V(4).Infof(errOut)
+			log.V(0).Infof(errOut)
 		}
 		if err != nil {
 			if _, ok := err.(*git.TimeoutError); ok {
@@ -274,12 +274,12 @@ func extractGitSource(ctx context.Context, gitClient GitClient, gitSource *build
 		cloneOptions = append(cloneOptions, git.Shallow)
 	}
 
-	log.V(3).Infof("Cloning source from %s", gitSource.URI)
+	log.V(0).Infof("GGM Cloning source from %s", gitSource.URI)
 
 	// Only use the quiet flag if Verbosity is not 5 or greater
-	if !log.Is(5) {
-		cloneOptions = append(cloneOptions, "--quiet")
-	}
+	//if !log.Is(5) {
+	//	cloneOptions = append(cloneOptions, "--quiet")
+	//}
 	startTime := metav1.Now()
 	if err := gitClient.CloneWithOptions(dir, gitSource.URI, cloneOptions...); err != nil {
 		return true, err
