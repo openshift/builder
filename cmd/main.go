@@ -6,8 +6,10 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/containers/storage/pkg/reexec"
@@ -24,6 +26,14 @@ func main() {
 	if reexec.Init() {
 		return
 	}
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		fmt.Println("Error: received unexpected terminate signal")
+		os.Exit(1)
+	}()
 
 	logs.InitLogs()
 	defer logs.FlushLogs()
