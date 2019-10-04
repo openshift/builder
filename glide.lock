@@ -1,5 +1,5 @@
-hash: 30af7d0179abea3b422322199334c2299ed096675d9615dd045f0b7cff204a4a
-updated: 2019-05-29T09:09:47.590821599-04:00
+hash: d15c7d65c510a024e73ba72a84be2c57d237cef2ab03d7c87af9ff302284645d
+updated: 2019-09-09T15:25:08.380025912-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -21,7 +21,7 @@ imports:
   - pkg/types/current
   - pkg/version
 - name: github.com/containers/buildah
-  version: 2a962f177cb206dde5fc8e8d251bdfd80e2c9e52
+  version: ff6e30a8c92007a89f9d49c993570cba788cf893
   subpackages:
   - bind
   - chroot
@@ -34,7 +34,7 @@ imports:
   - pkg/unshare
   - util
 - name: github.com/containers/image
-  version: 9467ac9cfd92c545aa389f22f27e552de053c0f2
+  version: 186df8702a61dd6ed16a88532ed9a10ddc679132
   subpackages:
   - copy
   - directory
@@ -60,8 +60,8 @@ imports:
   - pkg/blobinfocache/none
   - pkg/compression
   - pkg/docker/config
+  - pkg/keyctl
   - pkg/strslice
-  - pkg/sysregistries
   - pkg/sysregistriesv2
   - pkg/tlsclientconfig
   - signature
@@ -72,7 +72,7 @@ imports:
   - types
   - version
 - name: github.com/containers/storage
-  version: fb65405c4a82300143a800a7891dd4b9987449b3
+  version: 69bcd96b85fe4fdda4a491cc279ff888522d9122
   subpackages:
   - drivers
   - drivers/aufs
@@ -98,6 +98,7 @@ imports:
   - pkg/idtools
   - pkg/ioutils
   - pkg/locker
+  - pkg/lockfile
   - pkg/longpath
   - pkg/loopback
   - pkg/mount
@@ -110,6 +111,7 @@ imports:
   - pkg/stringid
   - pkg/stringutils
   - pkg/system
+  - pkg/tarlog
   - pkg/truncindex
 - name: github.com/cyphar/filepath-securejoin
   version: ae69057f2299fb9e5ba2df738607e6a505b74ab6
@@ -273,9 +275,14 @@ imports:
 - name: github.com/json-iterator/go
   version: f2b4162afba35581b6d4a50d3b8f34e33c144682
 - name: github.com/klauspost/compress
-  version: 30be6041bed523c18e269a700ebd9c2ea9328574
+  version: 2c38f6d2dc5a6a21b6851f2414f4e10adf8e3eee
   subpackages:
   - flate
+  - fse
+  - huff0
+  - snappy
+  - zstd
+  - zstd/internal/xxhash
 - name: github.com/klauspost/cpuid
   version: 0da02118eaa37aa89aea6776b464a4ad00990af1
 - name: github.com/klauspost/pgzip
@@ -427,6 +434,8 @@ imports:
   subpackages:
   - fflib/v1
   - fflib/v1/internal
+  - inception
+  - shared
 - name: github.com/prometheus/client_golang
   version: 7490f0a74525a1f863eaf81b42f3ead3a1ecc43a
   subpackages:
@@ -470,7 +479,7 @@ imports:
   - tar/asm
   - tar/storage
 - name: github.com/vbauerster/mpb
-  version: fbc6960bc81e6c0ef7f1d32f12923934f1f5836f
+  version: b1fa246876b8398a7e3aad2000ef5c0b1a0b58fe
   subpackages:
   - cwriter
   - decor
@@ -596,7 +605,7 @@ imports:
   subpackages:
   - pkg/features
 - name: k8s.io/apimachinery
-  version: 5f1ab6ad9104144e43c7e477938fd278ade27eb2
+  version: 5c0e7e0ce91a8083e170765a544def530b8ee4f0
   repo: https://github.com/openshift/kubernetes-apimachinery.git
   subpackages:
   - pkg/api/equality
@@ -654,7 +663,7 @@ imports:
   - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/apiserver
-  version: 996cefeb14170756dc1626dde64fcfb63c8edb24
+  version: 6eafd6a7ccfb33517f1d852155d8862d8b5d3e93
   repo: https://github.com/openshift/kubernetes-apiserver.git
   subpackages:
   - pkg/apis/audit
@@ -666,7 +675,7 @@ imports:
   - pkg/util/feature
   - pkg/util/logs
 - name: k8s.io/client-go
-  version: 7eaf7133bcfa11e19ebbbc76ff53e2cb32524683
+  version: 9feea9d4142fd23f46451ef4292787b85e2e0a52
   repo: https://github.com/openshift/kubernetes-client-go.git
   subpackages:
   - discovery
@@ -751,7 +760,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 529644d9bc332d7c4b99ff2a17e25a976089c96e
+  version: 84f203614d99ab73d7de2ae51bab61877eac7af6
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events

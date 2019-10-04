@@ -3,197 +3,293 @@ package mpb
 import (
 	"bytes"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestDraw(t *testing.T) {
 	// key is termWidth
-	testSuite := map[int]map[string]struct {
+	testSuite := map[int][]struct {
+		name           string
 		total, current int64
 		barWidth       int
-		barRefill      *refill
+		trimSpace      bool
+		rup            int64
 		want           string
 	}{
-		100: {
-			"t,c,bw{100,100,0}": {
-				total:    100,
-				current:  0,
-				barWidth: 100,
-				want:     "[--------------------------------------------------------------------------------------------------]",
-			},
-			"t,c,bw{100,1,100}": {
-				total:    100,
-				current:  1,
-				barWidth: 100,
-				want:     "[>-------------------------------------------------------------------------------------------------]",
-			},
-			"t,c,bw{100,40,100}": {
-				total:    100,
-				current:  40,
-				barWidth: 100,
-				want:     "[======================================>-----------------------------------------------------------]",
-			},
-			"t,c,bw{100,40,100}refill{'+', 32}": {
-				total:     100,
-				current:   40,
-				barWidth:  100,
-				barRefill: &refill{'+', 32},
-				want:      "[+++++++++++++++++++++++++++++++=======>-----------------------------------------------------------]",
-			},
-			"t,c,bw{100,99,100}": {
-				total:    100,
-				current:  99,
-				barWidth: 100,
-				want:     "[================================================================================================>-]",
-			},
-			"t,c,bw{100,100,100}": {
-				total:    100,
-				current:  100,
-				barWidth: 100,
-				want:     "[==================================================================================================]",
-			},
-		},
 		2: {
-			"t,c,bw{0,0,100}": {
-				barWidth: 100,
-				want:     "[]",
-			},
-			"t,c,bw{60,20,80}": {
+			{
+				name:     "t,c,bw{60,20,80}",
 				total:    60,
 				current:  20,
 				barWidth: 80,
-				want:     "[]",
+				want:     "  ",
+			},
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "",
 			},
 		},
 		3: {
-			"t,c,bw{100,20,100}": {
-				total:    100,
+			{
+				name:     "t,c,bw{60,20,80}",
+				total:    60,
 				current:  20,
-				barWidth: 100,
-				want:     "[-]",
+				barWidth: 80,
+				want:     "  ",
 			},
-			"t,c,bw{100,98,100}": {
-				total:    100,
-				current:  98,
-				barWidth: 100,
-				want:     "[=]",
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "",
 			},
-			"t,c,bw{100,100,100}": {
-				total:    100,
-				current:  100,
-				barWidth: 100,
-				want:     "[=]",
+		},
+		4: {
+			{
+				name:     "t,c,bw{60,20,80}",
+				total:    60,
+				current:  20,
+				barWidth: 80,
+				want:     "  ",
+			},
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "[]",
 			},
 		},
 		5: {
-			"t,c,bw{100,20,100}": {
-				total:    100,
+			{
+				name:     "t,c,bw{60,20,80}",
+				total:    60,
 				current:  20,
-				barWidth: 100,
-				want:     "[>--]",
+				barWidth: 80,
+				want:     "  ",
 			},
-			"t,c,bw{100,98,100}": {
-				total:    100,
-				current:  98,
-				barWidth: 100,
-				want:     "[===]",
-			},
-			"t,c,bw{100,100,100}": {
-				total:    100,
-				current:  100,
-				barWidth: 100,
-				want:     "[===]",
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "[>--]",
 			},
 		},
 		6: {
-			"t,c,bw{100,20,100}": {
-				total:    100,
+			{
+				name:     "t,c,bw{60,20,80}",
+				total:    60,
 				current:  20,
-				barWidth: 100,
-				want:     "[>---]",
+				barWidth: 80,
+				want:     " [] ",
 			},
-			"t,c,bw{100,98,100}": {
-				total:    100,
-				current:  98,
-				barWidth: 100,
-				want:     "[====]",
-			},
-			"t,c,bw{100,100,100}": {
-				total:    100,
-				current:  100,
-				barWidth: 100,
-				want:     "[====]",
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "[>---]",
 			},
 		},
-		20: {
-			"t,c,bw{100,20,100}": {
-				total:    100,
+		7: {
+			{
+				name:     "t,c,bw{60,20,80}",
+				total:    60,
 				current:  20,
-				barWidth: 100,
-				want:     "[===>--------------]",
+				barWidth: 80,
+				want:     " [>--] ",
 			},
-			"t,c,bw{100,60,100}": {
-				total:    100,
-				current:  60,
-				barWidth: 100,
-				want:     "[==========>-------]",
-			},
-			"t,c,bw{100,98,100}": {
-				total:    100,
-				current:  98,
-				barWidth: 100,
-				want:     "[==================]",
-			},
-			"t,c,bw{100,100,100}": {
-				total:    100,
-				current:  100,
-				barWidth: 100,
-				want:     "[==================]",
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "[=>---]",
 			},
 		},
-		50: {
-			"t,c,bw{100,20,100}": {
-				total:    100,
+		8: {
+			{
+				name:     "t,c,bw{60,20,80}",
+				total:    60,
 				current:  20,
-				barWidth: 100,
-				want:     "[=========>--------------------------------------]",
+				barWidth: 80,
+				want:     " [>---] ",
 			},
-			"t,c,bw{100,60,100}": {
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "[=>----]",
+			},
+		},
+		80: {
+			{
+				name:     "t,c,bw{60,20,80}",
+				total:    60,
+				current:  20,
+				barWidth: 80,
+				want:     " [========================>---------------------------------------------------] ",
+			},
+			{
+				name:      "t,c,bw,trim{60,20,80,true}",
+				total:     60,
+				current:   20,
+				barWidth:  80,
+				trimSpace: true,
+				want:      "[=========================>----------------------------------------------------]",
+			},
+		},
+		100: {
+			{
+				name:     "t,c,bw{100,100,0}",
 				total:    100,
-				current:  60,
+				current:  0,
 				barWidth: 100,
-				want:     "[============================>-------------------]",
+				want:     " [------------------------------------------------------------------------------------------------] ",
 			},
-			"t,c,bw{100,98,100}": {
+			{
+				name:      "t,c,bw,trim{100,100,0,true}",
+				total:     100,
+				current:   0,
+				barWidth:  100,
+				trimSpace: true,
+				want:      "[--------------------------------------------------------------------------------------------------]",
+			},
+			{
+				name:     "t,c,bw{100,1,100}",
 				total:    100,
-				current:  98,
+				current:  1,
 				barWidth: 100,
-				want:     "[==============================================>-]",
+				want:     " [>-----------------------------------------------------------------------------------------------] ",
 			},
-			"t,c,bw{100,100,100}": {
+			{
+				name:      "t,c,bw,trim{100,1,100,true}",
+				total:     100,
+				current:   1,
+				barWidth:  100,
+				trimSpace: true,
+				want:      "[>-------------------------------------------------------------------------------------------------]",
+			},
+			{
+				name:     "t,c,bw{100,33,100}",
+				total:    100,
+				current:  33,
+				barWidth: 100,
+				want:     " [===============================>----------------------------------------------------------------] ",
+			},
+			{
+				name:      "t,c,bw,trim{100,33,100,true}",
+				total:     100,
+				current:   33,
+				barWidth:  100,
+				trimSpace: true,
+				want:      "[===============================>------------------------------------------------------------------]",
+			},
+			{
+				name:     "t,c,bw,rup{100,33,100,33}",
+				total:    100,
+				current:  33,
+				barWidth: 100,
+				rup:      33,
+				want:     " [+++++++++++++++++++++++++++++++>----------------------------------------------------------------] ",
+			},
+			{
+				name:      "t,c,bw,rup,trim{100,33,100,33,true}",
+				total:     100,
+				current:   33,
+				barWidth:  100,
+				rup:       33,
+				trimSpace: true,
+				want:      "[+++++++++++++++++++++++++++++++>------------------------------------------------------------------]",
+			},
+			{
+				name:     "t,c,bw,rup{100,40,100,32}",
+				total:    100,
+				current:  40,
+				barWidth: 100,
+				rup:      33,
+				want:     " [++++++++++++++++++++++++++++++++=====>----------------------------------------------------------] ",
+			},
+			{
+				name:      "t,c,bw,rup,trim{100,40,100,32,true}",
+				total:     100,
+				current:   40,
+				barWidth:  100,
+				rup:       33,
+				trimSpace: true,
+				want:      "[++++++++++++++++++++++++++++++++======>-----------------------------------------------------------]",
+			},
+			{
+				name:     "t,c,bw{100,99,100}",
+				total:    100,
+				current:  99,
+				barWidth: 100,
+				want:     " [==============================================================================================>-] ",
+			},
+			{
+				name:      "t,c,bw,trim{100,99,100,true}",
+				total:     100,
+				current:   99,
+				barWidth:  100,
+				trimSpace: true,
+				want:      "[================================================================================================>-]",
+			},
+			{
+				name:     "t,c,bw{100,100,100}",
 				total:    100,
 				current:  100,
 				barWidth: 100,
-				want:     "[================================================]",
+				want:     " [================================================================================================] ",
+			},
+			{
+				name:      "t,c,bw,trim{100,100,100,true}",
+				total:     100,
+				current:   100,
+				barWidth:  100,
+				trimSpace: true,
+				want:      "[==================================================================================================]",
 			},
 		},
 	}
 
 	var tmpBuf bytes.Buffer
 	for termWidth, cases := range testSuite {
-		for name, tc := range cases {
+		for _, tc := range cases {
 			s := newTestState()
 			s.width = tc.barWidth
 			s.total = tc.total
 			s.current = tc.current
-			if tc.barRefill != nil {
-				s.refill = tc.barRefill
+			s.trimSpace = tc.trimSpace
+			if tc.rup > 0 {
+				if f, ok := s.filler.(interface{ SetRefill(int64) }); ok {
+					f.SetRefill(tc.rup)
+				}
 			}
 			tmpBuf.Reset()
 			tmpBuf.ReadFrom(s.draw(termWidth))
-			got := tmpBuf.String()
-			want := tc.want + "\n"
-			if got != want {
-				t.Errorf("termWidth %d; %s: want: %s %d, got: %s %d\n", termWidth, name, want, len(want), got, len(got))
+			by := tmpBuf.Bytes()
+			by = by[:len(by)-1]
+
+			if utf8.RuneCount(by) > termWidth {
+				t.Errorf("termWidth:%d %q barWidth:%d overflow termWidth\n", termWidth, tc.name, utf8.RuneCount(by))
+			}
+
+			got := string(by)
+			if got != tc.want {
+				t.Errorf("termWidth:%d %q want: %q %d, got: %q %d\n", termWidth, tc.name, tc.want, len(tc.want), got, len(got))
 			}
 		}
 	}
@@ -201,12 +297,10 @@ func TestDraw(t *testing.T) {
 
 func newTestState() *bState {
 	s := &bState{
-		trimLeftSpace:  true,
-		trimRightSpace: true,
-		bufP:           new(bytes.Buffer),
-		bufB:           new(bytes.Buffer),
-		bufA:           new(bytes.Buffer),
+		filler: newDefaultBarFiller(),
+		bufP:   new(bytes.Buffer),
+		bufB:   new(bytes.Buffer),
+		bufA:   new(bytes.Buffer),
 	}
-	s.runes = strToBarRunes(pformat)
 	return s
 }

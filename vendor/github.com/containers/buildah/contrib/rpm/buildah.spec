@@ -26,7 +26,7 @@
 
 Name:           buildah
 # Bump version in buildah.go too
-Version:        1.9.0-dev
+Version:        1.8.4
 Release:        1.git%{shortcommit}%{?dist}
 Summary:        A command line tool used to creating OCI Images
 License:        ASL 2.0
@@ -100,7 +100,79 @@ make DESTDIR=%{buildroot} PREFIX=%{_prefix} install install.completions
 %{_datadir}/bash-completion/completions/*
 
 %changelog
-* Thu May 02, 2019 Tom Sweeney <tsweeney@redhat.com> 1.9.0-dev-1
+* Tue Jun 04, 2019 Tom Sweeney <tsweeney@redhat.com> 1.8.4-1
+- Update containers/image to v2.0.0
+- run: fix hang with run and --isolation=chroot
+- run: fix hang when using run
+- chroot: drop unused function call
+- remove --> before imgageID on build
+- Always close stdin pipe
+- Write deny to setgroups when doing single user mapping
+- Avoid including linux/memfd.h
+- Add a test for the symlink pointing to a directory
+- Add missing continue
+- Fix the handling of symlinks to absolute paths
+- Only set default network sysctls if not rootless
+- Support --dns=none like podman
+- fix bug --cpu-shares parsing typo
+- Fix validate complaint
+- Update vendor on containers/storage to v1.12.10
+- Create directory paths for COPY thereby ensuring correct perms
+- imagebuildah: use a stable sort for comparing build args
+- imagebuildah: tighten up cache checking
+- bud.bats: add a test verying the order of --build-args
+- add -t to podman run
+- imagebuildah: simplify screening by top layers
+- imagebuildah: handle ID mappings for COPY --from
+- imagebuildah: apply additionalTags ourselves
+- bud.bats: test additional tags with cached images
+- bud.bats: add a test for WORKDIR and COPY with absolute destinations
+- Cleanup Overlay Mounts content
+
+* Tue Jun 04, 2019 Tom Sweeney <tsweeney@redhat.com> 1.8.3
+- Add support for file secret mounts
+- Add ability to skip secrets in mounts file
+- allow 32bit builds
+- fix tutorial instructions
+- imagebuilder: pass the right contextDir to Add()
+- add: use fileutils.PatternMatcher for .dockerignore
+- bud.bats: add another .dockerignore test
+- unshare: fallback to single usermapping
+- addHelperSymlink: clear the destination on os.IsExist errors
+- bud.bats: test replacing symbolic links
+- imagebuildah: fix handling of destinations that end with '/'
+- bud.bats: test COPY with a final "/" in the destination
+- linux: add check for sysctl before using it
+- unshare: set _CONTAINERS_ROOTLESS_GID
+- Rework buildahimamges
+- build context: support https git repos
+- Add a test for ENV special chars behaviour
+- Check in new Dockerfiles
+- Apply custom SHELL during build time
+- config: expand variables only at the command line
+- SetEnv: we only need to expand v once
+- Add default /root if empty on chroot iso
+- Add support for Overlay volumes into the container.
+- Export buildah validate volume functions so it can share code with libpod
+- Bump baseline test to F30
+- Fix rootless handling of /dev/shm size
+- Avoid fmt.Printf() in the library
+- imagebuildah: tighten cache checking back up
+- Handle WORKDIR with dangling target
+- Default Authfile to proper path
+- Make buildah run --isolation follow BUILDAH_ISOLATION environment
+- Vendor in latest containers/storage and containers/image
+- getParent/getChildren: handle layerless images
+- imagebuildah: recognize cache images for layerless images
+- bud.bats: test scratch images with --layers caching
+- Get CHANGELOG.md updates
+- Add some symlinks to test our .dockerignore logic
+- imagebuildah: addHelper: handle symbolic links
+- commit/push: use an everything-allowed policy
+- Correct manpage formatting in files section
+- Remove must be root statement from buildah doc
+- Change image names to stable, testing and upstream
+- Bump back to v1.9.0-dev
 
 * Thu May 02, 2019 Tom Sweeney <tsweeney@redhat.com> 1.8.2
 - Vendor Storage 1.12.6
