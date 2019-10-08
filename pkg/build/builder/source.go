@@ -16,8 +16,8 @@ import (
 	"k8s.io/klog"
 
 	"github.com/containers/buildah"
-	"github.com/containers/image/pkg/docker/config"
-	"github.com/containers/image/types"
+	"github.com/containers/image/v4/pkg/docker/config"
+	"github.com/containers/image/v4/types"
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
 

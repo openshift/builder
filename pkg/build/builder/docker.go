@@ -101,13 +101,10 @@ func (d *DockerBuilder) Build() error {
 		}
 		// if forcePull or the image does not exist on the node we should pull the image first
 		if d.build.Spec.Strategy.DockerStrategy.ForcePull || !imageExists {
-			pullAuthConfig, _ := dockercfg.NewHelper().GetDockerAuth(
-				imageName,
-				dockercfg.PullAuthType,
-			)
+			searchPaths := dockercfg.NewHelper().GetDockerAuthSearchPaths(dockercfg.PullAuthType)
 			log.V(0).Infof("\nPulling image %s ...", imageName)
 			startTime := metav1.Now()
-			err = d.pullImage(imageName, pullAuthConfig)
+			err = d.pullImage(imageName, searchPaths)
 
 			timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullBaseImage, startTime, metav1.Now())
 
@@ -179,7 +176,7 @@ func (d *DockerBuilder) Build() error {
 	return nil
 }
 
-func (d *DockerBuilder) pullImage(name string, authConfig docker.AuthConfiguration) error {
+func (d *DockerBuilder) pullImage(name string, searchPaths []string) error {
 	repository, tag := docker.ParseRepositoryTag(name)
 	options := docker.PullImageOptions{
 		Repository: repository,
@@ -191,7 +188,7 @@ func (d *DockerBuilder) pullImage(name string, authConfig docker.AuthConfigurati
 	}
 
 	return retryImageAction("Pull", func() (pullErr error) {
-		return d.dockerClient.PullImage(options, authConfig)
+		return d.dockerClient.PullImage(options, searchPaths)
 	})
 }
 
