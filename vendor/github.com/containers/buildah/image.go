@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/containers/buildah/docker"
-	"github.com/containers/image/docker/reference"
-	"github.com/containers/image/image"
-	"github.com/containers/image/manifest"
-	is "github.com/containers/image/storage"
-	"github.com/containers/image/types"
+	"github.com/containers/image/v4/docker/reference"
+	"github.com/containers/image/v4/image"
+	"github.com/containers/image/v4/manifest"
+	is "github.com/containers/image/v4/storage"
+	"github.com/containers/image/v4/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/ioutils"
@@ -710,7 +710,7 @@ func (b *Builder) makeImageRef(options CommitOptions, exporting bool) (types.Ima
 		preferredManifestType: manifestType,
 		exporting:             exporting,
 		squash:                options.Squash,
-		emptyLayer:            options.EmptyLayer,
+		emptyLayer:            options.EmptyLayer && !options.Squash,
 		tarPath:               b.tarPath(&b.IDMappingOptions),
 		parent:                parent,
 		blobDirectory:         options.BlobDirectory,

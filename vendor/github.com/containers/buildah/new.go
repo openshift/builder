@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	"github.com/containers/buildah/util"
-	"github.com/containers/image/manifest"
-	"github.com/containers/image/pkg/sysregistriesv2"
-	is "github.com/containers/image/storage"
-	"github.com/containers/image/transports"
-	"github.com/containers/image/transports/alltransports"
-	"github.com/containers/image/types"
+	"github.com/containers/image/v4/manifest"
+	"github.com/containers/image/v4/pkg/sysregistriesv2"
+	is "github.com/containers/image/v4/storage"
+	"github.com/containers/image/v4/transports"
+	"github.com/containers/image/v4/transports/alltransports"
+	"github.com/containers/image/v4/types"
 	"github.com/containers/storage"
 	"github.com/openshift/imagebuilder"
 	"github.com/pkg/errors"
@@ -360,6 +360,7 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 		Args:             options.Args,
 		Format:           options.Format,
 		TempVolumes:      map[string]bool{},
+		Devices:          options.Devices,
 	}
 
 	if options.Mount {

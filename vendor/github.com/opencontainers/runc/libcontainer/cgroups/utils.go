@@ -14,12 +14,20 @@ import (
 	"time"
 
 	units "github.com/docker/go-units"
+	"golang.org/x/sys/unix"
 )
 
 const (
 	CgroupNamePrefix = "name="
 	CgroupProcesses  = "cgroup.procs"
 )
+
+// HugePageSizeUnitList is a list of the units used by the linux kernel when
+// naming the HugePage control files.
+// https://www.kernel.org/doc/Documentation/cgroup-v1/hugetlb.txt
+// TODO Since the kernel only use KB, MB and GB; TB and PB should be removed,
+// depends on https://github.com/docker/go-units/commit/a09cd47f892041a4fac473133d181f5aea6fa393
+var HugePageSizeUnitList = []string{"B", "KB", "MB", "GB", "TB", "PB"}
 
 // https://www.kernel.org/doc/Documentation/cgroup-v1/cgroups.txt
 func FindCgroupMountpoint(cgroupPath, subsystem string) (string, error) {
@@ -408,19 +416,26 @@ func RemovePaths(paths map[string]string) (err error) {
 }
 
 func GetHugePageSize() ([]string, error) {
-	var pageSizes []string
-	sizeList := []string{"B", "kB", "MB", "GB", "TB", "PB"}
 	files, err := ioutil.ReadDir("/sys/kernel/mm/hugepages")
 	if err != nil {
-		return pageSizes, err
+		return []string{}, err
 	}
+	var fileNames []string
 	for _, st := range files {
-		nameArray := strings.Split(st.Name(), "-")
+		fileNames = append(fileNames, st.Name())
+	}
+	return getHugePageSizeFromFilenames(fileNames)
+}
+
+func getHugePageSizeFromFilenames(fileNames []string) ([]string, error) {
+	var pageSizes []string
+	for _, fileName := range fileNames {
+		nameArray := strings.Split(fileName, "-")
 		pageSize, err := units.RAMInBytes(nameArray[1])
 		if err != nil {
 			return []string{}, err
 		}
-		sizeString := units.CustomSize("%g%s", float64(pageSize), 1024.0, sizeList)
+		sizeString := units.CustomSize("%g%s", float64(pageSize), 1024.0, HugePageSizeUnitList)
 		pageSizes = append(pageSizes, sizeString)
 	}
 
@@ -464,10 +479,39 @@ func WriteCgroupProc(dir string, pid int) error {
 	}
 
 	// Dont attach any pid to the cgroup if -1 is specified as a pid
-	if pid != -1 {
-		if err := ioutil.WriteFile(filepath.Join(dir, CgroupProcesses), []byte(strconv.Itoa(pid)), 0700); err != nil {
-			return fmt.Errorf("failed to write %v to %v: %v", pid, CgroupProcesses, err)
-		}
+	if pid == -1 {
+		return nil
 	}
-	return nil
+
+	cgroupProcessesFile, err := os.OpenFile(filepath.Join(dir, CgroupProcesses), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0700)
+	if err != nil {
+		return fmt.Errorf("failed to write %v to %v: %v", pid, CgroupProcesses, err)
+	}
+	defer cgroupProcessesFile.Close()
+
+	for i := 0; i < 5; i++ {
+		_, err = cgroupProcessesFile.WriteString(strconv.Itoa(pid))
+		if err == nil {
+			return nil
+		}
+
+		// EINVAL might mean that the task being added to cgroup.procs is in state
+		// TASK_NEW. We should attempt to do so again.
+		if isEINVAL(err) {
+			time.Sleep(30 * time.Millisecond)
+			continue
+		}
+
+		return fmt.Errorf("failed to write %v to %v: %v", pid, CgroupProcesses, err)
+	}
+	return err
+}
+
+func isEINVAL(err error) bool {
+	switch err := err.(type) {
+	case *os.PathError:
+		return err.Err == unix.EINVAL
+	default:
+		return false
+	}
 }
