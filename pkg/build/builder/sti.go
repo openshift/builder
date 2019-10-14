@@ -226,12 +226,11 @@ func (s *S2IBuilder) Build() error {
 
 	// If DockerCfgPath is provided in buildapiv1.Config, then attempt to read the
 	// dockercfg file and get the authentication for pulling the images.
-	t, _ := dockercfg.NewHelper().GetDockerAuth(config.BuilderImage, dockercfg.PullAuthType)
-	config.PullAuthentication = s2iapi.AuthConfig{Username: t.Username, Password: t.Password, Email: t.Email, ServerAddress: t.ServerAddress}
 
 	if s.build.Spec.Strategy.SourceStrategy.ForcePull || !isImagePresent(s.dockerClient, config.BuilderImage) {
 		startTime := metav1.Now()
-		err = s.pullImage(config.BuilderImage, t)
+		searchPaths := dockercfg.NewHelper().GetDockerAuthSearchPaths(dockercfg.PullAuthType)
+		err = s.pullImage(config.BuilderImage, searchPaths)
 		timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullBaseImage, startTime, metav1.Now())
 		if err != nil {
 			return err
@@ -242,9 +241,9 @@ func (s *S2IBuilder) Build() error {
 		if s.build.Spec.Strategy.SourceStrategy.ForcePull || !isImagePresent(s.dockerClient, config.IncrementalFromTag) {
 			// Per @bparees the dockercfg.PushTypeAuth is needed to use the same credentials/authentication that
 			// we used to push the image previously.
-			it, _ := dockercfg.NewHelper().GetDockerAuth(config.IncrementalFromTag, dockercfg.PushAuthType)
+			searchPaths := dockercfg.NewHelper().GetDockerAuthSearchPaths(dockercfg.PushAuthType)
 			startTime := metav1.Now()
-			err = s.pullImage(config.IncrementalFromTag, it)
+			err = s.pullImage(config.IncrementalFromTag, searchPaths)
 			timing.RecordNewStep(ctx, buildapiv1.StagePullImages, buildapiv1.StepPullInputImage, startTime, metav1.Now())
 			// If there was an error, the incremental image may not exist. Treat the build as a normal s2i build.
 			if err != nil {
@@ -459,7 +458,7 @@ func (s *S2IBuilder) setupPullSecret() (*dockerclient.AuthConfigurations, error)
 	return dockerclient.NewAuthConfigurations(r)
 }
 
-func (s *S2IBuilder) pullImage(name string, authConfig dockerclient.AuthConfiguration) error {
+func (s *S2IBuilder) pullImage(name string, searchPaths []string) error {
 	log.V(2).Infof("Explicitly pulling image %s", name)
 	repository, tag := dockerclient.ParseRepositoryTag(name)
 	options := dockerclient.PullImageOptions{
@@ -472,7 +471,7 @@ func (s *S2IBuilder) pullImage(name string, authConfig dockerclient.AuthConfigur
 	}
 
 	return retryImageAction("Pull", func() (pullErr error) {
-		return s.dockerClient.PullImage(options, authConfig)
+		return s.dockerClient.PullImage(options, searchPaths)
 	})
 }
 

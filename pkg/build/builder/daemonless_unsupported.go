@@ -5,7 +5,7 @@ package builder
 import (
 	"context"
 
-	"github.com/containers/image/types"
+	"github.com/containers/image/v4/types"
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
 	buildapiv1 "github.com/openshift/api/build/v1"
@@ -33,7 +33,7 @@ func (d *DaemonlessClient) RemoveImage(name string) error {
 func (d *DaemonlessClient) CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error) {
 	return nil, errors.New("creating containers not supported on this platform")
 }
-func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
+func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, searchPaths []string) error {
 	return errors.New("pulling images not supported on this platform")
 }
 func (d *DaemonlessClient) RemoveContainer(opts docker.RemoveContainerOptions) error {

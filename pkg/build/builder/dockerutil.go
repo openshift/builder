@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	idocker "github.com/containers/image/docker"
+	idocker "github.com/containers/image/v4/docker"
 	"github.com/docker/distribution/registry/api/errcode"
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/pkg/errors"
@@ -32,7 +32,7 @@ type DockerClient interface {
 	PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error)
 	RemoveImage(name string) error
 	CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error)
-	PullImage(opts docker.PullImageOptions, auth docker.AuthConfiguration) error
+	PullImage(opts docker.PullImageOptions, authSearchPaths []string) error
 	RemoveContainer(opts docker.RemoveContainerOptions) error
 	InspectImage(name string) (*docker.Image, error)
 	TagImage(name string, opts docker.TagImageOptions) error

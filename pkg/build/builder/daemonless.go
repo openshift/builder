@@ -12,10 +12,10 @@ import (
 	"github.com/containers/buildah"
 	"github.com/containers/buildah/imagebuildah"
 	"github.com/containers/buildah/util"
-	ireference "github.com/containers/image/docker/reference"
-	"github.com/containers/image/pkg/docker/config"
-	"github.com/containers/image/transports/alltransports"
-	"github.com/containers/image/types"
+	ireference "github.com/containers/image/v4/docker/reference"
+	"github.com/containers/image/v4/pkg/docker/config"
+	"github.com/containers/image/v4/transports/alltransports"
+	"github.com/containers/image/v4/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
 	docker "github.com/fsouza/go-dockerclient"
@@ -24,8 +24,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
-	"github.com/openshift/library-go/pkg/image/reference"
 )
 
 // The build controller doesn't expect the CAP_ prefix to be used in the
@@ -45,7 +45,7 @@ func dropCapabilities() []string {
 	return dropCapabilities
 }
 
-func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, authConfig docker.AuthConfiguration, blobCacheDirectory string) error {
+func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, searchPaths []string, blobCacheDirectory string) error {
 	log.V(2).Infof("Asked to pull fresh copy of %q.", imageName)
 
 	if imageName == "" {
@@ -58,26 +58,7 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	}
 
 	systemContext := sc
-	// if credsDir, ok := os.LookupEnv("PULL_DOCKERCFG_PATH"); ok {
-	// 	systemContext.AuthFilePath = filepath.Join(credsDir, "config.json")
-	// }
-	systemContext.AuthFilePath = "/tmp/config.json"
-
-	ref, err := reference.Parse(imageName)
-	if err != nil {
-		return fmt.Errorf("error parsing image name %s: %v", ref, err)
-	}
-	if ref.Registry == "" {
-		log.V(2).Infof("defaulting registry to docker.io for image %s", imageName)
-		ref.Registry = "docker.io"
-	}
-
-	if authConfig.Username != "" && authConfig.Password != "" {
-		log.V(5).Infof("Setting authentication for registry %q for %q.", ref.Registry, imageName)
-		if err := config.SetAuthentication(&systemContext, ref.Registry, authConfig.Username, authConfig.Password); err != nil {
-			return err
-		}
-	}
+	dockercfg.SetSystemContextFilePath(&systemContext, dockercfg.GetDockerConfigPath(searchPaths))
 
 	options := buildah.PullOptions{
 		ReportWriter:  os.Stderr,
@@ -267,9 +248,6 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	}
 
 	systemContext := sc
-	// if credsDir, ok := os.LookupEnv("PUSH_DOCKERCFG_PATH"); ok {
-	// 	systemContext.AuthFilePath = filepath.Join(credsDir, ".docker", "config.json")
-	// }
 	systemContext.AuthFilePath = "/tmp/config.json"
 
 	if authConfig.Username != "" && authConfig.Password != "" {
@@ -536,12 +514,12 @@ func (d *DaemonlessClient) RemoveContainer(opts docker.RemoveContainerOptions) e
 	return err
 }
 
-func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
+func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, searchPaths []string) error {
 	imageName := opts.Repository
 	if opts.Tag != "" {
 		imageName = imageName + ":" + opts.Tag
 	}
-	return pullDaemonlessImage(d.SystemContext, d.Store, imageName, auth, d.BlobCacheDirectory)
+	return pullDaemonlessImage(d.SystemContext, d.Store, imageName, searchPaths, d.BlobCacheDirectory)
 }
 
 func (d *DaemonlessClient) TagImage(name string, opts docker.TagImageOptions) error {

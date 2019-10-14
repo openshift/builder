@@ -49,4 +49,10 @@ func TestGetDockerAuth(t *testing.T) {
 		t.Errorf("unexpected value getting docker auth fail")
 		return
 	}
+
+	path := NewHelper().GetDockerAuthSearchPaths(testEnvKey)
+	if len(path) == 0 {
+		t.Errorf("unexpected value getting docker auth fail")
+		return
+	}
 }

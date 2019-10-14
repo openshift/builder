@@ -1,6 +1,8 @@
 package dockercfg
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -11,10 +13,10 @@ import (
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
+	"github.com/containers/image/v4/types"
+
 	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )
-
-var log = utillog.ToFile(os.Stderr, 2)
 
 const (
 	PushAuthType       = "PUSH_DOCKERCFG_PATH"
@@ -24,6 +26,12 @@ const (
 	DockerConfigKey = ".dockercfg"
 	// DockerConfigJsonKey is the key of the required data for SecretTypeDockerConfigJson secrets
 	DockerConfigJsonKey = ".dockerconfigjson"
+	dockerConfigFileKey = "config.json"
+)
+
+var (
+	log                  = utillog.ToFile(os.Stderr, 2)
+	dockerFilesToExamine = []string{dockerConfigFileKey, DockerConfigJsonKey, DockerConfigKey}
 )
 
 // Helper contains all the valid config options for reading the local dockercfg file
@@ -40,21 +48,38 @@ func NewHelper() *Helper {
 func (h *Helper) InstallFlags(flags *pflag.FlagSet) {
 }
 
-// GetDockerAuth returns a valid Docker AuthConfiguration entry, and whether it was read
-// from the local dockercfg file
-func (h *Helper) GetDockerAuth(imageName, authType string) (docker.AuthConfiguration, bool) {
-	log.V(3).Infof("Locating docker auth for image %s and type %s", imageName, authType)
+// GetDockerAuthSearchPaths returns the list of possible locations for the raw
+// docker auth file that we'll inspect, where the winning location will be set
+// into the containers/image SystemContext.AuthFilePath field
+func (h *Helper) GetDockerAuthSearchPaths(authType string) []string {
+	log.V(3).Infof("Locating docker config paths for type %s", authType)
 	var searchPaths []string
-	var cfg credentialprovider.DockerConfig
-	var err error
-
 	if pathForAuthType := os.Getenv(authType); len(pathForAuthType) > 0 {
 		searchPaths = []string{pathForAuthType}
 	} else {
 		searchPaths = getExtraSearchPaths()
 	}
-	log.V(3).Infof("Getting docker auth in paths : %v", searchPaths)
-	cfg, err = GetDockerConfig(searchPaths)
+	log.V(3).Infof("Getting docker config in paths : %v", searchPaths)
+	return searchPaths
+}
+
+// SetSystemContextFilePath properly seeds the container/image SystemContext
+// with the authentication file based on the format implied by the file name
+func SetSystemContextFilePath(sc *types.SystemContext, path string) {
+	if filepath.Base(path) == dockerConfigFileKey {
+		sc.AuthFilePath = path
+		return
+	}
+	sc.LegacyFormatAuthFilePath = path
+}
+
+// GetDockerAuth returns a valid Docker AuthConfiguration entry, and whether it was read
+// from the local dockercfg file
+func (h *Helper) GetDockerAuth(imageName, authType string) (docker.AuthConfiguration, bool) {
+	log.V(3).Infof("Locating docker auth for image %s and type %s", imageName, authType)
+	searchPaths := h.GetDockerAuthSearchPaths(authType)
+
+	cfg, err := GetDockerConfig(searchPaths)
 	if err != nil {
 		klog.Errorf("Reading docker config from %v failed: %v", searchPaths, err)
 		return docker.AuthConfiguration{}, false
@@ -101,6 +126,48 @@ func GetDockercfgFile(path string) string {
 	}
 	log.V(5).Infof("Using Docker authentication configuration in '%s'", cfgPath)
 	return cfgPath
+}
+
+func readSpecificDockerConfigJSONFile(filePath string) bool {
+	var contents []byte
+	var err error
+
+	if contents, err = ioutil.ReadFile(filePath); err != nil {
+		log.V(4).Infof("error reading file: %v", err)
+		return false
+	}
+	return readDockerConfigJSONFileFromBytes(contents)
+}
+
+func readDockerConfigJSONFileFromBytes(contents []byte) bool {
+	var cfgJSON credentialprovider.DockerConfigJson
+	if err := json.Unmarshal(contents, &cfgJSON); err != nil {
+		log.V(4).Infof("while trying to parse blob %q: %v", contents, err)
+		return false
+	}
+	return true
+}
+
+// GetDockerConfigPath returns the first path that provides a valid DockerConfig;
+// modified elements from credentialprovider methods called from GetDockerConfig, following the same order of precedenced
+// articulated in GetDockerConfig, via the order of file names set in dockerFilesToExamine
+func GetDockerConfigPath(paths []string) string {
+	for _, configPath := range paths {
+		for _, file := range dockerFilesToExamine {
+			absDockerConfigFileLocation, err := filepath.Abs(filepath.Join(configPath, file))
+			if err != nil {
+				log.V(4).Infof("while trying to canonicalize %s: %v", configPath, err)
+				continue
+			}
+			log.V(4).Infof("looking for %s at %s", file, absDockerConfigFileLocation)
+			found := readSpecificDockerConfigJSONFile(absDockerConfigFileLocation)
+			if found {
+				log.V(4).Infof("found valid %s at %s", file, absDockerConfigFileLocation)
+				return absDockerConfigFileLocation
+			}
+		}
+	}
+	return ""
 }
 
 // GetDockerConfig return docker config info by checking given paths

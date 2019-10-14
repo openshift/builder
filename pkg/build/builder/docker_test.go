@@ -532,7 +532,7 @@ USER 1001`
 		buildImageFunc: func(opts docker.BuildImageOptions) error {
 			return nil
 		},
-		pullImageFunc: func(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
+		pullImageFunc: func(opts docker.PullImageOptions, searchPaths []string) error {
 			if opts.Repository == "scratch" && opts.Registry == "" {
 				return fmt.Errorf("cannot pull scratch")
 			}

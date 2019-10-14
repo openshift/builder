@@ -52,7 +52,7 @@ func (builder testBuilder) Build(config *s2iapi.Config) (*s2iapi.Result, error) 
 }
 
 type testS2IBuilderConfig struct {
-	pullImageFunc    func(opts docker.PullImageOptions, auth docker.AuthConfiguration) error
+	pullImageFunc    func(opts docker.PullImageOptions, searchPaths []string) error
 	inspectImageFunc func(name string) (*docker.Image, error)
 	errPushImage     error
 	getStrategyErr   error
@@ -320,7 +320,7 @@ func TestIncrementalPullError(t *testing.T) {
 		}
 		return &docker.Image{}, nil
 	}
-	pullFunc := func(opts docker.PullImageOptions, auth docker.AuthConfiguration) error {
+	pullFunc := func(opts docker.PullImageOptions, searchPaths []string) error {
 		if strings.Contains(opts.Repository, "test/test-result") {
 			return fmt.Errorf("image %s:%s does not exist", opts.Repository, opts.Tag)
 		}
