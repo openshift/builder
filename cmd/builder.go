@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	k8sversion "k8s.io/apimachinery/pkg/version"
-	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/kubectl/util/templates"
+	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/util/templates"
 
 	"github.com/openshift/builder/pkg/build/builder/cmd"
 	"github.com/openshift/builder/pkg/version"
