@@ -1,14 +1,14 @@
-package client // import "github.com/docker/docker/client"
+package client
 
 import (
-	"context"
 	"io"
+	"net/http"
 	"net/url"
-	"strings"
+
+	"golang.org/x/net/context"
 
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/errdefs"
 )
 
 // ImagePull requests the docker host to pull an image from a remote registry.
@@ -30,12 +30,9 @@ func (cli *Client) ImagePull(ctx context.Context, refStr string, options types.I
 	if !options.All {
 		query.Set("tag", getAPITagFromNamedRef(ref))
 	}
-	if options.Platform != "" {
-		query.Set("platform", strings.ToLower(options.Platform))
-	}
 
 	resp, err := cli.tryImageCreate(ctx, query, options.RegistryAuth)
-	if errdefs.IsUnauthorized(err) && options.PrivilegeFunc != nil {
+	if resp.statusCode == http.StatusUnauthorized && options.PrivilegeFunc != nil {
 		newAuthHeader, privilegeErr := options.PrivilegeFunc()
 		if privilegeErr != nil {
 			return nil, privilegeErr
