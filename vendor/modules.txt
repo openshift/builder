@@ -337,10 +337,10 @@ github.com/opencontainers/runtime-tools/error
 # github.com/opencontainers/selinux v1.3.0
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
-# github.com/openshift/api v3.9.1-0.20190810003144-27fb16909b15+incompatible
+# github.com/openshift/api v3.9.1-0.20191023095241-48e39eee5d1f+incompatible
 github.com/openshift/api/build/v1
 github.com/openshift/api/config/v1
-# github.com/openshift/client-go v0.0.0-20190813201236-5a5508328169
+# github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
 github.com/openshift/client-go/build/clientset/versioned/typed/build/v1
 github.com/openshift/client-go/build/clientset/versioned/scheme
 github.com/openshift/client-go/build/clientset/versioned/fake
@@ -352,7 +352,7 @@ github.com/openshift/imagebuilder/dockerfile/command
 github.com/openshift/imagebuilder/dockerfile/parser
 github.com/openshift/imagebuilder/signal
 github.com/openshift/imagebuilder/strslice
-# github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
+# github.com/openshift/library-go v0.0.0-20191023092337-10b6237962f7
 github.com/openshift/library-go/pkg/serviceability
 github.com/openshift/library-go/pkg/git
 github.com/openshift/library-go/pkg/image/reference
