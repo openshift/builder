@@ -18,7 +18,7 @@ require (
 	github.com/docker/libkv v0.2.1 // indirect
 	github.com/docker/swarmkit v1.12.0 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
-	github.com/fsouza/go-dockerclient v1.4.4
+	github.com/fsouza/go-dockerclient v1.5.0
 	github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095 // indirect
 	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
 	github.com/go-openapi/spec v0.19.3 // indirect
