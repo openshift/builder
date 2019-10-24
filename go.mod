@@ -8,7 +8,6 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/Sirupsen/logrus v0.0.0-00010101000000-000000000000 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
-	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
 	github.com/containers/buildah v1.11.3
 	github.com/containers/image/v4 v4.0.1
@@ -59,23 +58,14 @@ require (
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe
-	k8s.io/api v0.0.0-20191016110408-35e52d86657a
-	k8s.io/apimachinery v0.0.0-20191004115801-a2eda9f80ab8
-	k8s.io/client-go v0.0.0-20191016111102-bec269661e48
-	k8s.io/cluster-bootstrap v0.0.0-20191016115129-c07a134afb42 // indirect
-	k8s.io/component-base v0.0.0-20191016111319-039242c015a9
-	k8s.io/cri-api v0.0.0-20190828162817-608eb1dad4ac // indirect
+	k8s.io/api v0.0.0
+	k8s.io/apimachinery v0.0.0
+	k8s.io/client-go v0.0.0
+	k8s.io/component-base v0.0.0
 	k8s.io/klog v0.4.0
-	k8s.io/kube-aggregator v0.0.0-20191016112429-9587704a8ad4 // indirect
-	k8s.io/kube-controller-manager v0.0.0-20191016114939-2b2b218dc1df // indirect
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
-	k8s.io/kube-proxy v0.0.0-20191016114407-2e83b6f20229 // indirect
-	k8s.io/kube-scheduler v0.0.0-20191016114748-65049c67a58b // indirect
-	k8s.io/kubectl v0.0.0-20191016120415-2ed914427d51 // indirect
-	k8s.io/kubelet v0.0.0-20191016114556-7841ed97f1b2 // indirect
+	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v1.16.2
-	k8s.io/legacy-cloud-providers v0.0.0-20191016115753-cf0698c3a16b // indirect
-	k8s.io/sample-apiserver v0.0.0-20191016112829-06bb3c9d77c9 // indirect
 	k8s.io/utils v0.0.0-20190923111123-69764acb6e8e // indirect
 )
 
