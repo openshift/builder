@@ -56,6 +56,7 @@ require (
 
 replace (
 	github.com/containers/image/v4 => github.com/containers/image/v4 v4.0.0-20191004175620-9da78d1f50d2
+	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
 	github.com/opencontainers/runtime-tools => github.com/opencontainers/runtime-tools v0.8.0
 	k8s.io/api => github.com/openshift/kubernetes-api v0.0.0-20190918181048-13e46d2d750b
 	k8s.io/apiextensions-apiserver => github.com/openshift/kubernetes-apiextensions-apiserver v0.0.0-20190907075317-b45b4fd943f2
