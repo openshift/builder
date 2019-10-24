@@ -29,7 +29,7 @@ require (
 	github.com/openshift/client-go v0.0.0-20190813201236-5a5508328169
 	github.com/openshift/imagebuilder v1.1.0
 	github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
-	github.com/openshift/source-to-image v0.0.0-20190716154012-2a579ecd66df
+	github.com/openshift/source-to-image v1.2.0
 	github.com/pborman/uuid v1.2.0 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.8.1
