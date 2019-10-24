@@ -10,7 +10,6 @@ require (
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containerd/containerd v1.3.0 // indirect
 	github.com/containers/buildah v1.11.3
 	github.com/containers/image/v4 v4.0.1
 	github.com/containers/storage v1.13.4
@@ -26,7 +25,7 @@ require (
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
-	github.com/fsouza/go-dockerclient v1.4.4
+	github.com/fsouza/go-dockerclient v1.5.0
 	github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095 // indirect
 	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
 	github.com/go-openapi/spec v0.19.3 // indirect
