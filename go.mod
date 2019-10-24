@@ -4,24 +4,49 @@ go 1.12
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
+	github.com/Microsoft/opengcs v0.3.9 // indirect
+	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
+	github.com/Sirupsen/logrus v0.0.0-00010101000000-000000000000 // indirect
+	github.com/armon/go-radix v1.0.0 // indirect
+	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc // indirect
+	github.com/containerd/containerd v1.3.0 // indirect
 	github.com/containers/buildah v1.11.3
-	github.com/containers/image v3.0.2+incompatible // indirect
 	github.com/containers/image/v4 v4.0.1
 	github.com/containers/storage v1.13.4
+	github.com/coreos/bbolt v1.3.3 // indirect
+	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
+	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/docker/distribution v2.7.1+incompatible
+	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
+	github.com/docker/libkv v0.2.1 // indirect
 	github.com/docker/spdystream v0.0.0-20160310174837-449fdfce4d96 // indirect
+	github.com/docker/swarmkit v1.12.0 // indirect
+	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/fsouza/go-dockerclient v1.4.4
 	github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095 // indirect
+	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
 	github.com/go-openapi/spec v0.19.3 // indirect
+	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/googleapis/gnostic v0.3.1 // indirect
+	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/gregjones/httpcache v0.0.0-20170728041850-787624de3eb7 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway v1.11.3 // indirect
+	github.com/hashicorp/consul/api v1.2.0 // indirect
+	github.com/hashicorp/go-memdb v1.0.4 // indirect
+	github.com/hashicorp/memberlist v0.1.5 // indirect
+	github.com/hashicorp/serf v0.8.5 // indirect
+	github.com/jonboulle/clockwork v0.1.0 // indirect
 	github.com/klauspost/compress v1.8.2 // indirect
+	github.com/miekg/dns v1.1.22 // indirect
 	github.com/mitchellh/go-wordwrap v0.0.0-20150314170334-ad45545899c7 // indirect
+	github.com/moby/buildkit v0.6.2 // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/opencontainers/runc v1.0.0-rc8.0.20190827142921-dd075602f158
 	github.com/opencontainers/runtime-spec v1.0.0
@@ -34,13 +59,18 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/pkg/profile v1.3.0 // indirect
+	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/seccomp/containers-golang v0.0.0-20190710130535-8d1ed6a872a5 // indirect
-	github.com/shurcooL/sanitized_anchor_name v0.0.0-20151028001915-10ef21a441db // indirect
+	github.com/soheilhy/cmux v0.1.4 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
+	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
+	github.com/tonistiigi/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
+	github.com/tonistiigi/fsutil v0.0.0-20191018213012-0f039a052ca1 // indirect
+	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
+	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
-	golang.org/x/sys v0.0.0-20190902133755-9109b7679e13
-	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
+	golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe
 	gopkg.in/inf.v0 v0.9.0 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
@@ -55,10 +85,10 @@ require (
 )
 
 replace (
+	github.com/Sirupsen/logrus => github.com/sirupsen/logrus v1.4.2
 	github.com/containers/image/v4 => github.com/containers/image/v4 v4.0.0-20191004175620-9da78d1f50d2
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
 	github.com/opencontainers/runtime-tools => github.com/opencontainers/runtime-tools v0.8.0
-	github.com/Sirupsen/logrus => github.com/sirupsen/logrus v1.4.2
 	k8s.io/api => github.com/openshift/kubernetes-api v0.0.0-20190918181048-13e46d2d750b
 	k8s.io/apiextensions-apiserver => github.com/openshift/kubernetes-apiextensions-apiserver v0.0.0-20190907075317-b45b4fd943f2
 	k8s.io/apimachinery => github.com/openshift/kubernetes-apimachinery v0.0.0-20190822093434-ef0be50b30d5
