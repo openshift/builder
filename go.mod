@@ -44,7 +44,7 @@ require (
 	github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
 	github.com/openshift/imagebuilder v1.1.0
 	github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
-	github.com/openshift/source-to-image v1.2.0
+	github.com/openshift/source-to-image v1.2.1-0.20191029175504-f20322e54448
 	github.com/pkg/errors v0.8.1
 	github.com/pkg/profile v1.3.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
