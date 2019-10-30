@@ -6,12 +6,11 @@ require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
 	github.com/Microsoft/opengcs v0.3.9 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/Sirupsen/logrus v0.0.0-00010101000000-000000000000 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containers/buildah v1.11.3
-	github.com/containers/image/v4 v4.0.1
-	github.com/containers/storage v1.13.4
+	github.com/containers/buildah v1.11.4
+	github.com/containers/image/v5 v5.0.0
+	github.com/containers/storage v1.13.5
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
@@ -42,7 +41,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.0.0
 	github.com/openshift/api v3.9.1-0.20191024142031-e89ff1fddcbe+incompatible
 	github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
-	github.com/openshift/imagebuilder v1.1.0
+	github.com/openshift/imagebuilder v1.1.1
 	github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
 	github.com/openshift/source-to-image v1.2.0
 	github.com/pkg/errors v0.8.1
