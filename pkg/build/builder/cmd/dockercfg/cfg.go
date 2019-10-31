@@ -13,7 +13,7 @@ import (
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
-	"github.com/containers/image/v4/types"
+	"github.com/containers/image/v5/types"
 
 	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )

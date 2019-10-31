@@ -5,7 +5,7 @@ package builder
 import (
 	"context"
 
-	"github.com/containers/image/v4/types"
+	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
 	buildapiv1 "github.com/openshift/api/build/v1"
