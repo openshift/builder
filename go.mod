@@ -6,7 +6,6 @@ require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
 	github.com/Microsoft/opengcs v0.3.9 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/Sirupsen/logrus v0.0.0-00010101000000-000000000000 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
 	github.com/containers/buildah v1.11.4
@@ -18,7 +17,7 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/docker/libkv v0.2.1 // indirect
-	github.com/docker/swarmkit v1.12.0 // indirect
+	github.com/docker/swarmkit v1.12.1-0.20190926144208-d509e31c1fda // indirect
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/fsouza/go-dockerclient v1.5.0
@@ -70,7 +69,6 @@ require (
 )
 
 replace (
-	github.com/Sirupsen/logrus => github.com/sirupsen/logrus v1.4.2
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
 	github.com/opencontainers/runtime-tools => github.com/opencontainers/runtime-tools v0.8.0
 	k8s.io/api => k8s.io/api v0.0.0-20191016110408-35e52d86657a
