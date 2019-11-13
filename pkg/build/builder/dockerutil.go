@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	idocker "github.com/containers/image/v5/docker"
+	idocker "github.com/containers/image/v4/docker"
 	"github.com/docker/distribution/registry/api/errcode"
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/pkg/errors"
@@ -39,8 +39,8 @@ type DockerClient interface {
 }
 
 func unwrapUnauthorizedError(err error) error {
-	cause := errors.Cause(err)
-	if _, ok := cause.(idocker.ErrUnauthorizedForCredentials); ok {
+	switch cause := errors.Cause(err); cause {
+	case idocker.ErrUnauthorizedForCredentials:
 		// strip off wrappers that mainly add the image name as their added context,
 		// which just duplicates information that we're already logging
 		return cause

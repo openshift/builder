@@ -1,5 +1,7 @@
 ---
 run:
+  build-tags:
+    - ostree
   concurrency: 6
   deadline: 5m
 linters:

@@ -104,7 +104,7 @@ func (l *lockfile) lock(l_type int16, recursive bool) {
 		// If we're the first reference on the lock, we need to open the file again.
 		fd, err := openLock(l.file, l.ro)
 		if err != nil {
-			panic(fmt.Sprintf("error opening %q: %v", l.file, err))
+			panic(fmt.Sprintf("error opening %q", l.file))
 		}
 		unix.CloseOnExec(fd)
 		l.fd = uintptr(fd)

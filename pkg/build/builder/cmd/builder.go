@@ -12,8 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	restclient "k8s.io/client-go/rest"
 
-	istorage "github.com/containers/image/v5/storage"
-	"github.com/containers/image/v5/types"
+	istorage "github.com/containers/image/v4/storage"
+	"github.com/containers/image/v4/types"
 	"github.com/containers/storage"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
