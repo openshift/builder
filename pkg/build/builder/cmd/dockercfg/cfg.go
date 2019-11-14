@@ -66,11 +66,11 @@ func (h *Helper) GetDockerAuthSearchPaths(authType string) []string {
 // SetSystemContextFilePath properly seeds the container/image SystemContext
 // with the authentication file based on the format implied by the file name
 func SetSystemContextFilePath(sc *types.SystemContext, path string) {
-	if filepath.Base(path) == dockerConfigFileKey {
-		sc.AuthFilePath = path
+	if filepath.Base(path) == DockerConfigKey {
+		sc.LegacyFormatAuthFilePath = path
 		return
 	}
-	sc.LegacyFormatAuthFilePath = path
+	sc.AuthFilePath = path
 }
 
 // GetDockerAuth returns a valid Docker AuthConfiguration entry, and whether it was read
