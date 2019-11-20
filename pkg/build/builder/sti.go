@@ -251,6 +251,11 @@ func (s *S2IBuilder) Build() error {
 				log.V(5).Infof("Incremental image pull failure: %v", err)
 				config.Incremental = false
 				config.IncrementalFromTag = ""
+			} else {
+				// with the 'special case pull' of the incremental image above, set force pull to false so that the
+				// logic below does not attempt to re-pull the previous-output-image with the standard pull secret
+				// (which would potentially fail since the image should be pulled w/ the push credentails)
+				s.build.Spec.Strategy.SourceStrategy.ForcePull = false
 			}
 		}
 	}
