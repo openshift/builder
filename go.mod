@@ -20,7 +20,7 @@ require (
 	github.com/docker/swarmkit v1.12.1-0.20190926144208-d509e31c1fda // indirect
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
-	github.com/fsouza/go-dockerclient v1.5.0
+	github.com/fsouza/go-dockerclient v1.6.0
 	github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095 // indirect
 	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
 	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
@@ -32,7 +32,6 @@ require (
 	github.com/hashicorp/go-memdb v1.0.4 // indirect
 	github.com/hashicorp/memberlist v0.1.5 // indirect
 	github.com/hashicorp/serf v0.8.5 // indirect
-	github.com/klauspost/compress v1.8.2 // indirect
 	github.com/miekg/dns v1.1.22 // indirect
 	github.com/moby/buildkit v0.6.2 // indirect
 	github.com/opencontainers/runc v1.0.0-rc9
@@ -52,14 +51,14 @@ require (
 	github.com/tonistiigi/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20191018213012-0f039a052ca1 // indirect
 	go.uber.org/zap v1.11.0 // indirect
-	golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe
+	golang.org/x/sys v0.0.0-20191127021746-63cb32ae39b2
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v0.0.0
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
 	k8s.io/kubectl v0.0.0
-	k8s.io/kubernetes v0.0.0
+	k8s.io/kubernetes v1.13.0
 )
 
 replace (
