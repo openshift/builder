@@ -8,9 +8,9 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containers/buildah v1.11.4
+	github.com/containers/buildah v1.11.7-0.20191206171145-8d6869bccee0
 	github.com/containers/image/v5 v5.0.0
-	github.com/containers/storage v1.13.5
+	github.com/containers/storage v1.15.2
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
@@ -63,7 +63,9 @@ require (
 )
 
 replace (
+	github.com/containers/storage => github.com/containers/storage v1.13.3-0.20191209173733-4822c6053840
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
+	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
 	github.com/opencontainers/runtime-tools => github.com/opencontainers/runtime-tools v0.8.0
 	k8s.io/api => k8s.io/api v0.0.0-20191122220107-b5267f2975e0
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191122222427-64482ea217ff
