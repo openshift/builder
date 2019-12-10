@@ -681,6 +681,8 @@ github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61 h1:nWVo9bZwSK
 github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61/go.mod h1:NBttNjZpWwup/nthuLbPAPSYC8Qyo+BBK5bCtFoyYjo=
 github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d h1:1LuQzDKgiXj1omPNDcY1E/mEOE/90jdobR+7WBfBQYA=
 github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d/go.mod h1:LJM49W8fBVSj+rvcopJZu9mgH5Tx6HwLHySIYeGeu4k=
+github.com/openshift/source-to-image v1.2.0 h1:TAZnZttPvaTNiANeuYJUxVglcWtAdHpjl8VE81KZYiI=
+github.com/openshift/source-to-image v1.2.0/go.mod h1:LR3Zbcy5zfRjqLEftlfYqxirrDYkhrR9VLo+hs76/PI=
 github.com/openshift/source-to-image v1.2.1-0.20191029175504-f20322e54448 h1:eaLjM4qxYOydHYoNkcqDHK0ve3fVdOe4/zTA4k9zU/Q=
 github.com/openshift/source-to-image v1.2.1-0.20191029175504-f20322e54448/go.mod h1:LR3Zbcy5zfRjqLEftlfYqxirrDYkhrR9VLo+hs76/PI=
 github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75/go.mod h1:PLldrQSroqzH70Xl+1DQcGnefIbqsKR7UDaiux3zV+w=
