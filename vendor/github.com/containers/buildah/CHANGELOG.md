@@ -2,6 +2,68 @@
 
 # Changelog
 
+## v1.11.6 (2019-12-03)
+    Handle missing equal sign in --from and --chown flags for COPY/ADD
+    bud COPY does not download URL
+    Bump github.com/onsi/gomega from 1.7.0 to 1.7.1
+    Fix .dockerignore exclude regression
+    Ran buildah through codespell
+    commit(docker): always set ContainerID and ContainerConfig
+    Touch up commit man page image parameter
+    Add builder identity annotations.
+    info: use util.Runtime()
+    Bump github.com/onsi/ginkgo from 1.10.2 to 1.10.3
+    Bump back to v1.12.0-dev
+
+## v1.11.5 (2019-11-11)
+    Enhance error on unsafe symbolic link targets
+    Add OCIRuntime to info
+    Check nonexsit authfile
+    Only output image id if running buildah bud --quiet
+    Fix --pull=true||false and add --pull-never to bud and from (retry)
+    cgroups v2: tweak or skip tests
+    Prepwork: new 'skip' helpers for tests
+    Handle configuration blobs for manifest lists
+    unmarshalConvertedConfig: avoid using the updated image's ref
+    Add completions for Manifest commands
+    Add disableFips option to secrets pkg
+    Update bud.bats test archive test
+    Add test for caching based on content digest
+    Builder.untarPath(): always evaluate b.ContentDigester.Hash()
+    Bump github.com/onsi/ginkgo from 1.10.1 to 1.10.2
+    Fix another broken test: copy-url-mtime
+    yet more fixes
+    Actual bug fix for 'add' test: fix the expected mode
+    BATS tests - lots of mostly minor cleanup
+    build: drop support for ostree
+    Add support for make vendor-in-container
+    imgtype: exit with error if storage fails
+    remove XDG_RUNTIME_DIR from default authfile path
+    fix troubleshooting redirect instructions
+    Bump back to v1.12.0-dev
+
+## v1.11.4 (2019-10-28)
+    buildah: add a "manifest" command
+    manifests: add the module
+    pkg/supplemented: add a package for grouping images together
+    pkg/manifests: add a manifest list build/manipulation API
+    Update for ErrUnauthorizedForCredentials API change in containers/image
+    Update for manifest-lists API changes in containers/image
+    version: also note the version of containers/image
+    Move to containers/image v5.0.0
+    Enable --device directory as src device
+    Fix git build with branch specified
+    Bump github.com/openshift/imagebuilder from 1.1.0 to 1.1.1
+    Bump github.com/fsouza/go-dockerclient from 1.4.4 to 1.5.0
+    Add clarification to the Tutorial for new users
+    Silence "using cache" to ensure -q is fully quiet
+    Add OWNERS File to Buildah
+    Bump github.com/containers/storage from 1.13.4 to 1.13.5
+    Move runtime flag to bud from common
+    Commit: check for storage.ErrImageUnknown using errors.Cause()
+    Fix crash when invalid COPY --from flag is specified.
+    Bump back to v1.12.0-dev
+
 ## v1.11.3 (2019-10-04)
     Update c/image to v4.0.1
     Bump github.com/spf13/pflag from 1.0.3 to 1.0.5
