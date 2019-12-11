@@ -8,9 +8,9 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containers/buildah v1.11.4
+	github.com/containers/buildah v1.11.7-0.20191206171145-8d6869bccee0
 	github.com/containers/image/v5 v5.0.0
-	github.com/containers/storage v1.13.5
+	github.com/containers/storage v1.15.2
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
@@ -20,7 +20,7 @@ require (
 	github.com/docker/swarmkit v1.12.1-0.20190926144208-d509e31c1fda // indirect
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
-	github.com/fsouza/go-dockerclient v1.5.0
+	github.com/fsouza/go-dockerclient v1.6.0
 	github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095 // indirect
 	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
 	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
@@ -32,7 +32,6 @@ require (
 	github.com/hashicorp/go-memdb v1.0.4 // indirect
 	github.com/hashicorp/memberlist v0.1.5 // indirect
 	github.com/hashicorp/serf v0.8.5 // indirect
-	github.com/klauspost/compress v1.8.2 // indirect
 	github.com/miekg/dns v1.1.22 // indirect
 	github.com/moby/buildkit v0.6.2 // indirect
 	github.com/opencontainers/runc v1.0.0-rc9
@@ -52,18 +51,20 @@ require (
 	github.com/tonistiigi/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20191018213012-0f039a052ca1 // indirect
 	go.uber.org/zap v1.11.0 // indirect
-	golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe
+	golang.org/x/sys v0.0.0-20191127021746-63cb32ae39b2
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v0.0.0
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
 	k8s.io/kubectl v0.0.0
-	k8s.io/kubernetes v0.0.0
+	k8s.io/kubernetes v1.13.0
 )
 
 replace (
+	github.com/containers/storage => github.com/containers/storage v1.13.3-0.20191209173733-4822c6053840
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
+	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
 	github.com/opencontainers/runtime-tools => github.com/opencontainers/runtime-tools v0.8.0
 	k8s.io/api => k8s.io/api v0.0.0-20191122220107-b5267f2975e0
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191122222427-64482ea217ff
