@@ -88,6 +88,137 @@ func init() {
 	}
 }
 
+func TestCompressRegression(t *testing.T) {
+	// Match the fuzz function
+	var testInput = func(data []byte) int {
+		var enc Scratch
+		enc.WantLogLess = 5
+		comp, _, err := Compress1X(data, &enc)
+		if err == ErrIncompressible || err == ErrUseRLE || err == ErrTooBig {
+			return 0
+		}
+		if err != nil {
+			panic(err)
+		}
+		if len(comp) >= len(data)-len(data)>>enc.WantLogLess {
+			panic(fmt.Errorf("too large output provided. got %d, but should be < %d", len(comp), len(data)-len(data)>>enc.WantLogLess))
+		}
+
+		dec, remain, err := ReadTable(comp, nil)
+		if err != nil {
+			panic(err)
+		}
+		out, err := dec.Decompress1X(remain)
+		if err != nil {
+			panic(err)
+		}
+		if !bytes.Equal(out, data) {
+			panic("decompression 1x mismatch")
+		}
+		// Reuse as 4X
+		enc.Reuse = ReusePolicyAllow
+		comp, reUsed, err := Compress4X(data, &enc)
+		if err == ErrIncompressible || err == ErrUseRLE || err == ErrTooBig {
+			return 0
+		}
+		if err != nil {
+			panic(err)
+		}
+		if len(comp) >= len(data)-len(data)>>enc.WantLogLess {
+			panic(fmt.Errorf("too large output provided. got %d, but should be < %d", len(comp), len(data)-len(data)>>enc.WantLogLess))
+		}
+
+		remain = comp
+		if !reUsed {
+			dec, remain, err = ReadTable(comp, dec)
+			if err != nil {
+				panic(err)
+			}
+		}
+		out, err = dec.Decompress4X(remain, len(data))
+		if err != nil {
+			panic(err)
+		}
+		if !bytes.Equal(out, data) {
+			panic("decompression 4x with reuse mismatch")
+		}
+
+		enc.Reuse = ReusePolicyNone
+		comp, reUsed, err = Compress4X(data, &enc)
+		if err == ErrIncompressible || err == ErrUseRLE || err == ErrTooBig {
+			return 0
+		}
+		if err != nil {
+			panic(err)
+		}
+		if reUsed {
+			panic("reused when asked not to")
+		}
+		if len(comp) >= len(data)-len(data)>>enc.WantLogLess {
+			panic(fmt.Errorf("too large output provided. got %d, but should be < %d", len(comp), len(data)-len(data)>>enc.WantLogLess))
+		}
+
+		dec, remain, err = ReadTable(comp, dec)
+		if err != nil {
+			panic(err)
+		}
+		out, err = dec.Decompress4X(remain, len(data))
+		if err != nil {
+			panic(err)
+		}
+		if !bytes.Equal(out, data) {
+			panic("decompression 4x mismatch")
+		}
+
+		// Reuse as 1X
+		dec.Reuse = ReusePolicyAllow
+		comp, reUsed, err = Compress1X(data, &enc)
+		if err == ErrIncompressible || err == ErrUseRLE || err == ErrTooBig {
+			return 0
+		}
+		if err != nil {
+			panic(err)
+		}
+		if len(comp) >= len(data)-len(data)>>enc.WantLogLess {
+			panic(fmt.Errorf("too large output provided. got %d, but should be < %d", len(comp), len(data)-len(data)>>enc.WantLogLess))
+		}
+
+		remain = comp
+		if !reUsed {
+			dec, remain, err = ReadTable(comp, dec)
+			if err != nil {
+				panic(err)
+			}
+		}
+		out, err = dec.Decompress1X(remain)
+		if err != nil {
+			panic(err)
+		}
+		if !bytes.Equal(out, data) {
+			panic("decompression 1x with reuse mismatch")
+		}
+		return 1
+	}
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			buf0, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			testInput(buf0)
+		})
+	}
+	for _, test := range testfilesExtended {
+		t.Run(test.name, func(t *testing.T) {
+			buf0, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			testInput(buf0)
+		})
+	}
+}
+
 func TestCompress1X(t *testing.T) {
 	for _, test := range testfiles {
 		t.Run(test.name, func(t *testing.T) {
@@ -177,6 +308,9 @@ func TestCompress4XReuse(t *testing.T) {
 	var s Scratch
 	s.Reuse = ReusePolicyAllow
 	for i := 0; i < 255; i++ {
+		if testing.Short() && i > 10 {
+			break
+		}
 		t.Run(fmt.Sprint("test-", i), func(t *testing.T) {
 			buf0 := make([]byte, BlockSizeMax)
 			for j := range buf0 {
@@ -208,6 +342,9 @@ func TestCompress4XReuseActually(t *testing.T) {
 	var s Scratch
 	s.Reuse = ReusePolicyAllow
 	for i := 0; i < 255; i++ {
+		if testing.Short() && i > 10 {
+			break
+		}
 		t.Run(fmt.Sprint("test-", i), func(t *testing.T) {
 			buf0 := make([]byte, BlockSizeMax)
 			for j := range buf0 {

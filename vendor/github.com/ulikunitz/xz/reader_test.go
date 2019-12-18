@@ -1,4 +1,4 @@
-// Copyright 2014-2017 Ulrich Kunitz. All rights reserved.
+// Copyright 2014-2019 Ulrich Kunitz. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -55,7 +55,7 @@ func TestReaderSingleStream(t *testing.T) {
 	}
 }
 
-func TestReaaderMultipleStreams(t *testing.T) {
+func TestReaderMultipleStreams(t *testing.T) {
 	data, err := ioutil.ReadFile("fox.xz")
 	if err != nil {
 		t.Fatalf("ReadFile error %s", err)
@@ -70,6 +70,22 @@ func TestReaaderMultipleStreams(t *testing.T) {
 	m = append(m, data...)
 	m = append(m, 0, 0, 0, 0)
 	xz := bytes.NewReader(m)
+	r, err := NewReader(xz)
+	if err != nil {
+		t.Fatalf("NewReader error %s", err)
+	}
+	var buf bytes.Buffer
+	if _, err = io.Copy(&buf, r); err != nil {
+		t.Fatalf("io.Copy error %s", err)
+	}
+}
+
+func TestCheckNone(t *testing.T) {
+	const file = "fox-check-none.xz"
+	xz, err := os.Open(file)
+	if err != nil {
+		t.Fatalf("os.Open(%q) error %s", file, err)
+	}
 	r, err := NewReader(xz)
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)

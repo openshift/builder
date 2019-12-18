@@ -38,7 +38,7 @@ import:
 - package: github.com/containers/image
   version: v3.0.2
 - package: github.com/containers/storage
-  version: v1.13.2
+  version: v1.13-stable
 - package: github.com/opencontainers/runc
   subpackages:
   - libcontainer/cgroups
@@ -71,3 +71,24 @@ import:
 # golang.org/x/sys - pin to buildah
 - package: golang.org/x/sys
   version: 953cdadca894cdc07be76fc99f95b40c28f06623
+# 6. pins because we don't want to update them unintentionally
+- package: github.com/containerd/continuity
+  version: aaeac12a7ffcd198ae25440a9dff125c2e2703a7
+- package: github.com/docker/libnetwork
+  version: a9cd636e37898226332c439363e2ed0ea185ae92
+- package: github.com/etcd-io/bbolt
+  version: 35b666109344c1547e0135d0d17486746cc073f3
+- package: github.com/gorilla/mux
+  version: 884b5ffcbd3a11b730f0b75f5c86ac408753c34d
+- package: github.com/docker/distribution
+  version: 16128bbac47f75050e82f7e91b04df33775e0c23
+- package: github.com/hashicorp/go-multierror
+  version: bdca7bb83f603b80ef756bb953fe1dafa9cd00a2
+- package: google.golang.org/appengine
+  version: 54a98f90d1c46b7731eb8fb305d2a321c30ef610
+- package: github.com/mattn/go-isatty
+  version: bf9a1dea1961e1d831824fb135332bfb8c10e8b8
+- package: github.com/opencontainers/go-digest
+  version: ac19fd6e7483ff933754af248d80be865e543d22
+- package: k8s.io/klog
+  version: aeddeeced515f4c31fa65bfc24332b3e7763cc5c

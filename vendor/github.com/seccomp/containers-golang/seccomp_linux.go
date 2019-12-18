@@ -1,5 +1,9 @@
 // +build seccomp
 
+// SPDX-License-Identifier: Apache-2.0
+
+// Copyright 2013-2018 Docker, Inc.
+
 package seccomp // import "github.com/seccomp/containers-golang"
 
 import (
@@ -142,20 +146,20 @@ Loop:
 		}
 
 		if call.Name != "" {
-			newConfig.Syscalls = append(newConfig.Syscalls, createSpecsSyscall(call.Name, call.Action, call.Args))
+			newConfig.Syscalls = append(newConfig.Syscalls, createSpecsSyscall([]string{call.Name}, call.Action, call.Args))
 		}
 
-		for _, n := range call.Names {
-			newConfig.Syscalls = append(newConfig.Syscalls, createSpecsSyscall(n, call.Action, call.Args))
+		if len(call.Names) > 0 {
+			newConfig.Syscalls = append(newConfig.Syscalls, createSpecsSyscall(call.Names, call.Action, call.Args))
 		}
 	}
 
 	return newConfig, nil
 }
 
-func createSpecsSyscall(name string, action Action, args []*Arg) specs.LinuxSyscall {
+func createSpecsSyscall(names []string, action Action, args []*Arg) specs.LinuxSyscall {
 	newCall := specs.LinuxSyscall{
-		Names:  []string{name},
+		Names:  names,
 		Action: specs.LinuxSeccompAction(action),
 	}
 

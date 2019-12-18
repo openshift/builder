@@ -4,7 +4,7 @@ version: 2.1
 executors:
   container:
     docker:
-      - image: circleci/golang
+      - image: circleci/golang:1.13
     environment:
       GOCACHE: &gocache /tmp/go-build
     working_directory: &workdir /go/src/github.com/seccomp/containers-golang

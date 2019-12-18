@@ -101,6 +101,8 @@ const (
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
+var avxAvailable bool
+
 // crc implements the checksum specified in section 3 of
 // https://github.com/google/snappy/blob/master/framing_format.txt
 func crc(b []byte) uint32 {
@@ -110,7 +112,7 @@ func crc(b []byte) uint32 {
 
 // literalExtraSize returns the extra size of encoding n literals.
 // n should be >= 0 and <= math.MaxUint32.
-func literalExtraSize(n int) int {
+func literalExtraSize(n int64) int64 {
 	if n == 0 {
 		return 0
 	}

@@ -1,5 +1,5 @@
-hash: 0fc2f7448fb2044cd61208ebfddc5052ac56ea36e463b560885456d5c1387bfd
-updated: 2020-02-21T09:40:19.536379-05:00
+hash: ee1e634a860751a583446a0060f0b03a96f2991ce95e6c15223eb5419d71a25c
+updated: 2020-05-14T11:43:53.694825855-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -80,7 +80,7 @@ imports:
   - types
   - version
 - name: github.com/containers/storage
-  version: 69bcd96b85fe4fdda4a491cc279ff888522d9122
+  version: 429125f17273e70fd1b52b0a6172007f58292a7d
   subpackages:
   - drivers
   - drivers/aufs
@@ -110,7 +110,6 @@ imports:
   - pkg/longpath
   - pkg/loopback
   - pkg/mount
-  - pkg/ostree
   - pkg/parsers
   - pkg/parsers/kernel
   - pkg/pools
@@ -197,7 +196,6 @@ imports:
   version: a9cd636e37898226332c439363e2ed0ea185ae92
   subpackages:
   - ipamutils
-  - ipvs
   - resolvconf
   - resolvconf/dns
   - types
@@ -278,7 +276,7 @@ imports:
 - name: github.com/json-iterator/go
   version: ab8a2e0c74be9d3be70b3184d9acc634935ded82
 - name: github.com/klauspost/compress
-  version: fdc46f09595ea8241b9bfe291bbc868a7af19e10
+  version: 4a2d40e4b07e5b3d333bc0569facd0f2dbf4ef39
   subpackages:
   - flate
   - fse
@@ -286,12 +284,10 @@ imports:
   - snappy
   - zstd
   - zstd/internal/xxhash
-- name: github.com/klauspost/cpuid
-  version: cf2ded4aa83357cbc18366e6e1c64eda3c26eaf2
 - name: github.com/klauspost/pgzip
-  version: 083b1c3f84dd6486588802e5ce295de3a7f41a8b
+  version: 3fc4d32681e68458b92fa9b199d8953b1511d73f
 - name: github.com/konsorten/go-windows-terminal-sequences
-  version: f55edac94c9bbba5d6182a4be46d86a2c9b5b50e
+  version: edb144dfd453055e1e49a3d8b410a660b5a87613
 - name: github.com/mailru/easyjson
   version: 2f5df55504ebc322e4d52d34df6a1f5b503bf26d
   subpackages:
@@ -380,7 +376,7 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: d4a64ec2cbd86f11ea74dfdcf6520d5833d0c6cd
+  version: 8ce0047d664fc92a53ded23caef9ede2dc4468c6
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
@@ -399,7 +395,7 @@ imports:
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: 2cf86bbd930b78997e198b204a59b1711bad3c02
+  version: d58edcb9e7bca8b6c77e261db8df547364f69fb2
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -447,9 +443,9 @@ imports:
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: 27936f6d90f9c8e1145f11ed52ffffbfdb9e0af7
+  version: 614d223910a179a466c1767a985424175c39b465
 - name: github.com/pkg/profile
-  version: f6fe06335df110bcf1ed6d4e852b760bfc15beee
+  version: acd64d450fd45fb2afa41f833f3788c8a7797219
 - name: github.com/pquerna/ffjson
   version: af8b230fcd2007c7095168ca8ab94c68b60840c6
   subpackages:
@@ -485,13 +481,13 @@ imports:
 - name: github.com/russross/blackfriday
   version: 300106c228d52c8941d4b3de6054a6062a86dda3
 - name: github.com/seccomp/containers-golang
-  version: 8d1ed6a872a5b5605cd2e5fcf6bb10ff5ec8b288
+  version: f145e54aff2c46623079c255b787dafe16ac74dd
 - name: github.com/seccomp/libseccomp-golang
   version: 1b506fc7c24eec5a3693cdcbed40d9c226cfc6a1
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 10ef21a441db47d8b13ebcc5fd2310f636973c77
 - name: github.com/sirupsen/logrus
-  version: de736cf91b921d56253b4010270681d33fdf7cb5
+  version: 60c74ad9be0d874af0ab0daef6ab07c5c5911f0d
 - name: github.com/spf13/cobra
   version: b80588d523ec50c7fee20218426cf2ff70920f06
 - name: github.com/spf13/pflag
@@ -505,7 +501,7 @@ imports:
   subpackages:
   - patricia
 - name: github.com/ulikunitz/xz
-  version: 6f934d456d51e742b4eeab20d925a827ef22320a
+  version: 067145b4480ef600b25a0403f386ea25ffe42fd5
   subpackages:
   - internal/hash
   - internal/xlog
@@ -523,7 +519,7 @@ imports:
   - decor
   - internal
 - name: github.com/VividCortex/ewma
-  version: 0173b1dbcfaa7fec09eff3e32281ed08fa8f2a1c
+  version: 5c04cd146b30136f1fde792effc2453a0b1c311e
 - name: github.com/xeipuuv/gojsonpointer
   version: 6fe8760cad3569743d51ddbb243b26f8456742dc
 - name: github.com/xeipuuv/gojsonreference
@@ -579,7 +575,7 @@ imports:
   - jws
   - jwt
 - name: golang.org/x/sync
-  version: 42b317875d0fa942474b76e1b46a6060d720ae6e
+  version: 43a5402ce75a95522677f77c619865d66b8c57ab
   subpackages:
   - semaphore
 - name: golang.org/x/sys

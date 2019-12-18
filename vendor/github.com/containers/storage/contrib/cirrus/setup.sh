@@ -10,9 +10,9 @@ show_env_vars
 
 cd $GOSRC
 
-export RPMBuildRequires="podman autoconf automake gcc golang go-md2man gpgme-devel device-mapper-devel btrfs-progs-devel libassuan-devel libseccomp-devel glib2-devel ostree-devel make bats fuse3-devel fuse3"
+export RPMBuildRequires="podman autoconf automake gcc golang go-md2man gpgme-devel device-mapper-devel btrfs-progs-devel libassuan-devel libseccomp-devel glib2-devel make bats fuse3-devel fuse3"
 export RPMBuildConflicts="gcc-go"
-export AptBuildRequires="autoconf automake gcc golang go-md2man libgpgme11-dev libdevmapper-dev libseccomp-dev libglib2.0-dev libostree-dev make bats aufs-tools fuse3 libfuse3-dev libbtrfs-dev"
+export AptBuildRequires="autoconf automake gcc golang go-md2man libgpgme11-dev libdevmapper-dev libseccomp-dev libglib2.0-dev make bats aufs-tools fuse3 libfuse3-dev libbtrfs-dev"
 export AptBuildConflicts="cryptsetup-initramfs"
 
 case "$OS_REL_VER" in
@@ -27,7 +27,7 @@ case "$OS_REL_VER" in
         echo "Setting up $OS_RELEASE_ID $OS_RELEASE_VER"  # STUB: Add VM setup instructions here
         $SHORT_APTGET update  # Fetch latest package metadata
         $SHORT_APTGET -qq remove $AptBuildConflicts
-        $SHORT_APTGET -qq install $AptBuildRequires
+        $LONG_APTGET -qq install $AptBuildRequires
         install_fuse_overlayfs_from_git
         ;;
     *)
