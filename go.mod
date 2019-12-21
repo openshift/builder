@@ -10,7 +10,7 @@ require (
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
 	github.com/containers/buildah v1.11.7-0.20191206171145-8d6869bccee0
 	github.com/containers/image/v5 v5.0.0
-	github.com/containers/storage v1.15.2
+	github.com/containers/storage v1.15.3
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
@@ -62,10 +62,15 @@ require (
 )
 
 replace (
-	github.com/containers/storage => github.com/containers/storage v1.13.3-0.20191209173733-4822c6053840
+	// Result of go get github.com/containerd/containerd@v0.2.x
+	github.com/containerd/containerd => github.com/containerd/containerd v0.2.10-0.20180716142608-408d13de2fbb
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
+	github.com/docker/libnetwork => github.com/docker/libnetwork v0.8.0-dev.2.0.20171107005402-dcf79f8c7fcb
 	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
+	github.com/moby/buildkit => github.com/dmcgowan/buildkit v0.0.0-20170731200553-da2b9dc7dab9
 	github.com/opencontainers/runtime-tools => github.com/opencontainers/runtime-tools v0.8.0
+	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20190708153700-3bdd9d9f5532
+	google.golang.org/grpc => google.golang.org/grpc v1.3.0
 	k8s.io/api => k8s.io/api v0.0.0-20191122220107-b5267f2975e0
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191122222427-64482ea217ff
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20191121175448-79c2a76c473a
