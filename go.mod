@@ -8,9 +8,9 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containers/buildah v1.11.7-0.20191206171145-8d6869bccee0
-	github.com/containers/image/v5 v5.0.0
-	github.com/containers/storage v1.15.3
+	github.com/containers/buildah v1.11.6-0.20200109175634-4e23b7a10cc9
+	github.com/containers/image/v5 v5.1.0
+	github.com/containers/storage v1.15.5
 	github.com/coreos/bbolt v1.3.3 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
@@ -52,8 +52,8 @@ require (
 	github.com/tonistiigi/fsutil v0.0.0-20191018213012-0f039a052ca1 // indirect
 	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/sys v0.0.0-20191127021746-63cb32ae39b2
-	k8s.io/api v0.0.0
-	k8s.io/apimachinery v0.0.0
+	k8s.io/api v0.17.0
+	k8s.io/apimachinery v0.17.0
 	k8s.io/client-go v0.0.0
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
