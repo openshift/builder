@@ -199,6 +199,19 @@ func Test_addBuildParameters(t *testing.T) {
 		},
 		{
 			original: heredoc.Doc(`
+				ARG GOLANG_CONTAINER=golang:latest
+				FROM $GOLANG_CONTAINER
+				RUN echo "hello world"
+				`),
+			want: want{
+				Out: heredoc.Doc(`
+				FROM $GOLANG_CONTAINER
+				RUN echo "hello world"
+				`),
+			},
+		},
+		{
+			original: heredoc.Doc(`
 				FROM scratch
 				# FROM busybox
 				RUN echo "hello world"
