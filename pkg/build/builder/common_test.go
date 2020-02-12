@@ -205,6 +205,30 @@ func Test_addBuildParameters(t *testing.T) {
 				`),
 			want: want{
 				Out: heredoc.Doc(`
+				ARG GOLANG_CONTAINER=golang:latest
+				FROM $GOLANG_CONTAINER
+				RUN echo "hello world"
+				`),
+			},
+		},
+		{
+			// won't actually build: only ARG is allowed before the
+			// first FROM. preserving and then re-prepending ARG
+			// instructions effectively reorders them before any
+			// non-ARG instructions that also come before the first
+			// FROM.
+			original: heredoc.Doc(`
+				ARG GOLANG_CONTAINER=golang:latest
+				LABEL this=error
+				ARG GOLANG_CONTAINER2=golang:1.11
+				FROM $GOLANG_CONTAINER
+				RUN echo "hello world"
+				`),
+			want: want{
+				Out: heredoc.Doc(`
+				ARG GOLANG_CONTAINER=golang:latest
+				ARG GOLANG_CONTAINER2=golang:1.11
+				LABEL this=error
 				FROM $GOLANG_CONTAINER
 				RUN echo "hello world"
 				`),
@@ -628,7 +652,7 @@ func Test_findReferencedImages(t *testing.T) {
 			if _, err := dockerfile.Parse(strings.NewReader(test.original)); err != nil {
 				t.Fatal(err)
 			}
-			images, err := findReferencedImages(f.Name())
+			images, err := findReferencedImages(f.Name(), nil)
 			got := want{
 				Images: images,
 				Err:    err != nil,
