@@ -95,7 +95,8 @@ func (d *DockerBuilder) Build() error {
 		_, err = d.dockerClient.InspectImage(imageName)
 		if err != nil {
 			if err != docker.ErrNoSuchImage {
-				return err
+				log.V(4).Infof("\nError inspecting image \"%s\": %v, continuing", imageName, err)
+				continue
 			}
 			imageExists = false
 		}
