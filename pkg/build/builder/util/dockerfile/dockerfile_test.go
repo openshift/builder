@@ -61,6 +61,7 @@ LABEL version=1.0
 EXPOSE 8080
 VOLUME /var/run/www
 ENV PATH=/bin TEST=
+ENV OPTS words with whitespace
 ADD file /home/
 COPY dir/ /tmp/
 FROM other as 2
@@ -79,6 +80,7 @@ LABEL version=1.0
 EXPOSE 8080
 VOLUME /var/run/www
 ENV PATH=/bin TEST=
+ENV OPTS words with whitespace
 ADD file /home/
 COPY dir/ /tmp/
 FROM other as 2
@@ -394,6 +396,7 @@ func TestNextValues(t *testing.T) {
 		`EXPOSE 8080`:                   {"8080"},
 		`VOLUME /var/run/www`:           {"/var/run/www"},
 		`ENV PATH=/bin`:                 {"PATH", "/bin"},
+		`ENV OPTS word and whitespace`:  {"OPTS", "word and whitespace"},
 		`ADD file /home/`:               {"file", "/home/"},
 		`COPY dir/ /tmp/`:               {"dir/", "/tmp/"},
 		`RUN echo "Hello world!"`:       {`echo "Hello world!"`},
