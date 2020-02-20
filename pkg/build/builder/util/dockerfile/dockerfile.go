@@ -41,18 +41,8 @@ func Write(node *parser.Node) []byte {
 			}
 			return buf.Bytes()
 		case command.Env, command.Label:
-			for n := node.Next; n != nil; n = n.Next {
-				if buf.Len() > 0 {
-					buf.Write([]byte(" "))
-				}
-				buf.Write([]byte(n.Value))
-				buf.Write([]byte("="))
-				if n.Next != nil {
-					buf.Write([]byte(n.Next.Value))
-				}
-				n = n.Next
-			}
-			buf.Write([]byte("\n"))
+			buf.Reset()
+			buf.Write([]byte(node.Original + "\n"))
 			return buf.Bytes()
 		default:
 			if node.Attributes["json"] {
