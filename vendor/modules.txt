@@ -52,7 +52,7 @@ github.com/containernetworking/cni/pkg/types
 github.com/containernetworking/cni/pkg/version
 github.com/containernetworking/cni/pkg/types/020
 github.com/containernetworking/cni/pkg/types/current
-# github.com/containers/buildah v1.11.7-0.20191206171145-8d6869bccee0
+# github.com/containers/buildah v1.11.6-0.20200109175634-4e23b7a10cc9
 github.com/containers/buildah
 github.com/containers/buildah/imagebuildah
 github.com/containers/buildah/util
@@ -64,10 +64,10 @@ github.com/containers/buildah/pkg/chrootuser
 github.com/containers/buildah/pkg/overlay
 github.com/containers/buildah/pkg/secrets
 github.com/containers/buildah/pkg/umask
-# github.com/containers/common v0.0.3
+# github.com/containers/common v0.0.5
 github.com/containers/common/pkg/cgroups
 github.com/containers/common/pkg/unshare
-# github.com/containers/image/v5 v5.0.0
+# github.com/containers/image/v5 v5.1.0
 github.com/containers/image/v5/docker
 github.com/containers/image/v5/docker/reference
 github.com/containers/image/v5/pkg/docker/config
@@ -107,7 +107,17 @@ github.com/containers/image/v5/pkg/blobinfocache/memory
 github.com/containers/image/v5/pkg/blobinfocache/internal/prioritize
 # github.com/containers/libtrust v0.0.0-20190913040956-14b96171aa3b
 github.com/containers/libtrust
-# github.com/containers/storage v1.15.2 => github.com/containers/storage v1.13.3-0.20191209173733-4822c6053840
+# github.com/containers/ocicrypt v0.0.0-20190930154801-b87a4a69c741
+github.com/containers/ocicrypt
+github.com/containers/ocicrypt/config
+github.com/containers/ocicrypt/spec
+github.com/containers/ocicrypt/blockcipher
+github.com/containers/ocicrypt/keywrap
+github.com/containers/ocicrypt/keywrap/jwe
+github.com/containers/ocicrypt/keywrap/pgp
+github.com/containers/ocicrypt/keywrap/pkcs7
+github.com/containers/ocicrypt/utils
+# github.com/containers/storage v1.15.5 => github.com/containers/storage v1.13.3-0.20191209173733-4822c6053840
 github.com/containers/storage/pkg/reexec
 github.com/containers/storage
 github.com/containers/storage/pkg/archive
@@ -200,7 +210,7 @@ github.com/docker/docker/api/types/time
 github.com/docker/docker/api/types/volume
 github.com/docker/docker/pkg/tlsconfig
 github.com/docker/docker/pkg/term/windows
-# github.com/docker/docker-credential-helpers v0.6.1
+# github.com/docker/docker-credential-helpers v0.6.3
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
 # github.com/docker/go-connections v0.4.0
@@ -231,6 +241,8 @@ github.com/evanphx/json-patch
 github.com/exponent-io/jsonpath
 # github.com/fsouza/go-dockerclient v1.6.0
 github.com/fsouza/go-dockerclient
+# github.com/fullsailor/pkcs7 v0.0.0-20190404230743-d7302db945fa
+github.com/fullsailor/pkcs7
 # github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095
 github.com/getsentry/raven-go
 # github.com/ghodss/yaml v1.0.0
@@ -283,7 +295,7 @@ github.com/hashicorp/errwrap
 github.com/hashicorp/go-multierror
 # github.com/hashicorp/golang-lru v0.5.1
 github.com/hashicorp/golang-lru/simplelru
-# github.com/imdario/mergo v0.3.6
+# github.com/imdario/mergo v0.3.8
 github.com/imdario/mergo
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
@@ -306,8 +318,6 @@ github.com/konsorten/go-windows-terminal-sequences
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
 github.com/mailru/easyjson/buffer
-# github.com/mattn/go-isatty v0.0.4
-github.com/mattn/go-isatty
 # github.com/mattn/go-shellwords v1.0.6
 github.com/mattn/go-shellwords
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
@@ -449,11 +459,11 @@ github.com/ulikunitz/xz/internal/hash
 github.com/vbatts/tar-split/archive/tar
 github.com/vbatts/tar-split/tar/asm
 github.com/vbatts/tar-split/tar/storage
-# github.com/vbauerster/mpb v3.4.0+incompatible
-github.com/vbauerster/mpb
-github.com/vbauerster/mpb/decor
-github.com/vbauerster/mpb/cwriter
-github.com/vbauerster/mpb/internal
+# github.com/vbauerster/mpb/v4 v4.11.1
+github.com/vbauerster/mpb/v4
+github.com/vbauerster/mpb/v4/decor
+github.com/vbauerster/mpb/v4/cwriter
+github.com/vbauerster/mpb/v4/internal
 # github.com/xeipuuv/gojsonpointer v0.0.0-20190809123943-df4f5c81cb3b
 github.com/xeipuuv/gojsonpointer
 # github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415
@@ -466,15 +476,18 @@ go.opencensus.io/internal
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/tracestate
 go.opencensus.io
-# golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad
+# golang.org/x/crypto v0.0.0-20191112222119-e1110fd1c708
 golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/openpgp
+golang.org/x/crypto/openpgp/packet
 golang.org/x/crypto/openpgp/armor
 golang.org/x/crypto/openpgp/errors
-golang.org/x/crypto/openpgp/packet
 golang.org/x/crypto/openpgp/s2k
 golang.org/x/crypto/cast5
 golang.org/x/crypto/openpgp/elgamal
+golang.org/x/crypto/ed25519
+golang.org/x/crypto/pbkdf2
+golang.org/x/crypto/ed25519/internal/edwards25519
 # golang.org/x/net v0.0.0-20190923162816-aa69164e4478
 golang.org/x/net/context
 golang.org/x/net/http2
@@ -516,9 +529,13 @@ google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/remote_api
 # gopkg.in/inf.v0 v0.9.0
 gopkg.in/inf.v0
+# gopkg.in/square/go-jose.v2 v2.3.1
+gopkg.in/square/go-jose.v2
+gopkg.in/square/go-jose.v2/cipher
+gopkg.in/square/go-jose.v2/json
 # gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
-# k8s.io/api v0.0.0 => k8s.io/api v0.0.0-20191016110408-35e52d86657a
+# k8s.io/api v0.17.0 => k8s.io/api v0.16.4
 k8s.io/api/core/v1
 k8s.io/api/autoscaling/v1
 k8s.io/api/admission/v1
@@ -560,7 +577,7 @@ k8s.io/api/node/v1beta1
 k8s.io/api/scheduling/v1
 k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1alpha1
-# k8s.io/apimachinery v0.0.0 => k8s.io/apimachinery v0.0.0-20191004115801-a2eda9f80ab8
+# k8s.io/apimachinery v0.17.0 => k8s.io/apimachinery v0.16.4
 k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/apis/meta/v1
@@ -705,7 +722,7 @@ k8s.io/client-go/util/exec
 k8s.io/client-go/third_party/forked/golang/template
 # k8s.io/component-base v0.0.0 => k8s.io/component-base v0.0.0-20191016111319-039242c015a9
 k8s.io/component-base/logs
-# k8s.io/klog v0.4.0
+# k8s.io/klog v1.0.0 => k8s.io/klog v0.4.0
 k8s.io/klog
 # k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 k8s.io/kube-openapi/pkg/util/proto
