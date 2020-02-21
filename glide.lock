@@ -1,5 +1,5 @@
-hash: e0539eb1abb3a5c7b9e3cea0bca9f45e6fff1fbc599db68849637b56c0d61500
-updated: 2019-09-05T10:50:23.152989681-04:00
+hash: 04f902cc7da3667a6b112417e37ad8d272546229737f49a9b30b415adbb57e8c
+updated: 2020-02-21T09:24:16.976978-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -380,7 +380,7 @@ imports:
   - go-selinux
   - go-selinux/label
 - name: github.com/openshift/api
-  version: a25bb2adc83e68c68e3696332ff1d21694a34bb0
+  version: d4a64ec2cbd86f11ea74dfdcf6520d5833d0c6cd
   subpackages:
   - build/v1
 - name: github.com/openshift/client-go
@@ -392,14 +392,14 @@ imports:
   - build/clientset/versioned/typed/build/v1
   - build/clientset/versioned/typed/build/v1/fake
 - name: github.com/openshift/imagebuilder
-  version: 3ca94a17a34fac47e230d546937a099fa2face68
+  version: dbd706cc5c39055f22107a81a10ffd0fea87e851
   subpackages:
   - dockerfile/command
   - dockerfile/parser
   - signal
   - strslice
 - name: github.com/openshift/library-go
-  version: 7d4acc018c610623ee1413b1e7aebe2ac675d35f
+  version: 2cf86bbd930b78997e198b204a59b1711bad3c02
   subpackages:
   - pkg/git
   - pkg/image/internal/digest
@@ -829,7 +829,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: c5c5017d0231a11a71f5a5b8881e28dd6cd5bc90
+  version: c7e4edcfd9c61753bc62214abb138c3c2c3b131c
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/credentialprovider
