@@ -1,5 +1,5 @@
 hash: d15c7d65c510a024e73ba72a84be2c57d237cef2ab03d7c87af9ff302284645d
-updated: 2019-09-09T15:25:08.380025912-04:00
+updated: 2020-02-21T15:36:28.140353-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: 19f72df4d05d31cbe1c56bfc8045c96babff6c7e
@@ -315,7 +315,7 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 05fbef0ca5da472bbf96c9322b84a53edc03c9fd
 - name: github.com/mtrmac/gpgme
-  version: b2432428689ca58c2b8e8dea9449d3295cf96fc9
+  version: c3d28ade92cee62b3b6819332e3a7e38f564ff2c
 - name: github.com/Nvveen/Gotty
   version: cd527374f1e5bff4938207604a14f2e38a9cf512
 - name: github.com/opencontainers/go-digest
@@ -605,7 +605,7 @@ imports:
   subpackages:
   - pkg/features
 - name: k8s.io/apimachinery
-  version: 5c0e7e0ce91a8083e170765a544def530b8ee4f0
+  version: 8cfbc07164f4fd91a3c05ebaec532684d9465e72
   repo: https://github.com/openshift/kubernetes-apimachinery.git
   subpackages:
   - pkg/api/equality
@@ -663,7 +663,7 @@ imports:
   - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/apiserver
-  version: 6eafd6a7ccfb33517f1d852155d8862d8b5d3e93
+  version: e46c46eda5f2d5bbf60122c71895782b33d05784
   repo: https://github.com/openshift/kubernetes-apiserver.git
   subpackages:
   - pkg/apis/audit
@@ -675,7 +675,7 @@ imports:
   - pkg/util/feature
   - pkg/util/logs
 - name: k8s.io/client-go
-  version: 9feea9d4142fd23f46451ef4292787b85e2e0a52
+  version: 7a88268e115d643c24d43ee0eca15bb00c1f6386
   repo: https://github.com/openshift/kubernetes-client-go.git
   subpackages:
   - discovery
@@ -760,7 +760,7 @@ imports:
   - pkg/util/proto
   - pkg/util/proto/validation
 - name: k8s.io/kubernetes
-  version: 84f203614d99ab73d7de2ae51bab61877eac7af6
+  version: 70e138c6ce2a07236dadd2bfdb53b285842ec5da
   repo: https://github.com/openshift/kubernetes.git
   subpackages:
   - pkg/api/events

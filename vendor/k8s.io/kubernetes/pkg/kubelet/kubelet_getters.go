@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	kubelettypes "k8s.io/kubernetes/pkg/kubelet/types"
 	utilfile "k8s.io/kubernetes/pkg/util/file"
 	utilnode "k8s.io/kubernetes/pkg/util/node"
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
@@ -142,7 +143,18 @@ func (kl *Kubelet) getPodContainerDir(podUID types.UID, ctrName string) string {
 // GetPods returns all pods bound to the kubelet and their spec, and the mirror
 // pods.
 func (kl *Kubelet) GetPods() []*v1.Pod {
-	return kl.podManager.GetPods()
+	pods := kl.podManager.GetPods()
+	// a kubelet running without apiserver requires an additional
+	// update of the static pod status. See #57106
+	for _, p := range pods {
+		if kubelettypes.IsStaticPod(p) {
+			if status, ok := kl.statusManager.GetPodStatus(p.UID); ok {
+				glog.V(2).Infof("status for pod %v updated to %v", p.Name, status)
+				p.Status = status
+			}
+		}
+	}
+	return pods
 }
 
 // GetRunningPods returns all pods running on kubelet from looking at the
