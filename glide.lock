@@ -1,5 +1,5 @@
-hash: 04f902cc7da3667a6b112417e37ad8d272546229737f49a9b30b415adbb57e8c
-updated: 2020-02-21T09:24:16.976978-05:00
+hash: 0fc2f7448fb2044cd61208ebfddc5052ac56ea36e463b560885456d5c1387bfd
+updated: 2020-02-21T09:40:19.536379-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -343,7 +343,7 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/mtrmac/gpgme
-  version: b2432428689ca58c2b8e8dea9449d3295cf96fc9
+  version: c3d28ade92cee62b3b6819332e3a7e38f564ff2c
 - name: github.com/Nvveen/Gotty
   version: cd527374f1e5bff4938207604a14f2e38a9cf512
 - name: github.com/opencontainers/go-digest
