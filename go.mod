@@ -34,6 +34,7 @@ require (
 	github.com/hashicorp/serf v0.8.5 // indirect
 	github.com/miekg/dns v1.1.22 // indirect
 	github.com/moby/buildkit v0.6.2 // indirect
+	github.com/mtrmac/gpgme v0.1.2 // indirect
 	github.com/opencontainers/runc v1.0.0-rc9
 	github.com/opencontainers/runtime-spec v1.0.0
 	github.com/openshift/api v3.9.1-0.20191024142031-e89ff1fddcbe+incompatible
