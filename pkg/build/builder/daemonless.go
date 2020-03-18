@@ -4,8 +4,11 @@ package builder
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,9 +26,16 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
+	"k8s.io/kubernetes/pkg/credentialprovider"
+
 	buildapiv1 "github.com/openshift/api/build/v1"
+
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+)
+
+var (
+	nodeCredentialsFile = "/var/lib/kubelet/config.json"
 )
 
 // The build controller doesn't expect the CAP_ prefix to be used in the
@@ -45,6 +55,55 @@ func dropCapabilities() []string {
 	return dropCapabilities
 }
 
+// parsePullCredentials parses credentials from provided file.
+func parsePullCredentials(credsPath string) (credentialprovider.DockerConfig, error) {
+	var creds credentialprovider.DockerConfig
+	var err error
+
+	if filepath.Base(credsPath) == dockercfg.DockerConfigKey {
+		if creds, err = credentialprovider.ReadDockercfgFile(
+			[]string{filepath.Dir(credsPath)},
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		if creds, err = credentialprovider.ReadSpecificDockerConfigJsonFile(
+			credsPath,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if creds == nil {
+		creds = make(map[string]credentialprovider.DockerConfigEntry)
+	}
+
+	return creds, nil
+}
+
+// mergeNodeCredentials merges node credentials with credentials file provided.
+func mergeNodeCredentials(credsPath string) (*credentialprovider.DockerConfigJson, error) {
+	nodeCreds, err := parsePullCredentials(nodeCredentialsFile)
+	if err != nil {
+		log.V(2).Infof("proceeding without node credentials: %v", err)
+	}
+
+	namespaceCreds, err := parsePullCredentials(credsPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading pull credentials: %v", err)
+	}
+
+	for regurl, cfg := range nodeCreds {
+		if _, ok := namespaceCreds[regurl]; !ok {
+			namespaceCreds[regurl] = cfg
+		}
+	}
+
+	return &credentialprovider.DockerConfigJson{
+		Auths: namespaceCreds,
+	}, nil
+}
+
 func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, searchPaths []string, blobCacheDirectory string) error {
 	log.V(2).Infof("Asked to pull fresh copy of %q.", imageName)
 
@@ -57,8 +116,30 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		return fmt.Errorf("error parsing image name to pull %s: %v", "docker://"+imageName, err)
 	}
 
+	mergedCreds, err := mergeNodeCredentials(
+		dockercfg.GetDockerConfigPath(searchPaths),
+	)
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := ioutil.TempFile("", "config")
+	if err != nil {
+		return fmt.Errorf("error creating tmp credentials file: %v", err)
+	}
+	defer func() {
+		_ = dstFile.Close()
+		if err := os.Remove(dstFile.Name()); err != nil {
+			log.V(2).Infof("unable to remove tmp credentials file: %v", err)
+		}
+	}()
+
+	if err := json.NewEncoder(dstFile).Encode(mergedCreds); err != nil {
+		return fmt.Errorf("error encoding credentials: %v", err)
+	}
+
 	systemContext := sc
-	dockercfg.SetSystemContextFilePath(&systemContext, dockercfg.GetDockerConfigPath(searchPaths))
+	systemContext.AuthFilePath = dstFile.Name()
 
 	options := buildah.PullOptions{
 		ReportWriter:  os.Stderr,

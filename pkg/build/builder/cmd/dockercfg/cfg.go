@@ -13,8 +13,6 @@ import (
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
-	"github.com/containers/image/v5/types"
-
 	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )
 
@@ -61,16 +59,6 @@ func (h *Helper) GetDockerAuthSearchPaths(authType string) []string {
 	}
 	log.V(3).Infof("Getting docker config in paths : %v", searchPaths)
 	return searchPaths
-}
-
-// SetSystemContextFilePath properly seeds the container/image SystemContext
-// with the authentication file based on the format implied by the file name
-func SetSystemContextFilePath(sc *types.SystemContext, path string) {
-	if filepath.Base(path) == DockerConfigKey {
-		sc.LegacyFormatAuthFilePath = path
-		return
-	}
-	sc.AuthFilePath = path
 }
 
 // GetDockerAuth returns a valid Docker AuthConfiguration entry, and whether it was read
