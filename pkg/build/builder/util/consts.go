@@ -24,6 +24,8 @@ const (
 	StatusMessagePushImageToRegistryFailed       = "Failed to push the image to the registry."
 	StatusMessagePullBuilderImageFailed          = "Failed pulling builder image."
 	StatusMessageFetchSourceFailed               = "Failed to fetch the input source."
+	StatusMessageFetchImageContentFailed         = "Failed to extract image content."
+	StatusMessageManageDockerfileFailed          = "Failed to prepare the dockerfile for the build."
 	StatusMessageInvalidContextDirectory         = "The supplied context directory does not exist."
 	StatusMessageCancelledBuild                  = "The build was cancelled by the user."
 	StatusMessageDockerBuildFailed               = "Dockerfile build strategy has failed."
