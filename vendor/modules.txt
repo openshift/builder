@@ -356,7 +356,7 @@ github.com/opencontainers/runtime-tools/validate
 # github.com/opencontainers/selinux v1.3.1-0.20190929122143-5215b1806f52
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
-# github.com/openshift/api v3.9.1-0.20191024142031-e89ff1fddcbe+incompatible
+# github.com/openshift/api v0.0.0-20200319205122-2eb7761c21b1
 github.com/openshift/api/build/v1
 github.com/openshift/api/config/v1
 # github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
@@ -488,7 +488,7 @@ golang.org/x/crypto/openpgp/packet
 golang.org/x/crypto/openpgp/s2k
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
+# golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
@@ -535,7 +535,7 @@ gopkg.in/square/go-jose.v2/cipher
 gopkg.in/square/go-jose.v2/json
 # gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
-# k8s.io/api v0.17.0 => k8s.io/api v0.0.0-20191122220107-b5267f2975e0
+# k8s.io/api v0.17.1 => k8s.io/api v0.0.0-20191122220107-b5267f2975e0
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
 k8s.io/api/admissionregistration/v1
@@ -579,7 +579,7 @@ k8s.io/api/settings/v1alpha1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.17.0 => k8s.io/apimachinery v0.0.0-20191121175448-79c2a76c473a
+# k8s.io/apimachinery v0.17.1 => k8s.io/apimachinery v0.0.0-20191121175448-79c2a76c473a
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
