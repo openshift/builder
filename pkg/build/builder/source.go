@@ -13,6 +13,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/klog"
 
 	"github.com/containers/buildah"
@@ -24,6 +25,8 @@ import (
 	buildapiv1 "github.com/openshift/api/build/v1"
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	"github.com/openshift/builder/pkg/build/builder/timing"
+	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/library-go/pkg/git"
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 )
@@ -100,6 +103,19 @@ func GitClone(ctx context.Context, gitClient GitClient, gitSource *buildapiv1.Gi
 // and also adds some env and label values to the dockerfile based on
 // the build information.
 func ManageDockerfile(dir string, build *buildapiv1.Build) error {
+	ctx := timing.NewContext(context.Background())
+	defer func() {
+		build.Status.Stages = timing.GetStages(ctx)
+		clientConfig, err := restclient.InClusterConfig()
+		if err != nil {
+			return
+		}
+		buildsClient, err := buildclientv1.NewForConfig(clientConfig)
+		if err != nil {
+			return
+		}
+		HandleBuildStatusUpdate(build, buildsClient.Builds(build.Namespace), nil)
+	}()
 	os.MkdirAll(dir, 0777)
 	log.V(5).Infof("Checking for presence of a Dockerfile")
 	// a Dockerfile has been specified, create or overwrite into the destination
@@ -109,6 +125,9 @@ func ManageDockerfile(dir string, build *buildapiv1.Build) error {
 			baseDir = filepath.Join(baseDir, build.Spec.Source.ContextDir)
 		}
 		if err := ioutil.WriteFile(filepath.Join(baseDir, "Dockerfile"), []byte(*dockerfileSource), 0660); err != nil {
+			build.Status.Phase = buildapiv1.BuildPhaseFailed
+			build.Status.Reason = buildapiv1.StatusReasonManageDockerfileFailed
+			build.Status.Message = builderutil.StatusMessageManageDockerfileFailed
 			return err
 		}
 	}
@@ -118,9 +137,18 @@ func ManageDockerfile(dir string, build *buildapiv1.Build) error {
 	if build.Spec.Strategy.DockerStrategy != nil {
 		sourceInfo, err := readSourceInfo()
 		if err != nil {
+			build.Status.Phase = buildapiv1.BuildPhaseFailed
+			build.Status.Reason = buildapiv1.StatusReasonManageDockerfileFailed
+			build.Status.Message = builderutil.StatusMessageManageDockerfileFailed
 			return fmt.Errorf("error reading git source info: %v", err)
 		}
-		return addBuildParameters(dir, build, sourceInfo)
+		err = addBuildParameters(dir, build, sourceInfo)
+		if err != nil {
+			build.Status.Phase = buildapiv1.BuildPhaseFailed
+			build.Status.Reason = buildapiv1.StatusReasonManageDockerfileFailed
+			build.Status.Message = builderutil.StatusMessageManageDockerfileFailed
+		}
+		return err
 	}
 	return nil
 }

@@ -289,7 +289,13 @@ func (c *builderConfig) extractImageContent() error {
 	}()
 
 	buildDir := bld.InputContentPath
-	return bld.ExtractImageContent(ctx, c.dockerClient, c.store, buildDir, c.build, c.blobCache)
+	err := bld.ExtractImageContent(ctx, c.dockerClient, c.store, buildDir, c.build, c.blobCache)
+	if err != nil {
+		c.build.Status.Phase = buildapiv1.BuildPhaseFailed
+		c.build.Status.Reason = buildapiv1.StatusReasonFetchImageContentFailed
+		c.build.Status.Message = builderutil.StatusMessageFetchImageContentFailed
+	}
+	return err
 }
 
 // execute is responsible for running a build
