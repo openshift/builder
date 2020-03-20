@@ -16,6 +16,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/containers/buildah"
+	cconfig "github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/pkg/docker/config"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
@@ -391,13 +392,18 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 			}
 		}
 	}
+	defaultContainerConfig, err := cconfig.Default()
+	if err != nil {
+		return err
+	}
+	capabilities := defaultContainerConfig.Capabilities("", nil, dropCapabilities())
 
 	builderOptions := buildah.BuilderOptions{
-		FromImage:        image,
-		PullPolicy:       pullPolicy,
-		ReportWriter:     os.Stdout,
-		SystemContext:    &systemContext,
-		DropCapabilities: dropCapabilities(),
+		FromImage:     image,
+		PullPolicy:    pullPolicy,
+		ReportWriter:  os.Stdout,
+		SystemContext: &systemContext,
+		Capabilities:  capabilities,
 		CommonBuildOpts: &buildah.CommonBuildOptions{
 			HTTPProxy: true,
 		},
