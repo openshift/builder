@@ -130,18 +130,11 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		}
 	}
 
-	var transientMounts []imagebuildah.Mount
+	var transientMounts []string
 	if st, err := os.Stat("/run/secrets"); err == nil && st.IsDir() {
-		// Add a non-recursive bind of /run/secrets, to pass along
-		// anything that the runtime mounted from the node into our
-		// /run/secrets, without passing along API secrets that were
-		// mounted under it exclusively for the builder's use.
-		transientMounts = append(transientMounts, imagebuildah.Mount{
-			Source:      "/run/secrets",
-			Destination: "/run/secrets",
-			Type:        "bind",
-			Options:     []string{"ro", "nodev", "noexec", "nosuid"},
-		})
+		// Add a bind of /run/secrets, to pass along anything that the
+		// runtime mounted from the node into our /run/secrets.
+		transientMounts = append(transientMounts, "/run/secrets:/run/secrets:ro,nodev,noexec,nosuid")
 	}
 
 	options := imagebuildah.BuildOptions{
