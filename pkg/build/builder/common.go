@@ -2,6 +2,7 @@ package builder
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
@@ -250,7 +251,7 @@ func HandleBuildStatusUpdate(build *buildapiv1.Build, client buildclientv1.Build
 	wait.ExponentialBackoff(updateBackoff, func() (bool, error) {
 		// before updating, make sure we are using the latest version of the build
 		if latestBuild == nil {
-			latestBuild, err = client.Get(build.Name, metav1.GetOptions{})
+			latestBuild, err = client.Get(context.TODO(), build.Name, metav1.GetOptions{})
 			if err != nil {
 				latestBuild = nil
 				return false, nil
@@ -272,7 +273,7 @@ func HandleBuildStatusUpdate(build *buildapiv1.Build, client buildclientv1.Build
 		latestBuild.Status.Output.To = build.Status.Output.To
 		latestBuild.Status.Stages = timing.AppendStageAndStepInfo(latestBuild.Status.Stages, build.Status.Stages)
 
-		_, err = client.UpdateDetails(latestBuild.Name, latestBuild)
+		_, err = client.UpdateDetails(context.TODO(), latestBuild.Name, latestBuild, metav1.UpdateOptions{})
 
 		switch {
 		case err == nil:
