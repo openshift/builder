@@ -37,6 +37,8 @@ github.com/PuerkitoBio/purell
 github.com/PuerkitoBio/urlesc
 # github.com/VividCortex/ewma v1.1.1
 github.com/VividCortex/ewma
+# github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
+github.com/acarl005/stripansi
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
 # github.com/blang/semver v3.5.1+incompatible
@@ -45,14 +47,15 @@ github.com/blang/semver
 github.com/certifi/gocertifi
 # github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f
 github.com/containerd/cgroups/stats/v1
-# github.com/containernetworking/cni v0.7.1
+# github.com/containernetworking/cni v0.7.2-0.20190904153231-83439463f784
 github.com/containernetworking/cni/libcni
 github.com/containernetworking/cni/pkg/invoke
 github.com/containernetworking/cni/pkg/types
+github.com/containernetworking/cni/pkg/utils
 github.com/containernetworking/cni/pkg/version
 github.com/containernetworking/cni/pkg/types/020
 github.com/containernetworking/cni/pkg/types/current
-# github.com/containers/buildah v1.11.6-0.20200109175634-4e23b7a10cc9
+# github.com/containers/buildah v1.14.2
 github.com/containers/buildah
 github.com/containers/buildah/imagebuildah
 github.com/containers/buildah/util
@@ -63,11 +66,13 @@ github.com/containers/buildah/pkg/blobcache
 github.com/containers/buildah/pkg/chrootuser
 github.com/containers/buildah/pkg/overlay
 github.com/containers/buildah/pkg/secrets
+github.com/containers/buildah/pkg/parse
 github.com/containers/buildah/pkg/umask
-# github.com/containers/common v0.0.5
-github.com/containers/common/pkg/cgroups
+# github.com/containers/common v0.4.2
+github.com/containers/common/pkg/config
+github.com/containers/common/pkg/capabilities
 github.com/containers/common/pkg/unshare
-# github.com/containers/image/v5 v5.1.0
+# github.com/containers/image/v5 v5.2.1
 github.com/containers/image/v5/docker
 github.com/containers/image/v5/docker/reference
 github.com/containers/image/v5/pkg/docker/config
@@ -86,6 +91,7 @@ github.com/containers/image/v5/pkg/sysregistriesv2
 github.com/containers/image/v5/signature
 github.com/containers/image/v5/transports
 github.com/containers/image/v5/docker/policyconfiguration
+github.com/containers/image/v5/internal/iolimits
 github.com/containers/image/v5/pkg/blobinfocache/none
 github.com/containers/image/v5/pkg/tlsclientconfig
 github.com/containers/image/v5/internal/pkg/keyctl
@@ -117,7 +123,7 @@ github.com/containers/ocicrypt/keywrap/jwe
 github.com/containers/ocicrypt/keywrap/pgp
 github.com/containers/ocicrypt/keywrap/pkcs7
 github.com/containers/ocicrypt/utils
-# github.com/containers/storage v1.15.5 => github.com/containers/storage v1.13.3-0.20191209173733-4822c6053840
+# github.com/containers/storage v1.16.1 => github.com/containers/storage v1.13.3-0.20191209173733-4822c6053840
 github.com/containers/storage/pkg/reexec
 github.com/containers/storage
 github.com/containers/storage/pkg/archive
@@ -157,8 +163,6 @@ github.com/containers/storage/drivers/overlayutils
 github.com/containers/storage/drivers/quota
 github.com/containers/storage/pkg/fsutils
 github.com/containers/storage/drivers/copy
-# github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f
-github.com/coreos/go-systemd/dbus
 # github.com/cyphar/filepath-securejoin v0.2.2
 github.com/cyphar/filepath-securejoin
 # github.com/davecgh/go-spew v1.1.1
@@ -239,7 +243,7 @@ github.com/etcd-io/bbolt
 github.com/evanphx/json-patch
 # github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d
 github.com/exponent-io/jsonpath
-# github.com/fsouza/go-dockerclient v1.6.0
+# github.com/fsouza/go-dockerclient v1.6.3
 github.com/fsouza/go-dockerclient
 # github.com/fullsailor/pkcs7 v0.0.0-20190404230743-d7302db945fa
 github.com/fullsailor/pkcs7
@@ -255,8 +259,6 @@ github.com/go-openapi/jsonreference
 github.com/go-openapi/spec
 # github.com/go-openapi/swag v0.19.5
 github.com/go-openapi/swag
-# github.com/godbus/dbus v4.1.0+incompatible => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
-github.com/godbus/dbus
 # github.com/gogo/protobuf v1.2.2-0.20190723190241-65acae22fc9d
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
@@ -270,7 +272,7 @@ github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/google/btree v1.0.0
 github.com/google/btree
-# github.com/google/go-cmp v0.3.1
+# github.com/google/go-cmp v0.4.0
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
@@ -284,7 +286,7 @@ github.com/google/uuid
 github.com/googleapis/gnostic/OpenAPIv2
 github.com/googleapis/gnostic/compiler
 github.com/googleapis/gnostic/extensions
-# github.com/gorilla/mux v1.7.3
+# github.com/gorilla/mux v1.7.4
 github.com/gorilla/mux
 # github.com/gregjones/httpcache v0.0.0-20170728041850-787624de3eb7
 github.com/gregjones/httpcache
@@ -299,11 +301,11 @@ github.com/hashicorp/golang-lru/simplelru
 github.com/imdario/mergo
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/ishidawataru/sctp v0.0.0-20180918013207-6e2cb1366111
+# github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07
 github.com/ishidawataru/sctp
 # github.com/json-iterator/go v1.1.7
 github.com/json-iterator/go
-# github.com/klauspost/compress v1.9.4
+# github.com/klauspost/compress v1.9.8
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/huff0
@@ -318,7 +320,7 @@ github.com/konsorten/go-windows-terminal-sequences
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
 github.com/mailru/easyjson/buffer
-# github.com/mattn/go-shellwords v1.0.6
+# github.com/mattn/go-shellwords v1.0.10
 github.com/mattn/go-shellwords
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
@@ -343,6 +345,7 @@ github.com/opencontainers/runc/libcontainer/configs
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/apparmor
 github.com/opencontainers/runc/libcontainer/user
+github.com/opencontainers/runc/libcontainer/devices
 github.com/opencontainers/runc/libcontainer/utils
 # github.com/opencontainers/runtime-spec v1.0.0
 github.com/opencontainers/runtime-spec/specs-go
@@ -353,7 +356,7 @@ github.com/opencontainers/runtime-tools/validate
 github.com/opencontainers/runtime-tools/filepath
 github.com/opencontainers/runtime-tools/specerror
 github.com/opencontainers/runtime-tools/error
-# github.com/opencontainers/selinux v1.3.0
+# github.com/opencontainers/selinux v1.3.3
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
 # github.com/openshift/api v3.9.1-0.20191024142031-e89ff1fddcbe+incompatible
@@ -411,7 +414,7 @@ github.com/ostreedev/ostree-go/pkg/glibobject
 github.com/ostreedev/ostree-go/pkg/otbuiltin
 # github.com/peterbourgon/diskv v2.0.1+incompatible
 github.com/peterbourgon/diskv
-# github.com/pkg/errors v0.8.1
+# github.com/pkg/errors v0.9.1
 github.com/pkg/errors
 # github.com/pkg/profile v1.3.0
 github.com/pkg/profile
@@ -442,7 +445,7 @@ github.com/seccomp/containers-golang
 github.com/seccomp/libseccomp-golang
 # github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
-# github.com/spf13/cobra v0.0.5
+# github.com/spf13/cobra v0.0.6
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
@@ -459,7 +462,7 @@ github.com/ulikunitz/xz/internal/hash
 github.com/vbatts/tar-split/archive/tar
 github.com/vbatts/tar-split/tar/asm
 github.com/vbatts/tar-split/tar/storage
-# github.com/vbauerster/mpb/v4 v4.11.1
+# github.com/vbauerster/mpb/v4 v4.11.2
 github.com/vbauerster/mpb/v4
 github.com/vbauerster/mpb/v4/decor
 github.com/vbauerster/mpb/v4/cwriter
@@ -476,7 +479,7 @@ go.opencensus.io/internal
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/tracestate
 go.opencensus.io
-# golang.org/x/crypto v0.0.0-20191112222119-e1110fd1c708
+# golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/openpgp
 golang.org/x/crypto/openpgp/packet
