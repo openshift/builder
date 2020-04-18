@@ -394,14 +394,24 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 		}
 	*/
 
-	var auths *docker.AuthConfigurations
-	var err error
+	auths, err := GetDockerAuthConfiguration(nodeCredentialsFile)
+	if err != nil {
+		klog.V(2).Infof("proceeding without node credentials: %v", err)
+		auths = &docker.AuthConfigurations{
+			Configs: map[string]docker.AuthConfiguration{},
+		}
+	}
+
 	if imageSecretIndex != -1 {
 		pullSecretPath := os.Getenv(fmt.Sprintf("%s%d", dockercfg.PullSourceAuthType, imageSecretIndex))
 		if len(pullSecretPath) > 0 {
-			auths, err = GetDockerAuthConfiguration(pullSecretPath)
+			secretAuths, err := GetDockerAuthConfiguration(pullSecretPath)
 			if err != nil {
 				return fmt.Errorf("error reading docker auth configuration: %v", err)
+			}
+
+			for reg, auth := range secretAuths.Configs {
+				auths.Configs[reg] = auth
 			}
 		}
 	}
@@ -409,15 +419,13 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 	var systemContext types.SystemContext
 	systemContext.AuthFilePath = "/tmp/config.json"
 
-	if auths != nil {
-		for registry, ac := range auths.Configs {
-			log.V(5).Infof("Setting authentication for registry %q using %q.", registry, ac.ServerAddress)
-			if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
-				return err
-			}
-			if err := config.SetAuthentication(&systemContext, ac.ServerAddress, ac.Username, ac.Password); err != nil {
-				return err
-			}
+	for registry, ac := range auths.Configs {
+		log.V(5).Infof("Setting authentication for registry %q using %q.", registry, ac.ServerAddress)
+		if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
+			return err
+		}
+		if err := config.SetAuthentication(&systemContext, ac.ServerAddress, ac.Username, ac.Password); err != nil {
+			return err
 		}
 	}
 
