@@ -8,11 +8,12 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containers/buildah v1.11.6-0.20200109175634-4e23b7a10cc9
-	github.com/containers/image/v5 v5.1.0
-	github.com/containers/storage v1.15.5
+	github.com/containers/buildah v1.14.2
+	github.com/containers/common v0.4.2
+	github.com/containers/image/v5 v5.2.1
+	github.com/containers/storage v1.16.1
 	github.com/coreos/bbolt v1.3.3 // indirect
-	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
+	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
@@ -20,7 +21,7 @@ require (
 	github.com/docker/swarmkit v1.12.1-0.20190926144208-d509e31c1fda // indirect
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
-	github.com/fsouza/go-dockerclient v1.6.0
+	github.com/fsouza/go-dockerclient v1.6.3
 	github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095 // indirect
 	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
 	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
@@ -34,7 +35,6 @@ require (
 	github.com/hashicorp/serf v0.8.5 // indirect
 	github.com/miekg/dns v1.1.22 // indirect
 	github.com/moby/buildkit v0.6.2 // indirect
-	github.com/mtrmac/gpgme v0.1.2 // indirect
 	github.com/opencontainers/runc v1.0.0-rc9
 	github.com/opencontainers/runtime-spec v1.0.0
 	github.com/openshift/api v3.9.1-0.20191024142031-e89ff1fddcbe+incompatible
@@ -42,17 +42,18 @@ require (
 	github.com/openshift/imagebuilder v1.1.1
 	github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
 	github.com/openshift/source-to-image v1.2.0
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.3.0 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/seccomp/containers-golang v0.0.0-20190710130535-8d1ed6a872a5 // indirect
-	github.com/spf13/cobra v0.0.5
+	github.com/spf13/cobra v0.0.6
 	github.com/spf13/pflag v1.0.5
-	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/tonistiigi/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20191018213012-0f039a052ca1 // indirect
+	github.com/vishvananda/netns v0.0.0-20190625233234-7109fa855b0f // indirect
 	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/sys v0.0.0-20191127021746-63cb32ae39b2
+	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
 	k8s.io/api v0.17.0
 	k8s.io/apimachinery v0.17.0
 	k8s.io/client-go v0.0.0
