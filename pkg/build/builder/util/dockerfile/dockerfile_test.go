@@ -306,6 +306,11 @@ COPY . /boot
 FROM centos:7`,
 			want: []string{"scratch", "centos:7"},
 		},
+		"FROM with ARG": {
+			in: `ARG TAG=7
+FROM centos:$TAG`,
+			want: []string{"centos:7"},
+		},
 	}
 	for name, tc := range testCases {
 		node, err := Parse(strings.NewReader(tc.in))
