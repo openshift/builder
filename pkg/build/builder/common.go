@@ -448,7 +448,7 @@ func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageS
 		}
 	}
 	names := make(map[string]string)
-	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(nil))
+	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(make(map[string]string)))
 	if err != nil {
 		return err
 	}
@@ -488,7 +488,7 @@ func findReferencedImages(dockerfilePath string) ([]string, error) {
 	}
 	names := make(map[string]string)
 	images := sets.NewString()
-	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(nil))
+	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(make(map[string]string)))
 	if err != nil {
 		return nil, err
 	}
