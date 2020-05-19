@@ -31,7 +31,7 @@ After your cluster is installed, you will need to do the following:
 1. Patch the cluster version so that you can launch your own builder image:
 
 ```
-$ oc patch clusterversion/version --patch '{"spec":{"overrides":[{"kind":"ConfigMap", "namespace":"openshift-controller-manager-operator","name":"openshift-controller-manager-images","unmanaged":true}]}}' --type=merge
+$ oc patch clusterversion/version --patch '{"spec":{"overrides":[{"kind":"ConfigMap", "namespace":"openshift-controller-manager-operator","name":"openshift-controller-manager-images","unmanaged":true, "group": "apps/v1"}]}}' --type=merge
 ```
 
 2. Make your code changes and build the binary with `make build`.
