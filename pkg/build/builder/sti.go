@@ -14,6 +14,12 @@ import (
 
 	dockerclient "github.com/fsouza/go-dockerclient"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	buildapiv1 "github.com/openshift/api/build/v1"
+	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
+	"github.com/openshift/imagebuilder"
+	"github.com/openshift/library-go/pkg/git"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 	s2iconstants "github.com/openshift/source-to-image/pkg/api/constants"
 	"github.com/openshift/source-to-image/pkg/api/describe"
@@ -24,17 +30,10 @@ import (
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 	s2iutil "github.com/openshift/source-to-image/pkg/util"
 
-	buildapiv1 "github.com/openshift/api/build/v1"
-
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
-	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
-	"github.com/openshift/imagebuilder"
-	"github.com/openshift/library-go/pkg/git"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // builderFactory is the internal interface to decouple S2I-specific code from Origin builder code

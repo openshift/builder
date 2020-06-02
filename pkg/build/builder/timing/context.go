@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+
 	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )
 

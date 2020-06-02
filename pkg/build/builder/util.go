@@ -10,10 +10,11 @@ import (
 	"strings"
 
 	docker "github.com/fsouza/go-dockerclient"
+
+	buildapiv1 "github.com/openshift/api/build/v1"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 	s2iutil "github.com/openshift/source-to-image/pkg/util"
 
-	buildapiv1 "github.com/openshift/api/build/v1"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 )
 

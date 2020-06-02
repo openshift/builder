@@ -9,19 +9,20 @@ import (
 	"strings"
 
 	docker "github.com/fsouza/go-dockerclient"
-	dockercmd "github.com/openshift/imagebuilder/dockerfile/command"
-	"github.com/openshift/imagebuilder/dockerfile/parser"
-	s2iapi "github.com/openshift/source-to-image/pkg/api"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
+	dockercmd "github.com/openshift/imagebuilder/dockerfile/command"
+	"github.com/openshift/imagebuilder/dockerfile/parser"
+	s2iapi "github.com/openshift/source-to-image/pkg/api"
+
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
-	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 )
 
 // defaultDockerfilePath is the default path of the Dockerfile

@@ -17,9 +17,10 @@ import (
 
 	"k8s.io/component-base/logs"
 
+	"github.com/openshift/library-go/pkg/serviceability"
+
 	"github.com/openshift/builder/pkg/build/builder"
 	"github.com/openshift/builder/pkg/version"
-	"github.com/openshift/library-go/pkg/serviceability"
 )
 
 func main() {
