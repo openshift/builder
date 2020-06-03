@@ -79,7 +79,7 @@ func (d *DockerBuilder) Build() error {
 	buildTag := randomBuildTag(d.build.Namespace, d.build.Name)
 	dockerfilePath := getDockerfilePath(buildDir, d.build)
 
-	imageNames, err := findReferencedImages(dockerfilePath)
+	imageNames, err := findReferencedImages(dockerfilePath, d.build.Spec.Strategy.DockerStrategy.BuildArgs)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,8 @@ func (d *DockerBuilder) Build() error {
 		_, err = d.dockerClient.InspectImage(imageName)
 		if err != nil {
 			if err != docker.ErrNoSuchImage {
-				return err
+				log.V(4).Infof("\nError inspecting image \"%s\": %v, continuing", imageName, err)
+				continue
 			}
 			imageExists = false
 		}
