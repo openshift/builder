@@ -4,11 +4,11 @@ import (
 	"net/url"
 	"regexp"
 
-	s2iapi "github.com/openshift/source-to-image/pkg/api"
-	s2iutil "github.com/openshift/source-to-image/pkg/util"
+	corev1 "k8s.io/api/core/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
-	corev1 "k8s.io/api/core/v1"
+	s2iapi "github.com/openshift/source-to-image/pkg/api"
+	s2iutil "github.com/openshift/source-to-image/pkg/util"
 )
 
 var (

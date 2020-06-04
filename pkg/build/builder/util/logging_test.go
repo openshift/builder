@@ -6,11 +6,10 @@ import (
 	"regexp"
 	"testing"
 
-	s2iapi "github.com/openshift/source-to-image/pkg/api"
-
 	corev1 "k8s.io/api/core/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	s2iapi "github.com/openshift/source-to-image/pkg/api"
 )
 
 var credsRegex = regexp.MustCompile("user:password")

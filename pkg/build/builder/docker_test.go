@@ -17,11 +17,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
-	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
 	buildfake "github.com/openshift/client-go/build/clientset/versioned/fake"
 	"github.com/openshift/imagebuilder"
-
 	"github.com/openshift/library-go/pkg/git"
+
+	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
 )
 
 func TestInsertEnvAfterFrom(t *testing.T) {

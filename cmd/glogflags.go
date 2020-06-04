@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 
-	"k8s.io/klog"
-
 	"github.com/spf13/pflag"
+
+	"k8s.io/klog"
 )
 
 // GLog binds the log flags from the default Google "flag" package into a pflag.FlagSet.

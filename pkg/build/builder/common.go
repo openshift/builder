@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/docker/distribution/reference"
-	dockercmd "github.com/openshift/imagebuilder/dockerfile/command"
-	"github.com/openshift/imagebuilder/dockerfile/parser"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,18 +23,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 
+	buildapiv1 "github.com/openshift/api/build/v1"
+	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/imagebuilder"
+	dockercmd "github.com/openshift/imagebuilder/dockerfile/command"
+	"github.com/openshift/imagebuilder/dockerfile/parser"
+	"github.com/openshift/library-go/pkg/git"
 	imagereference "github.com/openshift/library-go/pkg/image/reference"
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 	"github.com/openshift/source-to-image/pkg/util"
 
-	buildapiv1 "github.com/openshift/api/build/v1"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	"github.com/openshift/builder/pkg/build/builder/util/dockerfile"
 	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
-	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
-	"github.com/openshift/library-go/pkg/git"
 )
 
 // postCommitAlias is a unique key to use for an alias in

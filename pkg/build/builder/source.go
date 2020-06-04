@@ -12,10 +12,6 @@ import (
 	"strings"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	restclient "k8s.io/client-go/rest"
-	"k8s.io/klog"
-
 	"github.com/containers/buildah"
 	cconfig "github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/pkg/docker/config"
@@ -23,13 +19,18 @@ import (
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	restclient "k8s.io/client-go/rest"
+	"k8s.io/klog"
+
 	buildapiv1 "github.com/openshift/api/build/v1"
-	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
-	"github.com/openshift/builder/pkg/build/builder/timing"
-	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/library-go/pkg/git"
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
+
+	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
+	"github.com/openshift/builder/pkg/build/builder/timing"
+	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 )
 
 const (

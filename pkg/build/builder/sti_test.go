@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	docker "github.com/fsouza/go-dockerclient"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	docker "github.com/fsouza/go-dockerclient"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
 	buildfake "github.com/openshift/client-go/build/clientset/versioned/fake"
