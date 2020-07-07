@@ -375,9 +375,9 @@ func getDockerfilePath(dir string, build *buildapiv1.Build) string {
 
 // replaceLastFrom changes the last FROM instruction of node to point to the
 // given image with an optional alias.
-func replaceLastFrom(node *parser.Node, image string, alias string) error {
+func replaceLastFrom(node *parser.Node, image string, alias string) {
 	if node == nil {
-		return nil
+		return
 	}
 	for i := len(node.Children) - 1; i >= 0; i-- {
 		child := node.Children[i]
@@ -398,10 +398,9 @@ func replaceLastFrom(node *parser.Node, image string, alias string) error {
 				}
 				child.Next.Next.Next.Value = alias
 			}
-			return nil
+			return
 		}
 	}
-	return nil
 }
 
 // getLastFrom gets the image name of the last FROM instruction
@@ -452,9 +451,7 @@ func appendPostCommit(node *parser.Node, cmd string) error {
 	image, alias := getLastFrom(node)
 	if len(alias) == 0 {
 		alias = postCommitAlias
-		if err := replaceLastFrom(node, image, alias); err != nil {
-			return err
-		}
+		replaceLastFrom(node, image, alias)
 	}
 
 	if err := appendStringInstruction(dockerfile.From, node, alias); err != nil {

@@ -415,10 +415,7 @@ func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.Sou
 		if ref, err := imagereference.Parse(name); err == nil {
 			name = ref.DaemonMinimal().Exact()
 		}
-		err := replaceLastFrom(node, name, "")
-		if err != nil {
-			return err
-		}
+		replaceLastFrom(node, name, "")
 	}
 
 	// Append build info as environment variables.
