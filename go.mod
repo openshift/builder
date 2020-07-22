@@ -7,13 +7,13 @@ require (
 	github.com/containers/buildah v1.14.10
 	github.com/containers/common v0.8.4
 	github.com/containers/image/v5 v5.4.3
-	github.com/containers/storage v1.18.2
+	github.com/containers/storage v1.20.2
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/fsouza/go-dockerclient v1.6.3
 	github.com/googleapis/gnostic v0.3.1 // indirect
-	github.com/opencontainers/runc v1.0.0-rc9
+	github.com/opencontainers/runc v1.0.0-rc90
 	github.com/opencontainers/runtime-spec v1.0.1
 	github.com/openshift/api v0.0.0-20200326160804-ecb9283fe820
 	github.com/openshift/client-go v0.0.0-20200326155132-2a6cd50aedd0
@@ -35,7 +35,7 @@ require (
 )
 
 replace (
-	github.com/containerd/containerd => github.com/containerd/containerd v1.3.0
+	github.com/containerd/containerd => github.com/containerd/containerd v1.3.2
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
 	github.com/docker/libnetwork => github.com/docker/libnetwork v0.8.0-dev.2.0.20171107005402-dcf79f8c7fcb
 	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
