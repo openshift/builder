@@ -393,6 +393,21 @@ func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.Sou
 		return err
 	}
 
+	// Arguments set before the first stage get discarded when we split the
+	// tree up into stages in replaceImagesFromSource.  Other instructions
+	// are preserved.  Preserve the arguments here so that we can prepend
+	// them to the replacement Dockerfile that we generate.
+	var preambleArgs []byte
+	for _, child := range node.Children {
+		if child.Value == dockercmd.Arg {
+			preambleArgs = append(preambleArgs, []byte(child.Original+"\n")...)
+		} else {
+			if child.Value == dockercmd.From {
+				break
+			}
+		}
+	}
+
 	// Update base image if build strategy specifies the From field.
 	if build.Spec.Strategy.DockerStrategy != nil && build.Spec.Strategy.DockerStrategy.From != nil && build.Spec.Strategy.DockerStrategy.From.Kind == "DockerImage" {
 		// Reduce the name to a minimal canonical form for the daemon
@@ -426,11 +441,15 @@ func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.Sou
 		return err
 	}
 
-	if err := replaceImagesFromSource(node, build.Spec.Source.Images); err != nil {
+	var buildArgs []corev1.EnvVar
+	if build.Spec.Strategy.DockerStrategy != nil {
+		buildArgs = build.Spec.Strategy.DockerStrategy.BuildArgs
+	}
+	if err := replaceImagesFromSource(node, build.Spec.Source.Images, buildArgs); err != nil {
 		return err
 	}
 
-	out := dockerfile.Write(node)
+	out := append(preambleArgs, dockerfile.Write(node)...)
 	log.V(4).Infof("Replacing dockerfile\n%s\nwith:\n%s", string(in), string(out))
 	return overwriteFile(dockerfilePath, out)
 }
@@ -438,7 +457,7 @@ func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.Sou
 // replaceImagesFromSource updates a single or multi-stage Dockerfile with any replacement
 // image sources ('FROM <name>' and 'COPY --from=<name>'). It operates on exact string matches
 // and performs no interpretation of names from the Dockerfile.
-func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageSource) error {
+func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageSource, buildArgs []corev1.EnvVar) error {
 	replacements := make(map[string]string)
 	for _, image := range imageSources {
 		if image.From.Kind != "DockerImage" || len(image.From.Name) == 0 {
@@ -449,7 +468,11 @@ func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageS
 		}
 	}
 	names := make(map[string]string)
-	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(make(map[string]string)))
+	buildArgMap := make(map[string]string)
+	for _, ba := range buildArgs {
+		buildArgMap[ba.Name] = ba.Value
+	}
+	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(buildArgMap))
 	if err != nil {
 		return err
 	}
@@ -479,7 +502,7 @@ func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageS
 }
 
 // findReferencedImages returns all qualified images referenced by the Dockerfile, or returns an error.
-func findReferencedImages(dockerfilePath string) ([]string, error) {
+func findReferencedImages(dockerfilePath string, buildArgs []corev1.EnvVar) ([]string, error) {
 	if len(dockerfilePath) == 0 {
 		return nil, nil
 	}
@@ -489,7 +512,11 @@ func findReferencedImages(dockerfilePath string) ([]string, error) {
 	}
 	names := make(map[string]string)
 	images := sets.NewString()
-	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(make(map[string]string)))
+	buildArgMap := make(map[string]string)
+	for _, ba := range buildArgs {
+		buildArgMap[ba.Name] = ba.Value
+	}
+	stages, err := imagebuilder.NewStages(node, imagebuilder.NewBuilder(buildArgMap))
 	if err != nil {
 		return nil, err
 	}
