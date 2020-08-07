@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // Logger is a simple interface that is roughly equivalent to klog.
@@ -39,7 +39,7 @@ func (discard) Infof(_ string, _ ...interface{}) {}
 type klogger struct{}
 
 func (klogger) Is(level int) bool {
-	return bool(klog.V(klog.Level(level)))
+	return bool(klog.V(klog.Level(level)).Enabled())
 }
 
 func (klogger) V(level int) Logger {
@@ -56,18 +56,18 @@ type kverbose struct {
 }
 
 func (kverbose) Is(level int) bool {
-	return bool(klog.V(klog.Level(level)))
+	return bool(klog.V(klog.Level(level)).Enabled())
 }
 
 func (kverbose) V(level int) Logger {
-	if klog.V(klog.Level(level)) {
+	if klog.V(klog.Level(level)).Enabled() {
 		return Log
 	}
 	return None
 }
 
 func (g kverbose) Infof(format string, args ...interface{}) {
-	if g.Verbose {
+	if g.Verbose.Enabled() {
 		klog.InfoDepth(2, fmt.Sprintf(format, args...))
 	}
 }
@@ -80,12 +80,12 @@ type file struct {
 }
 
 func (f file) Is(level int) bool {
-	return level <= f.level || bool(klog.V(klog.Level(level)))
+	return level <= f.level || bool(klog.V(klog.Level(level)).Enabled())
 }
 
 func (f file) V(level int) Logger {
 	// only log things that klog allows
-	if !klog.V(klog.Level(level)) {
+	if !klog.V(klog.Level(level)).Enabled() {
 		return None
 	}
 	// send anything above our level to klog
