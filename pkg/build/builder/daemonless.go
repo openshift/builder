@@ -67,7 +67,7 @@ func parsePullCredentials(credsPath string) (credentialprovider.DockerConfig, er
 			return nil, err
 		}
 	} else {
-		if creds, err = credentialprovider.ReadSpecificDockerConfigJsonFile(
+		if creds, err = credentialprovider.ReadSpecificDockerConfigJSONFile(
 			credsPath,
 		); err != nil {
 			return nil, err
@@ -82,7 +82,7 @@ func parsePullCredentials(credsPath string) (credentialprovider.DockerConfig, er
 }
 
 // mergeNodeCredentials merges node credentials with credentials file provided.
-func mergeNodeCredentials(credsPath string) (*credentialprovider.DockerConfigJson, error) {
+func mergeNodeCredentials(credsPath string) (*credentialprovider.DockerConfigJSON, error) {
 	nodeCreds, err := parsePullCredentials(nodeCredentialsFile)
 	if err != nil {
 		log.V(2).Infof("proceeding without node credentials: %v", err)
@@ -99,7 +99,7 @@ func mergeNodeCredentials(credsPath string) (*credentialprovider.DockerConfigJso
 		}
 	}
 
-	return &credentialprovider.DockerConfigJson{
+	return &credentialprovider.DockerConfigJSON{
 		Auths: namespaceCreds,
 	}, nil
 }

@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // GLog binds the log flags from the default Google "flag" package into a pflag.FlagSet.
