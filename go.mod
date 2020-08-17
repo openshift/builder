@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
-	github.com/containers/buildah v1.14.10
+	github.com/containers/buildah v1.14.11
 	github.com/containers/common v0.8.4
 	github.com/containers/image/v5 v5.4.3
 	github.com/containers/storage v1.20.2
@@ -22,7 +22,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
-	github.com/vishvananda/netns v0.0.0-20200520041808-52d707b772fe // indirect
 	golang.org/x/sys v0.0.0-20200622214017-ed371f2e16b4
 	k8s.io/api v0.19.0-rc.3
 	k8s.io/apimachinery v0.19.0-rc.3
