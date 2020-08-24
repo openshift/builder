@@ -434,7 +434,10 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 	if err != nil {
 		return err
 	}
-	capabilities := defaultContainerConfig.Capabilities("", nil, dropCapabilities())
+	capabilities, err := defaultContainerConfig.Capabilities("", nil, dropCapabilities())
+	if err != nil {
+		return err
+	}
 
 	builderOptions := buildah.BuilderOptions{
 		FromImage:     image,
