@@ -4,14 +4,14 @@ go 1.13
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
-	github.com/containers/buildah v1.14.11
-	github.com/containers/common v0.8.4
-	github.com/containers/image/v5 v5.4.3
+	github.com/containers/buildah v1.15.2
+	github.com/containers/common v0.14.0
+	github.com/containers/image/v5 v5.5.1
 	github.com/containers/storage v1.20.2
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
-	github.com/fsouza/go-dockerclient v1.6.3
+	github.com/fsouza/go-dockerclient v1.6.5
 	github.com/opencontainers/runc v1.0.0-rc91.0.20200707015106-819fcc687efb
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200520003142-237cc4f519e2
 	github.com/openshift/api v0.0.0-20200326160804-ecb9283fe820

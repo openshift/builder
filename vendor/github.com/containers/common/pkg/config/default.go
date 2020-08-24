@@ -53,9 +53,6 @@ var (
 	// DefaultDetachKeys is the default keys sequence for detaching a
 	// container
 	DefaultDetachKeys = "ctrl-p,ctrl-q"
-)
-
-var (
 	// ErrConmonOutdated indicates the version of conmon found (whether via the configuration or $PATH)
 	// is out of date for the current podman version
 	ErrConmonOutdated = errors.New("outdated conmon version")
@@ -80,15 +77,24 @@ var (
 		"CAP_SETUID",
 		"CAP_SYS_CHROOT",
 	}
+
+	cniBinDir = []string{
+		"/usr/libexec/cni",
+		"/usr/lib/cni",
+		"/usr/local/lib/cni",
+		"/opt/cni/bin",
+	}
 )
 
 const (
-	// EtcDir is the sysconfdir where podman should look for system config files.
+	// _etcDir is the sysconfdir where podman should look for system config files.
 	// It can be overridden at build time.
 	_etcDir = "/etc"
 	// InstallPrefix is the prefix where podman will be installed.
 	// It can be overridden at build time.
 	_installPrefix = "/usr"
+	// _cniConfigDir is the directory where cni plugins are found
+	_cniConfigDir = "/etc/cni/net.d/"
 	// CgroupfsCgroupsManager represents cgroupfs native cgroup manager
 	CgroupfsCgroupsManager = "cgroupfs"
 	// DefaultApparmorProfile  specifies the default apparmor profile for the container.
@@ -105,6 +111,9 @@ const (
 	DefaultPidsLimit = 2048
 	// DefaultPullPolicy pulls the image if it does not exist locally
 	DefaultPullPolicy = "missing"
+	// DefaultSignaturePolicyPath is the default value for the
+	// policy.json file.
+	DefaultSignaturePolicyPath = "/etc/containers/policy.json"
 	// DefaultRootlessSignaturePolicyPath is the default value for the
 	// rootless policy.json file.
 	DefaultRootlessSignaturePolicyPath = ".config/containers/policy.json"
@@ -129,14 +138,19 @@ func DefaultConfig() (*Config, error) {
 	}
 
 	netns := "bridge"
+
+	defaultEngineConfig.SignaturePolicyPath = DefaultSignaturePolicyPath
 	if unshare.IsRootless() {
 		home, err := unshare.HomeDir()
 		if err != nil {
 			return nil, err
 		}
 		sigPath := filepath.Join(home, DefaultRootlessSignaturePolicyPath)
-		if _, err := os.Stat(sigPath); err == nil {
-			defaultEngineConfig.SignaturePolicyPath = sigPath
+		defaultEngineConfig.SignaturePolicyPath = sigPath
+		if _, err := os.Stat(sigPath); err != nil {
+			if _, err := os.Stat(DefaultSignaturePolicyPath); err == nil {
+				defaultEngineConfig.SignaturePolicyPath = DefaultSignaturePolicyPath
+			}
 		}
 		netns = "slirp4netns"
 	}
@@ -153,6 +167,7 @@ func DefaultConfig() (*Config, error) {
 			Annotations:         []string{},
 			ApparmorProfile:     DefaultApparmorProfile,
 			CgroupNS:            cgroupNS,
+			Cgroups:             "enabled",
 			DefaultCapabilities: DefaultCapabilities,
 			DefaultSysctls:      []string{},
 			DefaultUlimits:      getDefaultProcessLimits(),
@@ -182,7 +197,7 @@ func DefaultConfig() (*Config, error) {
 		},
 		Network: NetworkConfig{
 			DefaultNetwork:   "podman",
-			NetworkConfigDir: cniConfigDir,
+			NetworkConfigDir: _cniConfigDir,
 			CNIPluginDirs:    cniBinDir,
 		},
 		Engine: *defaultEngineConfig,
@@ -224,6 +239,7 @@ func defaultConfigFromMemory() (*EngineConfig, error) {
 	c.CgroupManager = defaultCgroupManager()
 	c.StopTimeout = uint(10)
 
+	c.Remote = isRemote()
 	c.OCIRuntimes = map[string][]string{
 		"runc": {
 			"/usr/bin/runc",
@@ -274,6 +290,7 @@ func defaultConfigFromMemory() (*EngineConfig, error) {
 		"runc",
 	}
 	c.RuntimeSupportsNoCgroups = []string{"crun"}
+	c.RuntimeSupportsKVM = []string{"kata", "kata-runtime", "kata-qemu", "kata-fc"}
 	c.InitPath = DefaultInitPath
 	c.NoPivotRoot = false
 
@@ -443,6 +460,11 @@ func (c *Config) CgroupNS() string {
 	return c.Containers.CgroupNS
 }
 
+// Cgroups returns whether to containers with cgroup confinement
+func (c *Config) Cgroups() string {
+	return c.Containers.Cgroups
+}
+
 // UTSNS returns the default UTS Namespace configuration to run containers with
 func (c *Config) UTSNS() string {
 	return c.Containers.UTSNS
@@ -461,9 +483,12 @@ func (c *Config) Ulimits() []string {
 // PidsLimit returns the default maximum number of pids to use in containers
 func (c *Config) PidsLimit() int64 {
 	if unshare.IsRootless() {
-		cgroup2, _ := cgroupv2.Enabled()
-		if cgroup2 {
-			return c.Containers.PidsLimit
+		if c.Engine.CgroupManager == SystemdCgroupsManager {
+			cgroup2, _ := cgroupv2.Enabled()
+			if cgroup2 {
+				return c.Containers.PidsLimit
+			}
+			return 0
 		}
 	}
 	return sysinfo.GetDefaultPidsLimit()
