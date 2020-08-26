@@ -13,6 +13,7 @@ import (
 
 	"github.com/containers/buildah/docker"
 	"github.com/containers/image/v5/types"
+	encconfig "github.com/containers/ocicrypt/config"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/ioutils"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -27,7 +28,7 @@ const (
 	Package = "buildah"
 	// Version for the Package.  Bump version in contrib/rpm/buildah.spec
 	// too.
-	Version = "1.14.11"
+	Version = "1.16.0"
 	// The value we use to identify what type of information, currently a
 	// serialized Builder structure, we are using as per-container state.
 	// This should only be changed when we make incompatible changes to
@@ -309,6 +310,9 @@ type CommonBuildOptions struct {
 	// LabelOpts is the a slice of fields of an SELinux context, given in "field:pair" format, or "disable".
 	// Recognized field names are "role", "type", and "level".
 	LabelOpts []string
+	// OmitTimestamp forces epoch 0 as created timestamp to allow for
+	// deterministic, content-addressable builds.
+	OmitTimestamp bool
 	// SeccompProfilePath is the pathname of a seccomp profile.
 	SeccompProfilePath string
 	// ApparmorProfile is the name of an apparmor profile.
@@ -413,6 +417,9 @@ type BuilderOptions struct {
 	MaxPullRetries int
 	// PullRetryDelay is how long to wait before retrying a pull attempt.
 	PullRetryDelay time.Duration
+	// OciDecryptConfig contains the config that can be used to decrypt an image if it is
+	// encrypted if non-nil. If nil, it does not attempt to decrypt an image.
+	OciDecryptConfig *encconfig.DecryptConfig
 }
 
 // ImportOptions are used to initialize a Builder from an existing container

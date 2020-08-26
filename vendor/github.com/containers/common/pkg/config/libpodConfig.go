@@ -3,7 +3,6 @@ package config
 /* libpodConfig.go contains deprecated functionality and should not be used any longer */
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,7 +167,7 @@ type ConfigFromLibpod struct {
 	// EventsLogFilePath is where the events log is stored.
 	EventsLogFilePath string `toml:"events_logfile_path,omitempty"`
 
-	//DetachKeys is the sequence of keys used to detach a container.
+	// DetachKeys is the sequence of keys used to detach a container.
 	DetachKeys string `toml:"detach_keys,omitempty"`
 
 	// SDNotify tells Libpod to allow containers to notify the host systemd of
@@ -195,6 +194,10 @@ func newLibpodConfig(c *Config) error {
 	configs, err := systemLibpodConfigs()
 	if err != nil {
 		return errors.Wrapf(err, "error finding config on system")
+	}
+
+	if len(configs) == 0 {
+		return nil
 	}
 
 	for _, path := range configs {
@@ -226,7 +229,7 @@ func newLibpodConfig(c *Config) error {
 
 	// hard code EventsLogger to "file" to match older podman versions.
 	if config.EventsLogger != "file" {
-		logrus.Debugf("Ignoring lipod.conf EventsLogger setting %q. Use containers.conf if you want to change this setting and remove libpod.conf files.", config.EventsLogger)
+		logrus.Warnf("Ignoring libpod.conf EventsLogger setting %q. Use %q if you want to change this setting and remove libpod.conf files.", config.EventsLogger, Path())
 		config.EventsLogger = "file"
 	}
 
@@ -243,21 +246,7 @@ func readLibpodConfigFromFile(path string, config *ConfigFromLibpod) (*ConfigFro
 	logrus.Debugf("Reading configuration file %q", path)
 	_, err := toml.DecodeFile(path, config)
 	if err != nil {
-		return nil, fmt.Errorf("unable to decode configuration %v: %v", path, err)
-	}
-
-	// For the sake of backwards compat we need to check if the config fields
-	// with *Set suffix are set in the config.  Note that the storage-related
-	// fields are NOT set in the config here but in the storage.conf OR directly
-	// by the user.
-	if config.VolumePath != "" {
-		config.VolumePathSet = true
-	}
-	if config.StaticDir != "" {
-		config.StaticDirSet = true
-	}
-	if config.TmpDir != "" {
-		config.TmpDirSet = true
+		return nil, errors.Wrapf(err, "decode configuration %s", path)
 	}
 
 	return config, err
@@ -274,9 +263,7 @@ func systemLibpodConfigs() ([]string, error) {
 			if err != nil {
 				containersConfPath = filepath.Join("$HOME", UserOverrideContainersConfig)
 			}
-			// TODO: Raise to Warnf, when Podman is updated to
-			// remove libpod.conf by default
-			logrus.Debugf("Found deprecated file %s, please remove. Use %s to override defaults.\n", path, containersConfPath)
+			logrus.Warnf("Found deprecated file %s, please remove. Use %s to override defaults.\n", path, containersConfPath)
 			return []string{path}, nil
 		}
 		return nil, err
@@ -284,15 +271,11 @@ func systemLibpodConfigs() ([]string, error) {
 
 	configs := []string{}
 	if _, err := os.Stat(_rootConfigPath); err == nil {
-		// TODO: Raise to Warnf, when Podman is updated to
-		// remove libpod.conf by default
-		logrus.Debugf("Found deprecated file %s, please remove. Use %s to override defaults.\n", _rootConfigPath, OverrideContainersConfig)
+		logrus.Warnf("Found deprecated file %s, please remove. Use %s to override defaults.\n", _rootConfigPath, OverrideContainersConfig)
 		configs = append(configs, _rootConfigPath)
 	}
 	if _, err := os.Stat(_rootOverrideConfigPath); err == nil {
-		// TODO: Raise to Warnf, when Podman is updated to
-		// remove libpod.conf by default
-		logrus.Debugf("Found deprecated file %s, please remove. Use %s to override defaults.\n", _rootOverrideConfigPath, OverrideContainersConfig)
+		logrus.Warnf("Found deprecated file %s, please remove. Use %s to override defaults.\n", _rootOverrideConfigPath, OverrideContainersConfig)
 		configs = append(configs, _rootOverrideConfigPath)
 	}
 	return configs, nil
@@ -350,40 +333,75 @@ func (c *Config) libpodConfig() *ConfigFromLibpod {
 
 func (c *Config) libpodToContainersConfig(libpodConf *ConfigFromLibpod) {
 
-	c.Containers.InitPath = libpodConf.InitPath
+	if libpodConf.InitPath != "" {
+		c.Containers.InitPath = libpodConf.InitPath
+	}
 	c.Containers.LogSizeMax = libpodConf.MaxLogSize
 	c.Containers.EnableLabeling = libpodConf.EnableLabeling
 
-	c.Engine.SignaturePolicyPath = libpodConf.SignaturePolicyPath
+	if libpodConf.SignaturePolicyPath != "" {
+		c.Engine.SignaturePolicyPath = libpodConf.SignaturePolicyPath
+	}
 	c.Engine.SetOptions = libpodConf.SetOptions
-	c.Engine.VolumePath = libpodConf.VolumePath
-	c.Engine.ImageDefaultTransport = libpodConf.ImageDefaultTransport
-	c.Engine.OCIRuntime = libpodConf.OCIRuntime
+	if libpodConf.VolumePath != "" {
+		c.Engine.VolumePath = libpodConf.VolumePath
+	}
+	if libpodConf.ImageDefaultTransport != "" {
+		c.Engine.ImageDefaultTransport = libpodConf.ImageDefaultTransport
+	}
+	if libpodConf.OCIRuntime != "" {
+		c.Engine.OCIRuntime = libpodConf.OCIRuntime
+	}
 	c.Engine.OCIRuntimes = libpodConf.OCIRuntimes
 	c.Engine.RuntimeSupportsJSON = libpodConf.RuntimeSupportsJSON
 	c.Engine.RuntimeSupportsNoCgroups = libpodConf.RuntimeSupportsNoCgroups
 	c.Engine.RuntimePath = libpodConf.RuntimePath
 	c.Engine.ConmonPath = libpodConf.ConmonPath
 	c.Engine.ConmonEnvVars = libpodConf.ConmonEnvVars
-	c.Engine.CgroupManager = libpodConf.CgroupManager
-	c.Engine.StaticDir = libpodConf.StaticDir
-	c.Engine.TmpDir = libpodConf.TmpDir
+	if libpodConf.CgroupManager != "" {
+		c.Engine.CgroupManager = libpodConf.CgroupManager
+	}
+	if libpodConf.StaticDir != "" {
+		c.Engine.StaticDir = libpodConf.StaticDir
+	}
+	if libpodConf.TmpDir != "" {
+		c.Engine.TmpDir = libpodConf.TmpDir
+	}
 	c.Engine.NoPivotRoot = libpodConf.NoPivotRoot
 	c.Engine.HooksDir = libpodConf.HooksDir
-	c.Engine.Namespace = libpodConf.Namespace
-	c.Engine.InfraImage = libpodConf.InfraImage
-	c.Engine.InfraCommand = libpodConf.InfraCommand
+	if libpodConf.Namespace != "" {
+		c.Engine.Namespace = libpodConf.Namespace
+	}
+	if libpodConf.InfraImage != "" {
+		c.Engine.InfraImage = libpodConf.InfraImage
+	}
+	if libpodConf.InfraCommand != "" {
+		c.Engine.InfraCommand = libpodConf.InfraCommand
+	}
+
 	c.Engine.EnablePortReservation = libpodConf.EnablePortReservation
-	c.Engine.NetworkCmdPath = libpodConf.NetworkCmdPath
+	if libpodConf.NetworkCmdPath != "" {
+		c.Engine.NetworkCmdPath = libpodConf.NetworkCmdPath
+	}
 	c.Engine.NumLocks = libpodConf.NumLocks
 	c.Engine.LockType = libpodConf.LockType
-	c.Engine.EventsLogger = libpodConf.EventsLogger
-	c.Engine.EventsLogFilePath = libpodConf.EventsLogFilePath
-	c.Engine.DetachKeys = libpodConf.DetachKeys
+	if libpodConf.EventsLogger != "" {
+		c.Engine.EventsLogger = libpodConf.EventsLogger
+	}
+	if libpodConf.EventsLogFilePath != "" {
+		c.Engine.EventsLogFilePath = libpodConf.EventsLogFilePath
+	}
+	if libpodConf.DetachKeys != "" {
+		c.Engine.DetachKeys = libpodConf.DetachKeys
+	}
 	c.Engine.SDNotify = libpodConf.SDNotify
 	c.Engine.CgroupCheck = libpodConf.CgroupCheck
 
-	c.Network.NetworkConfigDir = libpodConf.CNIConfigDir
+	if libpodConf.CNIConfigDir != "" {
+		c.Network.NetworkConfigDir = libpodConf.CNIConfigDir
+	}
 	c.Network.CNIPluginDirs = libpodConf.CNIPluginDir
-	c.Network.DefaultNetwork = libpodConf.CNIDefaultNetwork
+	if libpodConf.CNIDefaultNetwork != "" {
+		c.Network.DefaultNetwork = libpodConf.CNIDefaultNetwork
+	}
 }

@@ -74,7 +74,7 @@ func ResolveName(name string, firstRegistry string, sc *types.SystemContext, sto
 		return []string{strings.TrimPrefix(name, DefaultTransport)}, DefaultTransport, false, nil
 	}
 	split := strings.SplitN(name, ":", 2)
-	if len(split) == 2 {
+	if StartsWithValidTransport(name) && len(split) == 2 {
 		if trans := transports.Get(split[0]); trans != nil {
 			return []string{split[1]}, trans.Name(), false, nil
 		}
@@ -146,6 +146,12 @@ func ResolveName(name string, firstRegistry string, sc *types.SystemContext, sto
 		candidates = append(candidates, candidate)
 	}
 	return candidates, DefaultTransport, searchRegistriesAreEmpty, nil
+}
+
+// StartsWithValidTransport validates the name starts with Buildah supported transport
+// to avoid the corner case image name same as the transport name
+func StartsWithValidTransport(name string) bool {
+	return strings.HasPrefix(name, "dir:") || strings.HasPrefix(name, "docker://") || strings.HasPrefix(name, "docker-archive:") || strings.HasPrefix(name, "docker-daemon:") || strings.HasPrefix(name, "oci:") || strings.HasPrefix(name, "oci-archive:")
 }
 
 // ExpandNames takes unqualified names, parses them as image names, and returns
@@ -462,4 +468,20 @@ func FindLocalRuntime(runtime string) string {
 		}
 	}
 	return localRuntime
+}
+
+// MergeEnv merges two lists of environment variables, avoiding duplicates.
+func MergeEnv(defaults, overrides []string) []string {
+	s := make([]string, 0, len(defaults)+len(overrides))
+	index := make(map[string]int)
+	for _, envSpec := range append(defaults, overrides...) {
+		envVar := strings.SplitN(envSpec, "=", 2)
+		if i, ok := index[envVar[0]]; ok {
+			s[i] = envSpec
+			continue
+		}
+		s = append(s, envSpec)
+		index[envVar[0]] = len(s) - 1
+	}
+	return s
 }
