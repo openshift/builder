@@ -10,24 +10,23 @@ require (
 	github.com/containers/storage v1.20.2
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
-	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/fsouza/go-dockerclient v1.6.3
 	github.com/opencontainers/runc v1.0.0-rc91.0.20200707015106-819fcc687efb
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200520003142-237cc4f519e2
-	github.com/openshift/api v0.0.0-20200326160804-ecb9283fe820
-	github.com/openshift/client-go v0.0.0-20200326155132-2a6cd50aedd0
+	github.com/openshift/api v0.0.0-20200827090112-c05698d102cf
+	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5
 	github.com/openshift/imagebuilder v1.1.6
-	github.com/openshift/library-go v0.0.0-20200327125526-163b2f0d6264
+	github.com/openshift/library-go v0.0.0-20200909173121-1d055d971916
 	github.com/openshift/source-to-image v1.3.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/sys v0.0.0-20200622214017-ed371f2e16b4
-	k8s.io/api v0.19.0-rc.3
-	k8s.io/apimachinery v0.19.0-rc.3
-	k8s.io/client-go v0.19.0-rc.3
-	k8s.io/component-base v0.19.0-rc.3
-	k8s.io/klog/v2 v2.2.0
+	k8s.io/api v0.19.0
+	k8s.io/apimachinery v0.19.0
+	k8s.io/client-go v0.19.0
+	k8s.io/component-base v0.19.0
+	k8s.io/klog/v2 v2.3.0
 	k8s.io/kubectl v0.19.0-rc.3
 	k8s.io/kubernetes v1.19.0-rc.3
 )
