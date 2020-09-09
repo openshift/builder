@@ -217,19 +217,37 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 		}
 		gitEnv = append(gitEnv, secretsEnv...)
 	}
-	if gitSource.HTTPProxy != nil && len(*gitSource.HTTPProxy) > 0 {
-		gitEnv = append(gitEnv, fmt.Sprintf("HTTP_PROXY=%s", *gitSource.HTTPProxy))
-		gitEnv = append(gitEnv, fmt.Sprintf("http_proxy=%s", *gitSource.HTTPProxy))
-	}
-	if gitSource.HTTPSProxy != nil && len(*gitSource.HTTPSProxy) > 0 {
-		gitEnv = append(gitEnv, fmt.Sprintf("HTTPS_PROXY=%s", *gitSource.HTTPSProxy))
-		gitEnv = append(gitEnv, fmt.Sprintf("https_proxy=%s", *gitSource.HTTPSProxy))
-	}
+	// Bug 1875639: git commands fail if HTTP_PROXY and HTTPS_PROXY are set alongside
+	// NO_PROXY
 	if gitSource.NoProxy != nil && len(*gitSource.NoProxy) > 0 {
 		gitEnv = append(gitEnv, fmt.Sprintf("NO_PROXY=%s", *gitSource.NoProxy))
 		gitEnv = append(gitEnv, fmt.Sprintf("no_proxy=%s", *gitSource.NoProxy))
 	}
 	return c.sourceSecretDir, bld.MergeEnv(os.Environ(), gitEnv), nil
+}
+
+// setupProxyConfig sets up a global git proxy configuration with the provided git client.
+// This is a work-around for Bug 1875639.
+//
+// See also: https://bugzilla.redhat.com/show_bug.cgi?id=1875639
+func (c *builderConfig) setupProxyConfig(gitClient git.Repository) error {
+	gitSource := c.build.Spec.Source.Git
+	if gitSource == nil {
+		return nil
+	}
+	if gitSource.HTTPProxy != nil && len(*gitSource.HTTPProxy) > 0 {
+		err := gitClient.AddGlobalConfig("http.proxy", *gitSource.HTTPProxy)
+		if err != nil {
+			return err
+		}
+	}
+	if gitSource.HTTPSProxy != nil && len(*gitSource.HTTPSProxy) > 0 {
+		err := gitClient.AddGlobalConfig("https.proxy", *gitSource.HTTPSProxy)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // clone is responsible for cloning the source referenced in the buildconfig
@@ -247,7 +265,10 @@ func (c *builderConfig) clone() error {
 	defer os.RemoveAll(secretTmpDir)
 
 	gitClient := git.NewRepositoryWithEnv(gitEnv)
-
+	err = c.setupProxyConfig(gitClient)
+	if err != nil {
+		return err
+	}
 	buildDir := bld.InputContentPath
 	sourceInfo, err := bld.GitClone(ctx, gitClient, c.build.Spec.Source.Git, c.build.Spec.Revision, buildDir)
 	if err != nil {
