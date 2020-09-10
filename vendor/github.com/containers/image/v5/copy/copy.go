@@ -659,7 +659,7 @@ func (c *copier) copyOneImage(ctx context.Context, policyContext *signature.Poli
 		// With !ic.canModifyManifest, that would just be a string of repeated failures for the same reason,
 		// so let’s bail out early and with a better error message.
 		if !ic.canModifyManifest {
-			return nil, "", "", errors.Wrap(err, "Writing manifest failed (and converting it is not possible)")
+			return nil, "", "", errors.Wrap(err, "Writing manifest failed (and converting it is not possible, image is signed or the destination specifies a digest)")
 		}
 
 		// errs is a list of errors when trying various manifest types. Also serves as an "upload succeeded" flag when set to nil.
@@ -757,7 +757,7 @@ func (ic *imageCopier) updateEmbeddedDockerReference() error {
 	}
 
 	if !ic.canModifyManifest {
-		return errors.Errorf("Copying a schema1 image with an embedded Docker reference to %s (Docker reference %s) would invalidate existing signatures. Explicitly enable signature removal to proceed anyway",
+		return errors.Errorf("Copying a schema1 image with an embedded Docker reference to %s (Docker reference %s) would change the manifest, which is not possible (image is signed or the destination specifies a digest)",
 			transports.ImageName(ic.c.dest.Reference()), destRef.String())
 	}
 	ic.manifestUpdates.EmbeddedDockerReference = destRef
@@ -784,7 +784,7 @@ func (ic *imageCopier) copyLayers(ctx context.Context) error {
 	// If we only need to check authorization, no updates required.
 	if updatedSrcInfos != nil && !reflect.DeepEqual(srcInfos, updatedSrcInfos) {
 		if !ic.canModifyManifest {
-			return errors.Errorf("Internal error: copyLayers() needs to use an updated manifest but that was known to be forbidden")
+			return errors.Errorf("Copying this image requires changing layer representation, which is not possible (image is signed or the destination specifies a digest)")
 		}
 		srcInfos = updatedSrcInfos
 		srcInfosUpdated = true
@@ -798,7 +798,6 @@ func (ic *imageCopier) copyLayers(ctx context.Context) error {
 
 	// copyGroup is used to determine if all layers are copied
 	copyGroup := sync.WaitGroup{}
-	copyGroup.Add(numLayers)
 
 	// copySemaphore is used to limit the number of parallel downloads to
 	// avoid malicious images causing troubles and to be nice to servers.
@@ -850,18 +849,22 @@ func (ic *imageCopier) copyLayers(ctx context.Context) error {
 
 	if err := func() error { // A scope for defer
 		progressPool, progressCleanup := ic.c.newProgressPool(ctx)
-		defer progressCleanup()
+		defer func() {
+			// Wait for all layers to be copied. progressCleanup() must not be called while any of the copyLayerHelpers interact with the progressPool.
+			copyGroup.Wait()
+			progressCleanup()
+		}()
 
 		for i, srcLayer := range srcInfos {
 			err = copySemaphore.Acquire(ctx, 1)
 			if err != nil {
 				return errors.Wrapf(err, "Can't acquire semaphore")
 			}
+			copyGroup.Add(1)
 			go copyLayerHelper(i, srcLayer, encLayerBitmap[i], progressPool)
 		}
 
-		// Wait for all layers to be copied
-		copyGroup.Wait()
+		// A call to copyGroup.Wait() is done at this point by the defer above.
 		return nil
 	}(); err != nil {
 		return err
@@ -1057,6 +1060,14 @@ func (ic *imageCopier) copyLayer(ctx context.Context, srcInfo types.BlobInfo, to
 			logrus.Debugf("Skipping blob %s (already present):", srcInfo.Digest)
 			bar := ic.c.createProgressBar(pool, srcInfo, "blob", "skipped: already exists")
 			bar.SetTotal(0, true)
+
+			// Throw an event that the layer has been skipped
+			if ic.c.progress != nil && ic.c.progressInterval > 0 {
+				ic.c.progress <- types.ProgressProperties{
+					Event:    types.ProgressEventSkipped,
+					Artifact: srcInfo,
+				}
+			}
 			return blobInfo, cachedDiffID, nil
 		}
 	}

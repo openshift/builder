@@ -3,6 +3,7 @@ package imagebuildah
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -16,10 +17,12 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/types"
+	encconfig "github.com/containers/ocicrypt/config"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/openshift/imagebuilder"
+	"github.com/openshift/imagebuilder/dockerfile/parser"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -129,7 +132,8 @@ type BuildOptions struct {
 	// when handling RUN instructions. If a capability appears in both lists, it
 	// will be dropped.
 	DropCapabilities []string
-	CommonBuildOpts  *buildah.CommonBuildOptions
+	// CommonBuildOpts is *required*.
+	CommonBuildOpts *buildah.CommonBuildOptions
 	// DefaultMountsFilePath is the file path holding the mounts to be mounted in "host-path:container-path" format
 	DefaultMountsFilePath string
 	// IIDFile tells the builder to write the image ID to the specified file
@@ -164,6 +168,9 @@ type BuildOptions struct {
 	SignBy string
 	// Architecture specifies the target architecture of the image to be built.
 	Architecture string
+	// Timestamp sets the created timestamp to the specified time, allowing
+	// for deterministic, content-addressable builds.
+	Timestamp *time.Time
 	// OS is the specifies the operating system of the image to be built.
 	OS string
 	// MaxPullPushRetries is the maximum number of attempts we'll make to pull or push any one
@@ -171,6 +178,13 @@ type BuildOptions struct {
 	MaxPullPushRetries int
 	// PullPushRetryDelay is how long to wait before retrying a pull or push attempt.
 	PullPushRetryDelay time.Duration
+	// OciDecryptConfig contains the config that can be used to decrypt an image if it is
+	// encrypted if non-nil. If nil, it does not attempt to decrypt an image.
+	OciDecryptConfig *encconfig.DecryptConfig
+	// Jobs is the number of stages to run in parallel.  If not specified it defaults to 1.
+	Jobs *int
+	// LogRusage logs resource usage for each step.
+	LogRusage bool
 }
 
 // BuildDockerfiles parses a set of one or more Dockerfiles (which may be
@@ -249,6 +263,9 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "error parsing main Dockerfile")
 	}
+
+	warnOnUnsetBuildArgs(mainNode, options.Args)
+
 	for _, d := range dockerfiles[1:] {
 		additionalNode, err := imagebuilder.ParseDockerfile(d)
 		if err != nil {
@@ -278,6 +295,20 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 		stages = stagesTargeted
 	}
 	return exec.Build(ctx, stages)
+}
+
+func warnOnUnsetBuildArgs(node *parser.Node, args map[string]string) {
+	for _, child := range node.Children {
+		switch strings.ToUpper(child.Value) {
+		case "ARG":
+			argName := child.Next.Value
+			if _, ok := args[argName]; !strings.Contains(argName, "=") && !ok {
+				logrus.Warnf("missing %q build argument. Try adding %q to the command line", argName, fmt.Sprintf("--build-arg %s=<VALUE>", argName))
+			}
+		default:
+			continue
+		}
+	}
 }
 
 // preprocessDockerfileContents runs CPP(1) in preprocess-only mode on the input
