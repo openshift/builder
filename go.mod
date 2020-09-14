@@ -15,7 +15,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200710190001-3e4195d92445
 	github.com/openshift/api v0.0.0-20200827090112-c05698d102cf
 	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5
-	github.com/openshift/imagebuilder v1.1.6
+	github.com/openshift/imagebuilder v1.1.7
 	github.com/openshift/library-go v0.0.0-20200909173121-1d055d971916
 	github.com/openshift/source-to-image v1.3.0
 	github.com/pkg/errors v0.9.1
