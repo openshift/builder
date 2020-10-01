@@ -62,7 +62,7 @@ github.com/containernetworking/cni/pkg/types/020
 github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/utils
 github.com/containernetworking/cni/pkg/version
-# github.com/containers/buildah v1.16.0
+# github.com/containers/buildah v1.16.4
 github.com/containers/buildah
 github.com/containers/buildah/bind
 github.com/containers/buildah/chroot
