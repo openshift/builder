@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
+	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/containers/buildah v1.16.4
 	github.com/containers/common v0.21.0
 	github.com/containers/image/v5 v5.5.2
@@ -17,7 +18,7 @@ require (
 	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5
 	github.com/openshift/imagebuilder v1.1.7
 	github.com/openshift/library-go v0.0.0-20200909173121-1d055d971916
-	github.com/openshift/source-to-image v1.3.0
+	github.com/openshift/source-to-image v1.3.1
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
