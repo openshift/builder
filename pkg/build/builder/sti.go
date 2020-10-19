@@ -365,13 +365,7 @@ func (s *S2IBuilder) Build() error {
 		opts.CgroupParent = s.cgLimits.Parent
 	}
 
-	pullAuthConfigs, err := s.setupPullSecret()
-	if err != nil {
-		s.build.Status.Phase = buildapiv1.BuildPhaseFailed
-		s.build.Status.Reason = buildapiv1.StatusReasonPullBuilderImageFailed
-		s.build.Status.Message = builderutil.StatusMessagePullBuilderImageFailed
-		return err
-	}
+	pullAuthConfigs := s.setupPullSecret()
 	if pullAuthConfigs != nil {
 		opts.AuthConfigs = *pullAuthConfigs
 	}
@@ -445,21 +439,8 @@ func (s *S2IBuilder) Build() error {
 
 // setupPullSecret provides a Docker authentication configuration when the
 // PullSecret is specified.
-func (s *S2IBuilder) setupPullSecret() (*dockerclient.AuthConfigurations, error) {
-	if len(os.Getenv(dockercfg.PullAuthType)) == 0 {
-		return nil, nil
-	}
-	log.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, os.Getenv(dockercfg.PullAuthType))
-	dockercfgPath := dockercfg.GetDockercfgFile(os.Getenv(dockercfg.PullAuthType))
-	if len(dockercfgPath) == 0 {
-		return nil, fmt.Errorf("no docker config file found in '%s'", os.Getenv(dockercfg.PullAuthType))
-	}
-	log.V(2).Infof("Using Docker config file %s", dockercfgPath)
-	r, err := os.Open(dockercfgPath)
-	if err != nil {
-		return nil, fmt.Errorf("'%s': %s", dockercfgPath, err)
-	}
-	return dockerclient.NewAuthConfigurations(r)
+func (s *S2IBuilder) setupPullSecret() *dockerclient.AuthConfigurations {
+	return mergeNodeCredentialsDockerAuth(os.Getenv(dockercfg.PullAuthType))
 }
 
 func (s *S2IBuilder) pullImage(name string, searchPaths []string) error {
