@@ -18,7 +18,9 @@ readonly -f os::build::modvendorflag
 function os::build::build_binary() {
   # Fetch the version.
   local version_ldflags
-  version_ldflags=$(os::build::ldflags)
+  version="$(git describe --tags --always --dirty)"
+  repo_path="github.com/openshift/builder"
+  version_ldflags="-X ${repo_path}/pkg/version.Version=${version}"
   # Fetch additional build flags.
   local mod_vendor_flag
   mod_vendor_flag=$(os::build::modvendorflag)
