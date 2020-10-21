@@ -82,26 +82,72 @@ func parsePullCredentials(credsPath string) (credentialprovider.DockerConfig, er
 }
 
 // mergeNodeCredentials merges node credentials with credentials file provided.
-func mergeNodeCredentials(credsPath string) (*credentialprovider.DockerConfigJSON, error) {
+func mergeNodeCredentials(credsPath string) *credentialprovider.DockerConfigJSON {
 	nodeCreds, err := parsePullCredentials(nodeCredentialsFile)
 	if err != nil {
 		log.V(2).Infof("proceeding without node credentials: %v", err)
 	}
 
-	namespaceCreds, err := parsePullCredentials(credsPath)
+	pullCreds, err := parsePullCredentials(credsPath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading pull credentials: %v", err)
+		log.V(2).Infof("proceeding without build pull credentials: %v", err)
+	}
+	if nodeCreds == nil || len(nodeCreds) == 0 {
+		return &credentialprovider.DockerConfigJSON{
+			Auths: pullCreds,
+		}
+	}
+	if pullCreds == nil || len(pullCreds) == 0 {
+		return &credentialprovider.DockerConfigJSON{
+			Auths: nodeCreds,
+		}
+	}
+
+	credConfigs := pullCreds
+	if credConfigs == nil {
+		credConfigs = credentialprovider.DockerConfig{}
 	}
 
 	for regurl, cfg := range nodeCreds {
-		if _, ok := namespaceCreds[regurl]; !ok {
-			namespaceCreds[regurl] = cfg
+		if _, ok := pullCreds[regurl]; !ok {
+			pullCreds[regurl] = cfg
 		}
 	}
 
 	return &credentialprovider.DockerConfigJSON{
-		Auths: namespaceCreds,
-	}, nil
+		Auths: pullCreds,
+	}
+}
+
+func mergeNodeCredentialsDockerAuth(credsPath string) *docker.AuthConfigurations {
+	nodeCreds, err := GetDockerAuthConfiguration(nodeCredentialsFile)
+	if err != nil {
+		log.V(5).Infof("proceeding without node credentials: %v", err)
+	}
+	pullCreds, err := GetDockerAuthConfiguration(credsPath)
+	if err != nil {
+		log.V(5).Infof("proceeding without build pull credentials: %v", err)
+	}
+
+	if nodeCreds == nil || len(nodeCreds.Configs) == 0 {
+		return pullCreds
+	}
+	if pullCreds == nil || len(pullCreds.Configs) == 0 {
+		return nodeCreds
+	}
+
+	credConfigs := pullCreds.Configs
+	if credConfigs == nil {
+		credConfigs = make(map[string]docker.AuthConfiguration)
+	}
+	for registryURL, cfg := range nodeCreds.Configs {
+		if _, ok := credConfigs[registryURL]; !ok {
+			credConfigs[registryURL] = cfg
+		}
+	}
+	return &docker.AuthConfigurations{
+		Configs: credConfigs,
+	}
 }
 
 func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, searchPaths []string, blobCacheDirectory string) error {
@@ -116,12 +162,7 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		return fmt.Errorf("error parsing image name to pull %s: %v", "docker://"+imageName, err)
 	}
 
-	mergedCreds, err := mergeNodeCredentials(
-		dockercfg.GetDockerConfigPath(searchPaths),
-	)
-	if err != nil {
-		return err
-	}
+	mergedCreds := mergeNodeCredentials(dockercfg.GetDockerConfigPath(searchPaths))
 
 	dstFile, err := ioutil.TempFile("", "config")
 	if err != nil {

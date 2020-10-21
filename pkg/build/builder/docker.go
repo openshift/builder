@@ -309,20 +309,12 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 		forcePull = d.build.Spec.Strategy.DockerStrategy.ForcePull
 	}
 
-	var auth *docker.AuthConfigurations
-	var err error
-	path := os.Getenv(dockercfg.PullAuthType)
-	if len(path) != 0 {
-		auth, err = GetDockerAuthConfiguration(path)
-		if err != nil {
-			return err
-		}
-	}
+	auth := mergeNodeCredentialsDockerAuth(os.Getenv(dockercfg.PullAuthType))
 
-	if err = d.copySecrets(d.build.Spec.Source.Secrets, dir); err != nil {
+	if err := d.copySecrets(d.build.Spec.Source.Secrets, dir); err != nil {
 		return err
 	}
-	if err = d.copyConfigMaps(d.build.Spec.Source.ConfigMaps, dir); err != nil {
+	if err := d.copyConfigMaps(d.build.Spec.Source.ConfigMaps, dir); err != nil {
 		return err
 	}
 

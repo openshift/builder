@@ -8,25 +8,23 @@ import (
 
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
+	docker "github.com/fsouza/go-dockerclient"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 )
 
-func Test_mergeNodeCredentials(t *testing.T) {
+func TestMergeNodeCredentials(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		nsCreds   string
 		nodeCreds string
-		errstr    string
 		expected  credentialprovider.DockerConfig
 	}{
 		{
-			name:   "invalid namespace credentials file path",
-			errstr: "no such file or directory",
+			name: "invalid namespace credentials file path",
 		},
 		{
 			name:    "invalid namespace credentials file",
 			nsCreds: "testdata/empty.txt",
-			errstr:  "unexpected end of JSON input",
 		},
 		{
 			name:     "empty namespace credentials",
@@ -95,20 +93,109 @@ func Test_mergeNodeCredentials(t *testing.T) {
 				}()
 			}
 
-			cfg, err := mergeNodeCredentials(tt.nsCreds)
-			if err != nil {
-				if tt.errstr == "" || !strings.Contains(err.Error(), tt.errstr) {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-				return
-			} else if tt.errstr != "" {
-				t.Errorf("expected error %q, nil received instead", tt.errstr)
-				return
-			}
+			cfg := mergeNodeCredentials(tt.nsCreds)
 
 			if !reflect.DeepEqual(cfg.Auths, tt.expected) {
 				t.Errorf("expected %+v, received: %+v", tt.expected, cfg.Auths)
+			}
+		})
+	}
+}
+
+func TestMergeNodeCredentialsDockerAuth(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		nsCreds   string
+		nodeCreds string
+		expected  map[string]docker.AuthConfiguration
+	}{
+		{
+			name:     "invalid namespace credentials file",
+			nsCreds:  "testdata/empty.txt",
+			expected: map[string]docker.AuthConfiguration{},
+		},
+		{
+			name:     "empty namespace credentials",
+			nsCreds:  "testdata/credentials-empty.json",
+			expected: map[string]docker.AuthConfiguration{},
+		},
+		{
+			name:    "valid namespace credentials",
+			nsCreds: "testdata/credentials-quayio-user0.json",
+			expected: map[string]docker.AuthConfiguration{
+				"quay.io": {
+					Username:      "user0",
+					Password:      "pass0",
+					Email:         "user0@redhat.com",
+					ServerAddress: "quay.io",
+				},
+			},
+		},
+		{
+			name:      "merge namespace with node credentials",
+			nsCreds:   "testdata/credentials-quayio-user0.json",
+			nodeCreds: "testdata/credentials-redhatio-nodeuser.json",
+			expected: map[string]docker.AuthConfiguration{
+				"quay.io": {
+					Username:      "user0",
+					Password:      "pass0",
+					Email:         "user0@redhat.com",
+					ServerAddress: "quay.io",
+				},
+				"registry.redhat.io": {
+					Username:      "nodeuser",
+					Password:      "nodepass",
+					Email:         "nodeuser@redhat.com",
+					ServerAddress: "registry.redhat.io",
+				},
+			},
+		},
+		{
+			name:      "overwriting node credentials",
+			nodeCreds: "testdata/credentials-redhatio-nodeuser.json",
+			nsCreds:   "testdata/credentials-redhatio-nsuser.json",
+			expected: map[string]docker.AuthConfiguration{
+				"registry.redhat.io": {
+					Username:      "nsuser",
+					Password:      "nspass",
+					Email:         "nsuser@redhat.com",
+					ServerAddress: "registry.redhat.io",
+				},
+			},
+		},
+		{
+			name:      "invalid node credentials",
+			nsCreds:   "testdata/credentials-quayio-user0.json",
+			nodeCreds: "testdata/empty.txt",
+			expected: map[string]docker.AuthConfiguration{
+				"quay.io": {
+					Username:      "user0",
+					Password:      "pass0",
+					Email:         "user0@redhat.com",
+					ServerAddress: "quay.io",
+				},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.nodeCreds != "" {
+				origNodeCredentialsFile := nodeCredentialsFile
+				nodeCredentialsFile = tt.nodeCreds
+				defer func() {
+					nodeCredentialsFile = origNodeCredentialsFile
+				}()
+			}
+
+			cfg := mergeNodeCredentialsDockerAuth(tt.nsCreds)
+			if cfg == nil || cfg.Configs == nil {
+				if len(tt.expected) > 0 {
+					t.Errorf("expected %+v, received nil", tt.expected)
+				}
+				return
+			}
+
+			if !reflect.DeepEqual(cfg.Configs, tt.expected) {
+				t.Errorf("expected %+v, received: %+v", tt.expected, cfg.Configs)
 			}
 		})
 	}
