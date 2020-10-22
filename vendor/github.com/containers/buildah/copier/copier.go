@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -35,6 +37,14 @@ const (
 
 func init() {
 	reexec.Register(copierCommand, copierMain)
+	// Attempt a user and host lookup to force libc (glibc, and possibly others that use dynamic
+	// modules to handle looking up user and host information) to load modules that match the libc
+	// our binary is currently using.  Hopefully they're loaded on first use, so that they won't
+	// need to be loaded after we've chrooted into the rootfs, which could include modules that
+	// don't match our libc and which can't be loaded, or modules which we don't want to execute
+	// because we don't trust their code.
+	_, _ = user.Lookup("buildah")
+	_, _ = net.LookupHost("localhost")
 }
 
 // isArchivePath returns true if the specified path can be read like a (possibly
@@ -976,20 +986,7 @@ func copierHandlerGet(bulkWriter io.Writer, req request, pm *fileutils.PatternMa
 			return errorResponse("copier: get: glob %q: %v", glob, err)
 		}
 		globMatchedCount += len(globMatched)
-		filtered := make([]string, 0, len(globMatched))
-		for _, globbed := range globMatched {
-			rel, excluded, err := pathIsExcluded(req.Root, globbed, pm)
-			if err != nil {
-				return errorResponse("copier: get: checking if %q is excluded: %v", globbed, err)
-			}
-			if rel == "." || !excluded {
-				filtered = append(filtered, globbed)
-			}
-		}
-		if len(filtered) == 0 {
-			return errorResponse("copier: get: glob %q matched nothing (%d filtered out of %v): %v", glob, len(globMatched), globMatched, syscall.ENOENT)
-		}
-		queue = append(queue, filtered...)
+		queue = append(queue, globMatched...)
 	}
 	// no matches -> error
 	if len(queue) == 0 {
@@ -1042,15 +1039,15 @@ func copierHandlerGet(bulkWriter io.Writer, req request, pm *fileutils.PatternMa
 				options := req.GetOptions
 				options.ExpandArchives = false
 				walkfn := func(path string, info os.FileInfo, err error) error {
+					if err != nil {
+						return errors.Wrapf(err, "copier: get: error reading %q", path)
+					}
 					// compute the path of this item
 					// relative to the top-level directory,
 					// for the tar header
 					rel, relErr := convertToRelSubdirectory(item, path)
 					if relErr != nil {
 						return errors.Wrapf(relErr, "copier: get: error computing path of %q relative to top directory %q", path, item)
-					}
-					if err != nil {
-						return errors.Wrapf(err, "copier: get: error reading %q", path)
 					}
 					// prefix the original item's name if we're keeping it
 					if relNamePrefix != "" {
@@ -1108,7 +1105,7 @@ func copierHandlerGet(bulkWriter io.Writer, req request, pm *fileutils.PatternMa
 			}
 		}
 		if itemsCopied == 0 {
-			return errors.New("copier: get: copied no items")
+			return errors.Wrapf(syscall.ENOENT, "copier: get: copied no items")
 		}
 		return nil
 	}
@@ -1271,6 +1268,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 			return errorResponse("copier: put: error mapping container filesystem owner %d:%d to host filesystem owners: %v", dirUID, dirGID, err)
 		}
 		dirUID, dirGID = hostDirPair.UID, hostDirPair.GID
+		defaultDirUID, defaultDirGID = hostDirPair.UID, hostDirPair.GID
 		if req.PutOptions.ChownFiles != nil {
 			containerFilePair := idtools.IDPair{UID: *fileUID, GID: *fileGID}
 			hostFilePair, err := idMappings.ToHost(containerFilePair)
@@ -1374,7 +1372,8 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 					hdr.Uid, hdr.Gid = *fileUID, *fileGID
 				}
 			}
-			// make sure the parent directory exists
+			// make sure the parent directory exists, including for tar.TypeXGlobalHeader entries
+			// that we otherwise ignore, because that's what docker build does with them
 			path := filepath.Join(targetDirectory, cleanerReldirectory(filepath.FromSlash(hdr.Name)))
 			if err := ensureDirectoryUnderRoot(filepath.Dir(path)); err != nil {
 				return err
@@ -1392,6 +1391,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 			// create the new item
 			devMajor := uint32(hdr.Devmajor)
 			devMinor := uint32(hdr.Devminor)
+			mode := os.FileMode(hdr.Mode) & os.ModePerm
 			switch hdr.Typeflag {
 			// no type flag for sockets
 			default:
@@ -1399,7 +1399,9 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 			case tar.TypeReg, tar.TypeRegA:
 				var written int64
 				written, err = createFile(path, tr)
-				if written != hdr.Size {
+				// only check the length if there wasn't an error, which we'll
+				// check along with errors for other types of entries
+				if err == nil && written != hdr.Size {
 					return errors.Errorf("copier: put: error creating %q: incorrect length (%d != %d)", path, written, hdr.Size)
 				}
 			case tar.TypeLink:
@@ -1449,6 +1451,13 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 						err = mkfifo(path, 0600)
 					}
 				}
+			case tar.TypeXGlobalHeader:
+				// Per archive/tar, PAX uses these to specify key=value information
+				// applies to all subsequent entries.  The one in reported in #2717,
+				// https://www.openssl.org/source/openssl-1.1.1g.tar.gz, includes a
+				// comment=(40 byte hex string) at the start, possibly a digest.
+				// Don't try to create whatever path was used for the header.
+				goto nextHeader
 			}
 			// check for errors
 			if err != nil {
@@ -1467,7 +1476,6 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 				return errors.Wrapf(err, "copier: put: error setting ownership of %q to %d:%d", path, hdr.Uid, hdr.Gid)
 			}
 			// set permissions, except for symlinks, since we don't have lchmod
-			mode := os.FileMode(hdr.Mode) & os.ModePerm
 			if hdr.Typeflag != tar.TypeSymlink {
 				if err = os.Chmod(path, mode); err != nil {
 					return errors.Wrapf(err, "copier: put: error setting permissions on %q to 0%o", path, mode)
@@ -1495,6 +1503,7 @@ func copierHandlerPut(bulkReader io.Reader, req request, idMappings *idtools.IDM
 			if err = lutimes(hdr.Typeflag == tar.TypeSymlink, path, hdr.AccessTime, hdr.ModTime); err != nil {
 				return errors.Wrapf(err, "error setting access and modify timestamps on %q to %s and %s", path, hdr.AccessTime, hdr.ModTime)
 			}
+		nextHeader:
 			hdr, err = tr.Next()
 		}
 		if err != io.EOF {

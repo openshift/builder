@@ -1,3 +1,27 @@
+- Changelog for v1.16.7 (2020-11-30)
+  * Bump github.com/containers/common from v0.21.0 to v0.22.0.
+  * Bump github.com/containers/image from v5.5.2 to v5.6.0.
+  * Bump github.com/containers/storage from 1.23.3 to v1.23.5.
+
+- Changelog for v1.16.6 (2020-11-16)
+  * copier.Get(): ignore ENOTSUP/ENOSYS when listing xattrs
+  * ADD: handle --chown on URLs
+  * imagebuildah: cache should take image format into account
+  * copier: try to force loading of nsswitch modules before chroot()
+  * overlay: use fusermount for rootless umounts
+  * overlay: fix umount
+  * copier: put: ignore Typeflag="g"
+
+- Changelog for v1.16.5 (2020-10-21)
+  * copier.copierHandlerPut: don't check length when there are errors
+  * CI: run gating tasks with a lot more memory
+  * Run(): ignore containers.conf's environment configuration
+  * bump(github.com/openshift/imagebuilder) to v1.1.8
+  * ADD and COPY: descend into excluded directories, sometimes
+  * copier: add more context to a couple of error messages
+  * copier: check an error earlier
+  * Set directory ownership when copied with ID mapping
+
 - Changelog for v1.16.4 (2020-10-01)
   * ADD: only expand archives at the right time
 
