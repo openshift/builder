@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
+	buildv1 "github.com/openshift/api/build/v1"
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 )
 
@@ -22,7 +23,7 @@ type CACert struct {
 }
 
 // Setup creates a .gitconfig fragment that points to the given ca.crt
-func (s CACert) Setup(baseDir string, context SCMAuthContext) error {
+func (s CACert) Setup(baseDir string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error {
 	if !(s.SourceURL.Type == s2igit.URLTypeURL && s.SourceURL.URL.Scheme == "https" && s.SourceURL.URL.Opaque == "") {
 		return nil
 	}
@@ -35,7 +36,7 @@ func (s CACert) Setup(baseDir string, context SCMAuthContext) error {
 	log.V(5).Infof("Adding CACert Auth to %s:\n%s\n", gitconfig.Name(), content)
 	gitconfig.WriteString(content)
 
-	return ensureGitConfigIncludes(gitconfig.Name(), context)
+	return EnsureGitConfigIncludes(gitconfig.Name(), context, gitSource)
 }
 
 // Name returns the name of this auth method.

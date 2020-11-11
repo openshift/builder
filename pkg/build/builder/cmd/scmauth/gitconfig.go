@@ -1,6 +1,7 @@
 package scmauth
 
 import (
+	buildv1 "github.com/openshift/api/build/v1"
 	"path/filepath"
 )
 
@@ -10,9 +11,9 @@ const GitConfigName = ".gitconfig"
 type GitConfig struct{}
 
 // Setup adds the secret .gitconfig as an include to the .gitconfig file to be used in the build
-func (_ GitConfig) Setup(baseDir string, context SCMAuthContext) error {
+func (_ GitConfig) Setup(baseDir string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error {
 	log.V(4).Infof("Adding user-provided gitconfig %s to build gitconfig", filepath.Join(baseDir, GitConfigName))
-	return ensureGitConfigIncludes(filepath.Join(baseDir, GitConfigName), context)
+	return EnsureGitConfigIncludes(filepath.Join(baseDir, GitConfigName), context, gitSource)
 }
 
 // Name returns the name of this auth method.

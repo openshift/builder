@@ -24,7 +24,7 @@ func TestGitConfigSetup(t *testing.T) {
 	secretDir := secretDir(t, ".gitconfig")
 	defer os.RemoveAll(secretDir)
 
-	err := gitConfig.Setup(secretDir, context)
+	err := gitConfig.Setup(secretDir, context, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

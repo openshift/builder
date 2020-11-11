@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 
+	buildv1 "github.com/openshift/api/build/v1"
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 )
 
@@ -39,11 +40,11 @@ func (a SCMAuths) present(files []os.FileInfo) SCMAuths {
 	return auths
 }
 
-func (a SCMAuths) doSetup(secretsDir string) (*defaultSCMContext, error) {
+func (a SCMAuths) doSetup(secretsDir string, gitSource *buildv1.GitBuildSource) (*defaultSCMContext, error) {
 	context := NewDefaultSCMContext()
 	for _, auth := range a {
 		log.V(4).Infof("Setting up SCMAuth %q", auth.Name())
-		err := auth.Setup(secretsDir, context)
+		err := auth.Setup(secretsDir, context, gitSource)
 		if err != nil {
 			return nil, fmt.Errorf("cannot set up source authentication method %q: %v", auth.Name(), err)
 		}
@@ -52,7 +53,7 @@ func (a SCMAuths) doSetup(secretsDir string) (*defaultSCMContext, error) {
 
 }
 
-func (a SCMAuths) Setup(secretsDir string) (env []string, overrideURL *url.URL, err error) {
+func (a SCMAuths) Setup(secretsDir string, gitSource *buildv1.GitBuildSource) (env []string, overrideURL *url.URL, err error) {
 	files, err := ioutil.ReadDir(secretsDir)
 	if err != nil {
 		return nil, nil, err
@@ -64,7 +65,7 @@ func (a SCMAuths) Setup(secretsDir string) (env []string, overrideURL *url.URL, 
 	}
 
 	// Setup the present SCMAuths
-	context, err := presentAuths.doSetup(secretsDir)
+	context, err := presentAuths.doSetup(secretsDir, gitSource)
 	if err != nil {
 		return nil, nil, err
 	}

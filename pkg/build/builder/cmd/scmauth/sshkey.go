@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+
+	buildv1 "github.com/openshift/api/build/v1"
 )
 
 const SSHPrivateKeyMethodName = "ssh-privatekey"
@@ -14,7 +16,7 @@ type SSHPrivateKey struct{}
 
 // Setup creates a wrapper script for SSH command to be able to use the provided
 // SSH key while accessing private repository.
-func (_ SSHPrivateKey) Setup(baseDir string, context SCMAuthContext) error {
+func (_ SSHPrivateKey) Setup(baseDir string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error {
 	script, err := ioutil.TempFile("", "gitssh")
 	if err != nil {
 		return err
@@ -57,7 +59,9 @@ func (_ SSHPrivateKey) Setup(baseDir string, context SCMAuthContext) error {
 	if err := context.Set("GIT_SSH", script.Name()); err != nil {
 		return err
 	}
-	return nil
+	// we still call ensure to set up the .gitconfig in case there is a global proxy in conjunction
+	// with the ssh source secret
+	return EnsureGitConfigIncludes("", context, gitSource)
 }
 
 // Name returns the name of this auth method.

@@ -77,3 +77,15 @@ func validateConfigContent(t *testing.T, config string, search string) {
 
 	t.Errorf("Could not find search string %q in config file %s", search, config)
 }
+
+func validateConfigContentDoesNotExist(t *testing.T, config string, search string) {
+	lines, err := builder.ReadLines(config)
+	if err != nil {
+		t.Fatalf("cannot read file %s: %v", config, err)
+	}
+	for _, line := range lines {
+		if strings.Contains(line, search) {
+			t.Errorf("found search string %q in config file %s", search, config)
+		}
+	}
+}

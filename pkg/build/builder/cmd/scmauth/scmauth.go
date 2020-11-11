@@ -1,6 +1,10 @@
 package scmauth
 
-import "net/url"
+import (
+	"net/url"
+
+	buildv1 "github.com/openshift/api/build/v1"
+)
 
 // SCMAuth is an interface implemented by different authentication providers
 // which are responsible for setting up the credentials to be used when accessing
@@ -14,7 +18,7 @@ type SCMAuth interface {
 
 	// Setup lays down the required files for this authentication method to work.
 	// Returns the the source URL stripped of credentials.
-	Setup(baseDir string, context SCMAuthContext) error
+	Setup(baseDir string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error
 }
 
 // SCMAuthContext keeps track of variables needed for SCM authentication.

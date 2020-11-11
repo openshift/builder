@@ -9,6 +9,7 @@ import (
 
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
 
+	buildv1 "github.com/openshift/api/build/v1"
 	builder "github.com/openshift/builder/pkg/build/builder"
 )
 
@@ -31,7 +32,7 @@ type UsernamePassword struct {
 
 // Setup creates a gitconfig fragment that includes a substitution URL with the username/password
 // included in the URL. Returns source URL stripped of username/password credentials.
-func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) error {
+func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error {
 	// Only apply to https and http URLs
 	if !(u.SourceURL.Type == s2igit.URLTypeURL &&
 		(u.SourceURL.URL.Scheme == "http" || u.SourceURL.URL.Scheme == "https") &&
@@ -84,7 +85,7 @@ func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) error {
 		fmt.Fprintf(gitconfig, "%s", configContent)
 		fmt.Fprintf(gitcredentials, "%s", gitconfigURL.String())
 
-		return ensureGitConfigIncludes(gitconfig.Name(), context)
+		return EnsureGitConfigIncludes(gitconfig.Name(), context, gitSource)
 	}
 
 	return nil

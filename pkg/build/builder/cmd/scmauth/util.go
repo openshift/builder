@@ -7,19 +7,34 @@ import (
 	"path/filepath"
 	"strings"
 
-	builder "github.com/openshift/builder/pkg/build/builder"
+	buildv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/builder/pkg/build/builder"
 	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 )
 
 var log = utillog.ToFile(os.Stderr, 2)
 
-func createGitConfig(includePath string, context SCMAuthContext) error {
+func createGitConfig(includePath string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error {
 	tempDir, err := ioutil.TempDir("", "git")
 	if err != nil {
 		return err
 	}
 	gitconfig := filepath.Join(tempDir, ".gitconfig")
-	content := fmt.Sprintf("[include]\npath = %s\n", includePath)
+	content := ""
+	if len(includePath) > 0 {
+		content = fmt.Sprintf("[include]\npath = %s\n", includePath)
+	}
+	if gitSource != nil {
+		if gitSource.HTTPProxy != nil && len(*gitSource.HTTPProxy) > 0 {
+			content = content + fmt.Sprintf("[http]\nproxy = %s\n", *gitSource.HTTPProxy)
+		}
+		if gitSource.HTTPSProxy != nil && len(*gitSource.HTTPSProxy) > 0 {
+			content = content + fmt.Sprintf("[https]\n.proxy = %s\n", *gitSource.HTTPSProxy)
+		}
+	}
+	if len(content) == 0 {
+		return nil
+	}
 	if err := ioutil.WriteFile(gitconfig, []byte(content), 0600); err != nil {
 		return err
 	}
@@ -36,12 +51,12 @@ func createGitConfig(includePath string, context SCMAuthContext) error {
 	return nil
 }
 
-// ensureGitConfigIncludes ensures that the OS env var GIT_CONFIG is set and
+// EnsureGitConfigIncludes ensures that the OS env var GIT_CONFIG is set and
 // that it points to a file that has an include statement for the given path
-func ensureGitConfigIncludes(path string, context SCMAuthContext) error {
+func EnsureGitConfigIncludes(path string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error {
 	gitconfig, present := context.Get("GIT_CONFIG")
 	if !present {
-		return createGitConfig(path, context)
+		return createGitConfig(path, context, gitSource)
 	}
 
 	lines, err := builder.ReadLines(gitconfig)

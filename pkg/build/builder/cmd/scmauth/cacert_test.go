@@ -25,7 +25,7 @@ func TestCACertSetup(t *testing.T) {
 	secretDir := secretDir(t, "ca.crt")
 	defer os.RemoveAll(secretDir)
 
-	err := caCert.Setup(secretDir, context)
+	err := caCert.Setup(secretDir, context, nil)
 	gitConfig, _ := context.Get("GIT_CONFIG")
 	defer cleanupConfig(gitConfig)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestCACertSetupNoSSL(t *testing.T) {
 	secretDir := secretDir(t, "ca.crt")
 	defer os.RemoveAll(secretDir)
 
-	err := caCert.Setup(secretDir, context)
+	err := caCert.Setup(secretDir, context, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

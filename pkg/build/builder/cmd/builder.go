@@ -208,7 +208,7 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 		}
 		scmAuths := scmauth.GitAuths(sourceURL)
 
-		secretsEnv, overrideURL, err := scmAuths.Setup(c.sourceSecretDir)
+		secretsEnv, overrideURL, err := scmAuths.Setup(c.sourceSecretDir, c.build.Spec.Source.Git)
 		if err != nil {
 			return c.sourceSecretDir, nil, fmt.Errorf("cannot setup source secret: %v", err)
 		}
@@ -216,6 +216,18 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 			gitSource.URI = overrideURL.String()
 		}
 		gitEnv = append(gitEnv, secretsEnv...)
+	} else {
+		// sets up a git proxy configuration.
+		// This is a work-around for Bug 1875639.
+		//
+		// See also: https://bugzilla.redhat.com/show_bug.cgi?id=1875639
+		// But then it had to be reworked because of https://bugzilla.redhat.com/show_bug.cgi?id=1896446
+		context := scmauth.NewDefaultSCMContext()
+		err := scmauth.EnsureGitConfigIncludes("", context, c.build.Spec.Source.Git)
+		if err != nil {
+			return "", nil, fmt.Errorf("cannot setup proxy .gitconfig when no source secret exists: %v", err)
+		}
+		gitEnv = append(gitEnv, context.Env()...)
 	}
 	// Bug 1875639: git commands fail if HTTP_PROXY and HTTPS_PROXY are set alongside
 	// NO_PROXY
@@ -224,30 +236,6 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 		gitEnv = append(gitEnv, fmt.Sprintf("no_proxy=%s", *gitSource.NoProxy))
 	}
 	return c.sourceSecretDir, bld.MergeEnv(os.Environ(), gitEnv), nil
-}
-
-// setupProxyConfig sets up a global git proxy configuration with the provided git client.
-// This is a work-around for Bug 1875639.
-//
-// See also: https://bugzilla.redhat.com/show_bug.cgi?id=1875639
-func (c *builderConfig) setupProxyConfig(gitClient git.Repository) error {
-	gitSource := c.build.Spec.Source.Git
-	if gitSource == nil {
-		return nil
-	}
-	if gitSource.HTTPProxy != nil && len(*gitSource.HTTPProxy) > 0 {
-		err := gitClient.AddGlobalConfig("http.proxy", *gitSource.HTTPProxy)
-		if err != nil {
-			return err
-		}
-	}
-	if gitSource.HTTPSProxy != nil && len(*gitSource.HTTPSProxy) > 0 {
-		err := gitClient.AddGlobalConfig("https.proxy", *gitSource.HTTPSProxy)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // clone is responsible for cloning the source referenced in the buildconfig
@@ -265,10 +253,6 @@ func (c *builderConfig) clone() error {
 	defer os.RemoveAll(secretTmpDir)
 
 	gitClient := git.NewRepositoryWithEnv(gitEnv)
-	err = c.setupProxyConfig(gitClient)
-	if err != nil {
-		return err
-	}
 	buildDir := bld.InputContentPath
 	sourceInfo, err := bld.GitClone(ctx, gitClient, c.build.Spec.Source.Git, c.build.Spec.Revision, buildDir)
 	if err != nil {

@@ -4,6 +4,8 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+
+	buildv1 "github.com/openshift/api/build/v1"
 )
 
 type testAuth struct {
@@ -18,7 +20,7 @@ func (a *testAuth) Handles(name string) bool {
 	return name == a.name
 }
 
-func (a *testAuth) Setup(baseDir string, context SCMAuthContext) error {
+func (a *testAuth) Setup(baseDir string, context SCMAuthContext, gitSource *buildv1.GitBuildSource) error {
 	context.Set(a.name, "test")
 	return nil
 }
@@ -53,7 +55,7 @@ func TestPresent(t *testing.T) {
 func TestSetup(t *testing.T) {
 	secretDir := secretDir(t, "one", "two", "three")
 	defer os.RemoveAll(secretDir)
-	env, _, err := scmAuths().Setup(secretDir)
+	env, _, err := scmAuths().Setup(secretDir, nil)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
