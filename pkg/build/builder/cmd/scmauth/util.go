@@ -29,7 +29,17 @@ func createGitConfig(includePath string, context SCMAuthContext, gitSource *buil
 			content = content + fmt.Sprintf("[http]\nproxy = %s\n", *gitSource.HTTPProxy)
 		}
 		if gitSource.HTTPSProxy != nil && len(*gitSource.HTTPSProxy) > 0 {
-			content = content + fmt.Sprintf("[https]\n.proxy = %s\n", *gitSource.HTTPSProxy)
+			content = content + fmt.Sprintf("[https]\nproxy = %s\n", *gitSource.HTTPSProxy)
+		}
+		if gitSource.NoProxy != nil && len(*gitSource.NoProxy) > 0 {
+			noProxies := strings.Split(*gitSource.NoProxy, ",")
+			for _, noProxy := range noProxies {
+				if strings.Contains(gitSource.URI, noProxy) {
+					// To set up NO_PROXY in a .gitconfig file, add 'http' and 'https' records for the specific URI that unset 'proxy'
+					content = content + fmt.Sprintf("[http \"%s\"]\nproxy =\n", gitSource.URI)
+					content = content + fmt.Sprintf("[https \"%s\"]\nproxy =\n", gitSource.URI)
+				}
+			}
 		}
 	}
 	if len(content) == 0 {

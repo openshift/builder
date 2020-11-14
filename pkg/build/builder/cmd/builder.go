@@ -231,6 +231,9 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 	}
 	// Bug 1875639: git commands fail if HTTP_PROXY and HTTPS_PROXY are set alongside
 	// NO_PROXY
+	// Note, even though with https://bugzilla.redhat.com/show_bug.cgi?id=1896446 we now set up no proxy
+	// in the .gitconfig file, we still set the environment variable in case items other than git/curl
+	// runnin in the build pod will benefit from it being set.
 	if gitSource.NoProxy != nil && len(*gitSource.NoProxy) > 0 {
 		gitEnv = append(gitEnv, fmt.Sprintf("NO_PROXY=%s", *gitSource.NoProxy))
 		gitEnv = append(gitEnv, fmt.Sprintf("no_proxy=%s", *gitSource.NoProxy))
