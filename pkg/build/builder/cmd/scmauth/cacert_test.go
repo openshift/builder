@@ -25,8 +25,11 @@ func TestCACertSetup(t *testing.T) {
 	secretDir := secretDir(t, "ca.crt")
 	defer os.RemoveAll(secretDir)
 
-	err := caCert.Setup(secretDir, context)
+	configFile, err := caCert.Setup(secretDir, context)
 	gitConfig, _ := context.Get("GIT_CONFIG")
+	if configFile != gitConfig {
+		t.Errorf("expected .gitconfig from Setup %s to match GIT_CONFIG value %s", configFile, gitConfig)
+	}
 	defer cleanupConfig(gitConfig)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -42,12 +45,16 @@ func TestCACertSetupNoSSL(t *testing.T) {
 	secretDir := secretDir(t, "ca.crt")
 	defer os.RemoveAll(secretDir)
 
-	err := caCert.Setup(secretDir, context)
+	configFile, err := caCert.Setup(secretDir, context)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_, gitConfigPresent := context.Get("GIT_CONFIG")
+
+	if len(configFile) > 0 {
+		t.Errorf("expected .gitconfig from Setup to be empty, got %s", configFile)
+	}
+	value, gitConfigPresent := context.Get("GIT_CONFIG")
 	if gitConfigPresent {
-		t.Fatalf("git config not expected")
+		t.Errorf("expected GIT_CONFIG to be unset, got %s", value)
 	}
 }
