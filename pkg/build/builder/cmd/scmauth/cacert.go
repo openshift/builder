@@ -22,13 +22,14 @@ type CACert struct {
 }
 
 // Setup creates a .gitconfig fragment that points to the given ca.crt
-func (s CACert) Setup(baseDir string, context SCMAuthContext) error {
+// Returns the location of the .gitconfig file, and error if raised.
+func (s CACert) Setup(baseDir string, context SCMAuthContext) (string, error) {
 	if !(s.SourceURL.Type == s2igit.URLTypeURL && s.SourceURL.URL.Scheme == "https" && s.SourceURL.URL.Opaque == "") {
-		return nil
+		return "", nil
 	}
 	gitconfig, err := ioutil.TempFile("", "ca.crt.")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer gitconfig.Close()
 	content := fmt.Sprintf(CACertConfig, filepath.Join(baseDir, CACertName))
@@ -39,11 +40,11 @@ func (s CACert) Setup(baseDir string, context SCMAuthContext) error {
 }
 
 // Name returns the name of this auth method.
-func (_ CACert) Name() string {
+func (CACert) Name() string {
 	return CACertName
 }
 
 // Handles returns true if the secret is a CA certificate
-func (_ CACert) Handles(name string) bool {
+func (CACert) Handles(name string) bool {
 	return name == CACertName
 }

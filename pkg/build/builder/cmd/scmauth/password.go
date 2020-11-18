@@ -30,37 +30,37 @@ type UsernamePassword struct {
 }
 
 // Setup creates a gitconfig fragment that includes a substitution URL with the username/password
-// included in the URL. Returns source URL stripped of username/password credentials.
-func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) error {
+// included in the URL. Returns the location of the .gitconfig file, and error if raised.
+func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) (string, error) {
 	// Only apply to https and http URLs
 	if !(u.SourceURL.Type == s2igit.URLTypeURL &&
 		(u.SourceURL.URL.Scheme == "http" || u.SourceURL.URL.Scheme == "https") &&
 		u.SourceURL.URL.Opaque == "") {
-		return nil
+		return "", nil
 	}
 
 	// Read data from secret files
 	usernameSecret, err := readSecret(baseDir, UsernameSecret)
 	if err != nil {
-		return err
+		return "", err
 	}
 	passwordSecret, err := readSecret(baseDir, PasswordSecret)
 	if err != nil {
-		return err
+		return "", err
 	}
 	tokenSecret, err := readSecret(baseDir, TokenSecret)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Determine overrides
 	overrideSourceURL, gitconfigURL, err := doSetup(u.SourceURL.URL, usernameSecret, passwordSecret, tokenSecret)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if overrideSourceURL != nil {
 		if err := context.SetOverrideURL(overrideSourceURL); err != nil {
-			return err
+			return "", err
 		}
 	}
 
@@ -68,12 +68,12 @@ func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) error {
 	if gitconfigURL != nil {
 		gitcredentials, err := ioutil.TempFile("", "gitcredentials.")
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer gitcredentials.Close()
 		gitconfig, err := ioutil.TempFile("", "gitcredentialscfg.")
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer gitconfig.Close()
 
@@ -87,7 +87,7 @@ func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) error {
 		return ensureGitConfigIncludes(gitconfig.Name(), context)
 	}
 
-	return nil
+	return "", nil
 }
 
 func doSetup(sourceURL url.URL, usernameSecret, passwordSecret, tokenSecret string) (*url.URL, *url.URL, error) {
