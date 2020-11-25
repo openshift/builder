@@ -24,11 +24,14 @@ func TestGitConfigSetup(t *testing.T) {
 	secretDir := secretDir(t, ".gitconfig")
 	defer os.RemoveAll(secretDir)
 
-	err := gitConfig.Setup(secretDir, context)
+	configFile, err := gitConfig.Setup(secretDir, context)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	config, _ := context.Get("GIT_CONFIG")
-	defer cleanupConfig(config)
-	validateConfig(t, config, "test")
+	envConfig, _ := context.Get("GIT_CONFIG")
+	if configFile != envConfig {
+		t.Errorf("expected .gitconfig from Setup %s to match GIT_CONFIG value %s", configFile, envConfig)
+	}
+	defer cleanupConfig(envConfig)
+	validateConfig(t, envConfig, "test")
 }

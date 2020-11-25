@@ -18,9 +18,9 @@ func (a *testAuth) Handles(name string) bool {
 	return name == a.name
 }
 
-func (a *testAuth) Setup(baseDir string, context SCMAuthContext) error {
+func (a *testAuth) Setup(baseDir string, context SCMAuthContext) (string, error) {
 	context.Set(a.name, "test")
-	return nil
+	return "", nil
 }
 
 func scmAuths() SCMAuths {
@@ -53,7 +53,7 @@ func TestPresent(t *testing.T) {
 func TestSetup(t *testing.T) {
 	secretDir := secretDir(t, "one", "two", "three")
 	defer os.RemoveAll(secretDir)
-	env, _, err := scmAuths().Setup(secretDir)
+	env, _, _, err := scmAuths().Setup(secretDir)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

@@ -23,7 +23,7 @@ func TestSSHPrivateKeySetup(t *testing.T) {
 	secretDir := secretDir(t, "ssh-privatekey")
 	defer os.RemoveAll(secretDir)
 
-	err := sshKey.Setup(secretDir, context)
+	_, err := sshKey.Setup(secretDir, context)
 	if err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
@@ -47,7 +47,7 @@ func TestSSHPrivateKeyWithKnownHostsSetup(t *testing.T) {
 	secretDir := secretDir(t, "ssh-privatekey", "known_hosts")
 	defer os.RemoveAll(secretDir)
 
-	err := sshKey.Setup(secretDir, context)
+	_, err := sshKey.Setup(secretDir, context)
 	if err != nil {
 		t.Errorf("unexpected error %v", err)
 	}

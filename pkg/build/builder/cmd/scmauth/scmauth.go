@@ -13,8 +13,9 @@ type SCMAuth interface {
 	Handles(name string) bool
 
 	// Setup lays down the required files for this authentication method to work.
-	// Returns the the source URL stripped of credentials.
-	Setup(baseDir string, context SCMAuthContext) error
+	// Returns the path to the generated .gitconfig file used for authentication, and error if
+	// raised.
+	Setup(baseDir string, context SCMAuthContext) (string, error)
 }
 
 // SCMAuthContext keeps track of variables needed for SCM authentication.
@@ -27,6 +28,12 @@ type SCMAuthContext interface {
 	// Set will set the value of a variable. If a variable has already been set
 	// and the value sent is different, then an error will be returned.
 	Set(name, value string) error
+
+	// Env returns a string slice with variables set on this context
+	Env() []string
+
+	// OverrideURL returns the override URL for this context.
+	OverrideURL() *url.URL
 
 	// SetOverrideURL will set an override URL. If a value has already been set
 	// and the URL passed is different, then an error will be returned.
