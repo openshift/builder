@@ -39,11 +39,11 @@ func (a SCMAuths) present(files []os.FileInfo) SCMAuths {
 	return auths
 }
 
-func (a SCMAuths) doSetup(secretsDir string) (*defaultSCMContext, error) {
+func (a SCMAuths) doSetup(secretsDir string) (SCMAuthContext, error) {
 	context := NewDefaultSCMContext()
 	for _, auth := range a {
 		log.V(4).Infof("Setting up SCMAuth %q", auth.Name())
-		err := auth.Setup(secretsDir, context)
+		_, err := auth.Setup(secretsDir, context)
 		if err != nil {
 			return nil, fmt.Errorf("cannot set up source authentication method %q: %v", auth.Name(), err)
 		}
@@ -52,22 +52,22 @@ func (a SCMAuths) doSetup(secretsDir string) (*defaultSCMContext, error) {
 
 }
 
-func (a SCMAuths) Setup(secretsDir string) (env []string, overrideURL *url.URL, err error) {
+func (a SCMAuths) Setup(secretsDir string) (env []string, overrideURL *url.URL, gitConfig string, err error) {
 	files, err := ioutil.ReadDir(secretsDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	// Filter the list of SCMAuths based on the secret files that are present
 	presentAuths := a.present(files)
 	if len(presentAuths) == 0 {
-		return nil, nil, fmt.Errorf("no auth handler was found for secrets in %s", secretsDir)
+		return nil, nil, "", fmt.Errorf("no auth handler was found for secrets in %s", secretsDir)
 	}
 
 	// Setup the present SCMAuths
 	context, err := presentAuths.doSetup(secretsDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-
-	return context.Env(), context.OverrideURL(), nil
+	configFile, _ := context.Get("GIT_CONFIG")
+	return context.Env(), context.OverrideURL(), configFile, nil
 }

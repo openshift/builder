@@ -10,7 +10,9 @@ type defaultSCMContext struct {
 	overrideURL *url.URL
 }
 
-func NewDefaultSCMContext() *defaultSCMContext {
+// NewDefaultSCMContext creates a new environment context for setting up source control management
+// tools, i.e. git.
+func NewDefaultSCMContext() SCMAuthContext {
 	return &defaultSCMContext{
 		vars: make(map[string]string),
 	}

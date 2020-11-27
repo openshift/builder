@@ -400,7 +400,7 @@ github.com/openshift/imagebuilder/dockerfile/command
 github.com/openshift/imagebuilder/dockerfile/parser
 github.com/openshift/imagebuilder/signal
 github.com/openshift/imagebuilder/strslice
-# github.com/openshift/library-go v0.0.0-20200909173121-1d055d971916
+# github.com/openshift/library-go v0.0.0-20201126123001-e59ac21aada3
 github.com/openshift/library-go/pkg/git
 github.com/openshift/library-go/pkg/image/internal/digest
 github.com/openshift/library-go/pkg/image/internal/reference

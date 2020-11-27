@@ -188,29 +188,38 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 	return cfg, nil
 }
 
-func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
+// setupGitEnvironment configures the context for git commands to run. Returns
+// the following:
+//
+// 1. Path to the source secrets directory
+// 2. A list of set environment variables for git
+// 3. The path to the context's .gitconfig file if set, and
+// 4. An error if raised
+func (c *builderConfig) setupGitEnvironment() (string, []string, string, error) {
 
 	// For now, we only handle git. If not specified, we're done
 	gitSource := c.build.Spec.Source.Git
 	if gitSource == nil {
-		return "", []string{}, nil
+		return "", []string{}, "", nil
 	}
 
 	sourceSecret := c.build.Spec.Source.SourceSecret
 	gitEnv := []string{"GIT_ASKPASS=true"}
+	var outGitConfigFile string
 	// If a source secret is present, set it up and add its environment variables
 	if sourceSecret != nil {
 		// TODO: this should be refactored to let each source type manage which secrets
 		// it accepts
 		sourceURL, err := s2igit.Parse(gitSource.URI)
 		if err != nil {
-			return "", nil, fmt.Errorf("cannot parse build URL: %s", gitSource.URI)
+			return "", nil, "", fmt.Errorf("cannot parse build URL: %s", gitSource.URI)
 		}
 		scmAuths := scmauth.GitAuths(sourceURL)
 
-		secretsEnv, overrideURL, err := scmAuths.Setup(c.sourceSecretDir)
+		secretsEnv, overrideURL, gitConfigFile, err := scmAuths.Setup(c.sourceSecretDir)
+		outGitConfigFile = gitConfigFile
 		if err != nil {
-			return c.sourceSecretDir, nil, fmt.Errorf("cannot setup source secret: %v", err)
+			return c.sourceSecretDir, nil, outGitConfigFile, fmt.Errorf("cannot setup source secret: %v", err)
 		}
 		if overrideURL != nil {
 			gitSource.URI = overrideURL.String()
@@ -223,31 +232,38 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, error) {
 		gitEnv = append(gitEnv, fmt.Sprintf("NO_PROXY=%s", *gitSource.NoProxy))
 		gitEnv = append(gitEnv, fmt.Sprintf("no_proxy=%s", *gitSource.NoProxy))
 	}
-	return c.sourceSecretDir, bld.MergeEnv(os.Environ(), gitEnv), nil
+	return c.sourceSecretDir, bld.MergeEnv(os.Environ(), gitEnv), outGitConfigFile, nil
 }
 
-// setupProxyConfig sets up a global git proxy configuration with the provided git client.
-// This is a work-around for Bug 1875639.
+// setupProxyConfig sets up a git proxy configuration with the provided git client, and directory
+// containing a local `.gitconfig` file if this directory contains a source secret.
 //
-// See also: https://bugzilla.redhat.com/show_bug.cgi?id=1875639
-func (c *builderConfig) setupProxyConfig(gitClient git.Repository) error {
+// This is a work-around for Bug 1875639 - see https://bugzilla.redhat.com/show_bug.cgi?id=1875639
+func (c *builderConfig) setupProxyConfig(gitClient git.Repository, gitConfigFile string) error {
 	gitSource := c.build.Spec.Source.Git
 	if gitSource == nil {
 		return nil
 	}
 	if gitSource.HTTPProxy != nil && len(*gitSource.HTTPProxy) > 0 {
-		err := gitClient.AddGlobalConfig("http.proxy", *gitSource.HTTPProxy)
-		if err != nil {
+		if err := c.addGitConfig(gitClient, gitConfigFile, "http.proxy", *gitSource.HTTPProxy); err != nil {
 			return err
 		}
 	}
 	if gitSource.HTTPSProxy != nil && len(*gitSource.HTTPSProxy) > 0 {
-		err := gitClient.AddGlobalConfig("https.proxy", *gitSource.HTTPSProxy)
-		if err != nil {
+		if err := c.addGitConfig(gitClient, gitConfigFile, "https.proxy", *gitSource.HTTPSProxy); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *builderConfig) addGitConfig(gitClient git.Repository, gitConfigFile string, parameter string, value string) error {
+	if len(gitConfigFile) == 0 {
+		log.V(5).Infof("Adding parameter %s to global .gitconfig", parameter)
+		return gitClient.AddGlobalConfig(parameter, value)
+	}
+	log.V(5).Infof("Adding parameter %s to .gitconfig %s", parameter, gitConfigFile)
+	return gitClient.AddConfig("", parameter, value)
 }
 
 // clone is responsible for cloning the source referenced in the buildconfig
@@ -258,17 +274,17 @@ func (c *builderConfig) clone() error {
 		c.build.Status.Stages = timing.GetStages(ctx)
 		bld.HandleBuildStatusUpdate(c.build, c.buildsClient, sourceRev)
 	}()
-	secretTmpDir, gitEnv, err := c.setupGitEnvironment()
+	secretTmpDir, gitEnv, gitConfigFile, err := c.setupGitEnvironment()
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(secretTmpDir)
 
 	gitClient := git.NewRepositoryWithEnv(gitEnv)
-	err = c.setupProxyConfig(gitClient)
-	if err != nil {
+	if err = c.setupProxyConfig(gitClient, gitConfigFile); err != nil {
 		return err
 	}
+
 	buildDir := bld.InputContentPath
 	sourceInfo, err := bld.GitClone(ctx, gitClient, c.build.Spec.Source.Git, c.build.Spec.Revision, buildDir)
 	if err != nil {
