@@ -26,7 +26,7 @@ func Test_mergeNodeCredentials(t *testing.T) {
 		{
 			name:    "invalid namespace credentials file",
 			nsCreds: "testdata/empty.txt",
-			errstr:  "unexpected end of JSON input",
+			errstr:  "error occurred while trying to unmarshal json",
 		},
 		{
 			name:     "empty namespace credentials",
