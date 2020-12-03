@@ -37,7 +37,7 @@ require (
 	github.com/moby/buildkit v0.6.2 // indirect
 	github.com/opencontainers/runc v1.0.0-rc9
 	github.com/opencontainers/runtime-spec v1.0.0
-	github.com/openshift/api v3.9.1-0.20191024142031-e89ff1fddcbe+incompatible
+	github.com/openshift/api v0.0.0-20200618202633-7192180f496a
 	github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
 	github.com/openshift/imagebuilder v1.1.1
 	github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
@@ -54,8 +54,8 @@ require (
 	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/sys v0.0.0-20191127021746-63cb32ae39b2
 	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
-	k8s.io/api v0.17.0
-	k8s.io/apimachinery v0.17.0
+	k8s.io/api v0.17.13
+	k8s.io/apimachinery v0.17.13
 	k8s.io/client-go v0.0.0
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
