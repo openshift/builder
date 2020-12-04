@@ -17,6 +17,8 @@ var (
 	minorFromGit string
 	// build date in ISO8601 format, output of $(date -u +'%Y-%m-%dT%H:%M:%SZ')
 	buildDate string
+	// buildahVersion reports the version of buildah vendored into openshift/builder
+	buildahVersion string
 )
 
 // Get returns the overall codebase version. It's for detecting
@@ -29,4 +31,9 @@ func Get() version.Info {
 		GitVersion: versionFromGit,
 		BuildDate:  buildDate,
 	}
+}
+
+// BuildahVersion returns the version of buildah vendored in.
+func BuildahVersion() string {
+	return buildahVersion
 }
