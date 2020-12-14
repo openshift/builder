@@ -480,4 +480,5 @@ func RunExtractImageContent(out io.Writer) error {
 // logVersion logs the version of openshift-builder.
 func logVersion() {
 	log.V(5).Infof("openshift-builder %v", version.Get())
+	log.V(5).Infof("Powered by buildah %s", version.BuildahVersion())
 }

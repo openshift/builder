@@ -17,6 +17,7 @@ function os::build::version::get_vars() {
 		os::log::warning "No version file at ${OS_VERSION_FILE}, falling back to git versions"
 	fi
 	os::build::version::git_vars
+	os::build::version::buildah_vars
 }
 readonly -f os::build::version::get_vars
 
@@ -72,6 +73,14 @@ function os::build::version::git_vars() {
 }
 readonly -f os::build::version::git_vars
 
+function os::build::version::buildah_vars() {
+	if [[ -n "${OS_BUILDAH_VERSION-}" ]]; then
+		return 0
+	fi
+	OS_BUILDAH_VERSION=$(go list -mod=mod -m -f '{{.Version}}' github.com/containers/buildah)
+}
+readonly -f os::build::version::buildah_vars
+
 # os::build::version::save_vars saves the environment flags to $1
 function os::build::version::save_vars() {
 	cat <<EOF
@@ -105,6 +114,7 @@ function os::build::ldflags() {
   ldflags+=($(os::build::ldflag "${OS_GO_PACKAGE}/pkg/version.versionFromGit" "${OS_GIT_VERSION}"))
   ldflags+=($(os::build::ldflag "${OS_GO_PACKAGE}/pkg/version.commitFromGit" "${OS_GIT_COMMIT}"))
   ldflags+=($(os::build::ldflag "${OS_GO_PACKAGE}/pkg/version.buildDate" "${buildDate}"))
+  ldflags+=($(os::build::ldflag "${OS_GO_PACKAGE}/pkg/version.buildahVersion" "${OS_BUILDAH_VERSION}"))
 
   # The -ldflags parameter takes a single string, so join the output.
   echo "${ldflags[*]-}"
