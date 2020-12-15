@@ -77,7 +77,7 @@ function os::build::version::buildah_vars() {
 	if [[ -n "${OS_BUILDAH_VERSION-}" ]]; then
 		return 0
 	fi
-	OS_BUILDAH_VERSION=$(go list -mod=mod -m -f '{{.Version}}' github.com/containers/buildah)
+	OS_BUILDAH_VERSION=$(go list -mod=vendor -m -f '{{.Version}}' github.com/containers/buildah)
 }
 readonly -f os::build::version::buildah_vars
 
