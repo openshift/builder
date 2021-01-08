@@ -162,7 +162,10 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		return fmt.Errorf("error parsing image name to pull %s: %v", "docker://"+imageName, err)
 	}
 
-	mergedCreds := mergeNodeCredentials(dockercfg.GetDockerConfigPath(searchPaths))
+	dockerConfigCreds, dockerConfigCredsErr := dockercfg.GetDockerConfigPath(searchPaths)
+	// we do not error out immediately if dockercfg.GetDockerConfigPath returns an error
+	// in case the node credentials facilitate the pulling of the image
+	mergedCreds := mergeNodeCredentials(dockerConfigCreds)
 
 	dstFile, err := ioutil.TempFile("", "config")
 	if err != nil {
@@ -189,6 +192,9 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		BlobDirectory: blobCacheDirectory,
 	}
 	_, err = buildah.Pull(context.TODO(), "docker://"+imageName, options)
+	if err != nil && dockerConfigCredsErr != nil {
+		err = fmt.Errorf("%s; also, error processing dockerconfigjson: %s", err.Error(), dockerConfigCredsErr.Error())
+	}
 	return err
 }
 
