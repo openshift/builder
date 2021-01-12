@@ -13,6 +13,7 @@ RUN INSTALL_PKGS=" \
 COPY --from=builder /go/src/github.com/openshift/builder/openshift-builder /usr/bin/
 COPY imagecontent/bin /usr/bin
 COPY imagecontent/etc/containers /etc/containers
+COPY imagecontent/usr/share/containers /usr/share/containers
 RUN mkdir -p /var/cache/blobs \
     /var/lib/shared/overlay-images \
     /var/lib/shared/overlay-layers && \

@@ -12,6 +12,7 @@ RUN INSTALL_PKGS=" \
     yum clean all
 COPY imagecontent/bin /usr/bin
 COPY imagecontent/etc/containers /etc/containers
+COPY imagecontent/usr/share/containers /usr/share/containers
 RUN mkdir -p /var/cache/blobs \
     /var/lib/shared/overlay-images \
     /var/lib/shared/overlay-layers && \
