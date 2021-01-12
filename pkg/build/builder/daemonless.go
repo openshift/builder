@@ -218,6 +218,11 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		transientMounts = append(transientMounts, "/run/secrets:/run/secrets:ro,nodev,noexec,nosuid")
 	}
 
+	seccompProfilePath := "/usr/share/containers/seccomp.json"
+	if profileEnv, ok := os.LookupEnv("BUILD_SECCOMP_PROFILE"); ok {
+		seccompProfilePath = profileEnv
+	}
+
 	options := imagebuildah.BuildOptions{
 		ContextDirectory: contextDir,
 		PullPolicy:       pullPolicy,
@@ -234,11 +239,12 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 			{Name: string(specs.NetworkNamespace), Host: true},
 		},
 		CommonBuildOpts: &buildah.CommonBuildOptions{
-			HTTPProxy:    true,
-			Memory:       opts.Memory,
-			MemorySwap:   opts.Memswap,
-			CgroupParent: opts.CgroupParent,
-			Ulimit:       daemonlessProcessLimits(),
+			HTTPProxy:          true,
+			Memory:             opts.Memory,
+			MemorySwap:         opts.Memswap,
+			CgroupParent:       opts.CgroupParent,
+			Ulimit:             daemonlessProcessLimits(),
+			SeccompProfilePath: seccompProfilePath,
 		},
 		Layers:                  layers,
 		NoCache:                 opts.NoCache,
