@@ -520,6 +520,9 @@ func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store,
 		return nil, fmt.Errorf("unrecognized BUILD_ISOLATION setting %q", strings.ToLower(isolationSpec))
 	}
 
+	isolation = buildah.IsolationOCI
+	log.V(1).Infof("Forcing OCI isolation.")
+
 	if blobCacheDirectory != "" {
 		log.V(0).Infof("Caching blobs under %q.", blobCacheDirectory)
 	}
