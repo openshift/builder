@@ -6,12 +6,13 @@ LABEL io.k8s.display-name="OpenShift Origin Builder" \
 # TODO: Add fuse-overlayfs once we build off of RHEL-8 UBI
 RUN INSTALL_PKGS=" \
       bind-utils bsdtar findutils fuse-overlayfs git hostname lsof \
-      procps-ng socat tar tree util-linux wget which \
+      procps-ng runc socat tar tree util-linux wget which \
       " && \
     yum install -y --setopt=skip_missing_names_on_install=False ${INSTALL_PKGS} && \
     yum clean all
 COPY imagecontent/bin /usr/bin
 COPY imagecontent/etc/containers /etc/containers
+COPY imagecontent/usr/share/containers /usr/share/containers
 RUN mkdir -p /var/cache/blobs \
     /var/lib/shared/overlay-images \
     /var/lib/shared/overlay-layers && \

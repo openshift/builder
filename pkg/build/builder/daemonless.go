@@ -259,6 +259,10 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		transientMounts = append(transientMounts, "/run/secrets:/run/secrets:ro,nodev,noexec,nosuid")
 	}
 
+	// Use a profile provided in the image instead of the default provided
+	// in runtime-tools's generator logic.
+	seccompProfilePath := "/usr/share/containers/seccomp.json"
+
 	options := imagebuildah.BuildOptions{
 		ContextDirectory: contextDir,
 		PullPolicy:       pullPolicy,
@@ -275,11 +279,12 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 			{Name: string(specs.NetworkNamespace), Host: true},
 		},
 		CommonBuildOpts: &buildah.CommonBuildOptions{
-			HTTPProxy:    true,
-			Memory:       opts.Memory,
-			MemorySwap:   opts.Memswap,
-			CgroupParent: opts.CgroupParent,
-			Ulimit:       daemonlessProcessLimits(),
+			HTTPProxy:          true,
+			Memory:             opts.Memory,
+			MemorySwap:         opts.Memswap,
+			CgroupParent:       opts.CgroupParent,
+			Ulimit:             daemonlessProcessLimits(),
+			SeccompProfilePath: seccompProfilePath,
 		},
 		Layers:                  layers,
 		NoCache:                 opts.NoCache,
@@ -541,20 +546,7 @@ type DaemonlessClient struct {
 
 // GetDaemonlessClient returns a valid implemenatation of the DockerClient
 // interface, or an error if the implementation couldn't be created.
-func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, isolationSpec, blobCacheDirectory string, imageOptimizationPolicy buildapiv1.ImageOptimizationPolicy) (client DockerClient, err error) {
-	isolation := buildah.IsolationDefault
-	switch strings.ToLower(isolationSpec) {
-	case "chroot":
-		isolation = buildah.IsolationChroot
-	case "oci":
-		isolation = buildah.IsolationOCI
-	case "rootless":
-		isolation = buildah.IsolationOCIRootless
-	case "":
-	default:
-		return nil, fmt.Errorf("unrecognized BUILD_ISOLATION setting %q", strings.ToLower(isolationSpec))
-	}
-
+func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, blobCacheDirectory string, imageOptimizationPolicy buildapiv1.ImageOptimizationPolicy) (client DockerClient, err error) {
 	if blobCacheDirectory != "" {
 		log.V(0).Infof("Caching blobs under %q.", blobCacheDirectory)
 	}
@@ -562,7 +554,7 @@ func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store,
 	return &DaemonlessClient{
 		SystemContext:           systemContext,
 		Store:                   store,
-		Isolation:               isolation,
+		Isolation:               buildah.IsolationOCI,
 		BlobCacheDirectory:      blobCacheDirectory,
 		ImageOptimizationPolicy: imageOptimizationPolicy,
 		builders:                make(map[string]*buildah.Builder),

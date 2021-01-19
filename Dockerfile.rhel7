@@ -6,7 +6,7 @@ RUN hack/build.sh
 FROM registry.svc.ci.openshift.org/ocp/4.0:base
 # TODO: Add fuse-overlayfs once we build off of RHEL-8 UBI
 RUN INSTALL_PKGS=" \
-      bind-utils bsdtar findutils git hostname lsof socat \
+      bind-utils bsdtar findutils git hostname lsof runc socat \
       sysvinit-tools tar tree util-linux wget which \
       " && \
     yum install -y --setopt=skip_missing_names_on_install=False $INSTALL_PKGS && \
@@ -14,6 +14,7 @@ RUN INSTALL_PKGS=" \
 COPY --from=builder /go/src/github.com/openshift/builder/openshift-builder /usr/bin/
 COPY imagecontent/bin /usr/bin
 COPY imagecontent/etc/containers /etc/containers
+COPY imagecontent/usr/share/containers /usr/share/containers
 RUN mkdir -p /var/cache/blobs \
     /var/lib/shared/overlay-images \
     /var/lib/shared/overlay-layers && \
