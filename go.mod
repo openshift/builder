@@ -8,7 +8,7 @@ require (
 	github.com/containers/buildah v1.16.4
 	github.com/containers/common v0.21.0
 	github.com/containers/image/v5 v5.5.2
-	github.com/containers/storage v1.23.3
+	github.com/containers/storage v1.24.5
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/fsouza/go-dockerclient v1.6.5
@@ -22,7 +22,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/sys v0.0.0-20201112073958-5cba982894dd
+	golang.org/x/sys v0.0.0-20201218084310-7d0127a74742
 	k8s.io/api v0.20.0
 	k8s.io/apimachinery v0.20.0
 	k8s.io/client-go v0.20.0
@@ -34,6 +34,8 @@ require (
 
 replace (
 	github.com/containerd/containerd => github.com/containerd/containerd v1.3.2
+	// needed to force a newer containers/image than we'd pull in via buildah, to get its #1089
+	github.com/containers/image/v5 => github.com/containers/image/v5 v5.10.1
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
 	github.com/docker/libnetwork => github.com/docker/libnetwork v0.8.0-dev.2.0.20171107005402-dcf79f8c7fcb
 	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
