@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -17,10 +15,10 @@ import (
 
 	"k8s.io/component-base/logs"
 
-	"github.com/openshift/library-go/pkg/serviceability"
-
 	"github.com/openshift/builder/pkg/build/builder"
 	"github.com/openshift/builder/pkg/version"
+	"github.com/openshift/library-go/pkg/serviceability"
+	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
 )
 
 func main() {
@@ -51,14 +49,15 @@ func main() {
 
 	clusterCASrc := fmt.Sprintf("%s/ca.crt", builder.SecretCertsMountPath)
 	clusterCADst := fmt.Sprintf("%s/cluster.crt", tlsCertRoot)
-	err := CopyFileIfExists(clusterCASrc, clusterCADst)
+	fs := s2ifs.NewFileSystem()
+	err := fs.Copy(clusterCASrc, clusterCADst, map[string]string{})
 	if err != nil {
 		fmt.Printf("Error setting up cluster CA cert: %v", err)
 		os.Exit(1)
 	}
 
 	runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
-	err = CopyDirIfExists(runtimeCASrc, runtimeCertRoot)
+	err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, map[string]string{})
 	if err != nil {
 		fmt.Printf("Error setting up service CA cert: %v", err)
 		os.Exit(1)
@@ -69,60 +68,6 @@ func main() {
 	if err := command.Execute(); err != nil {
 		os.Exit(1)
 	}
-}
-
-// CopyDirIfExists recursively copies a directory to the destination path.
-// If the source directory does not exist, no error is returned.
-// If the destination directory exists, any contents with matching file names
-// will be overwritten.
-func CopyDirIfExists(src, dst string) error {
-	srcInfo, err := os.Stat(src)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err = os.MkdirAll(dst, srcInfo.Mode()); err != nil {
-		return err
-	}
-	dirInfo, err := ioutil.ReadDir(src)
-	for _, info := range dirInfo {
-		srcPath := filepath.Join(src, info.Name())
-		dstPath := filepath.Join(dst, info.Name())
-		if info.IsDir() {
-			err = CopyDirIfExists(srcPath, dstPath)
-		} else {
-			err = CopyFileIfExists(srcPath, dstPath)
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// CopyFileIfExists copies the source file to the given destination, if the source file exists.
-// If the destination file exists, it will be overwritten and will not copy file attributes.
-func CopyFileIfExists(src, dst string) error {
-	_, err := os.Stat(src)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-	return out.Close()
 }
 
 // CommandFor returns the appropriate command for this base name,
