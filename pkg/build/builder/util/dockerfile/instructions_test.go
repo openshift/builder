@@ -65,7 +65,18 @@ func TestKeyValueInstructions(t *testing.T) {
 			in: []KeyValue{
 				{"☃", "'\" \\ / \b \f \n \r \t \x00"},
 			},
-			want: `"☃"="'\" \\ / \u0008 \u000c \n \r \t \u0000"`,
+			want: `"☃"="'\" \\ / \b \f \n \r \t \x00"`,
+		},
+		{
+			// We should verify that HTML symbols < > & are not escaped,
+			// as it is perfectly fine and expected for them to be used
+			// in Dockerfile
+			in: []KeyValue{
+				{"URL", "https://domain.name/key1=val1&key2=val2"},
+				{"NAME", "Person Name <person.name@domain.name>"},
+			},
+			want: `"URL"="https://domain.name/key1=val1&key2=val2"` +
+				` "NAME"="Person Name <person.name@domain.name>"`,
 		},
 	}
 	for _, tc := range testCases {

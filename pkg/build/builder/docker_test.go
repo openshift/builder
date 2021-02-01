@@ -380,7 +380,7 @@ func TestDockerfilePath(t *testing.T) {
 		"\"OPENSHIFT_BUILD_SOURCE\"=\"http://github.com/openshift/origin.git\"",
 		"\"OPENSHIFT_BUILD_COMMIT\"=\"commitid\"",
 		// expected labels
-		"\"io.openshift.build.commit.author\"=\"test user \\u003ctest@email.com\\u003e\"",
+		"\"io.openshift.build.commit.author\"=\"test user <test@email.com>\"",
 		"\"io.openshift.build.commit.date\"=\"date\"",
 		"\"io.openshift.build.commit.id\"=\"commitid\"",
 		"\"io.openshift.build.commit.ref\"=\"ref\"",
