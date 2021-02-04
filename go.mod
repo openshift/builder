@@ -4,56 +4,30 @@ go 1.12
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
-	github.com/Microsoft/opengcs v0.3.9 // indirect
-	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containers/buildah v1.14.2
-	github.com/containers/common v0.4.2
-	github.com/containers/image/v5 v5.2.1
-	github.com/containers/storage v1.16.1
-	github.com/coreos/bbolt v1.3.3 // indirect
-	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
-	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/containers/buildah v1.14.11
+	github.com/containers/common v0.8.4
+	github.com/containers/image/v5 v5.4.3
+	github.com/containers/storage v1.18.2
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
-	github.com/docker/libkv v0.2.1 // indirect
-	github.com/docker/swarmkit v1.12.1-0.20190926144208-d509e31c1fda // indirect
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/fsouza/go-dockerclient v1.6.3
 	github.com/getsentry/raven-go v0.0.0-20190513200303-c977f96e1095 // indirect
-	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
-	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
 	github.com/googleapis/gnostic v0.3.1 // indirect
-	github.com/gorilla/websocket v1.4.1 // indirect
-	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
-	github.com/grpc-ecosystem/grpc-gateway v1.11.3 // indirect
-	github.com/hashicorp/consul/api v1.2.0 // indirect
-	github.com/hashicorp/go-memdb v1.0.4 // indirect
-	github.com/hashicorp/memberlist v0.1.5 // indirect
-	github.com/hashicorp/serf v0.8.5 // indirect
-	github.com/miekg/dns v1.1.22 // indirect
-	github.com/moby/buildkit v0.6.2 // indirect
 	github.com/opencontainers/runc v1.0.0-rc9
-	github.com/opencontainers/runtime-spec v1.0.0
+	github.com/opencontainers/runtime-spec v1.0.1
 	github.com/openshift/api v0.0.0-20200618202633-7192180f496a
 	github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
-	github.com/openshift/imagebuilder v1.1.1
+	github.com/openshift/imagebuilder v1.1.4
 	github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
-	github.com/openshift/source-to-image v1.2.0
+	github.com/openshift/source-to-image v1.3.0
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.3.0 // indirect
-	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/seccomp/containers-golang v0.0.0-20190710130535-8d1ed6a872a5 // indirect
-	github.com/spf13/cobra v0.0.6
+	github.com/spf13/cobra v0.0.7
 	github.com/spf13/pflag v1.0.5
-	github.com/tonistiigi/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
-	github.com/tonistiigi/fsutil v0.0.0-20191018213012-0f039a052ca1 // indirect
-	github.com/vishvananda/netns v0.0.0-20190625233234-7109fa855b0f // indirect
-	go.uber.org/zap v1.11.0 // indirect
-	golang.org/x/sys v0.0.0-20191127021746-63cb32ae39b2
-	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
+	golang.org/x/sys v0.0.0-20200327173247-9dae0f8f5775
 	k8s.io/api v0.17.13
 	k8s.io/apimachinery v0.17.13
 	k8s.io/client-go v0.0.0
@@ -64,15 +38,14 @@ require (
 )
 
 replace (
-	// Result of go get github.com/containerd/containerd@v0.2.x
-	github.com/containerd/containerd => github.com/containerd/containerd v0.2.10-0.20180716142608-408d13de2fbb
-	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
+	github.com/containerd/containerd => github.com/containerd/containerd v1.3.6
+	github.com/docker/docker => github.com/docker/docker v0.0.0-20190404075923-dbe4a30928d4
 	github.com/docker/libnetwork => github.com/docker/libnetwork v0.8.0-dev.2.0.20171107005402-dcf79f8c7fcb
 	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
-	github.com/moby/buildkit => github.com/dmcgowan/buildkit v0.0.0-20170731200553-da2b9dc7dab9
 	github.com/opencontainers/runtime-tools => github.com/opencontainers/runtime-tools v0.8.0
+	// CVE-2020-9283 fix
+	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20190708153700-3bdd9d9f5532
-	google.golang.org/grpc => google.golang.org/grpc v1.3.0
 	k8s.io/api => k8s.io/api v0.0.0-20191122220107-b5267f2975e0
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191122222427-64482ea217ff
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20191121175448-79c2a76c473a
