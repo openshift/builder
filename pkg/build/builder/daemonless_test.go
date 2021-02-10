@@ -223,3 +223,59 @@ func TestParseDropCapabilities(t *testing.T) {
 		os.Unsetenv(builderutil.DropCapabilities)
 	}
 }
+
+func TestAppendCATrustMount(t *testing.T) {
+	cases := []struct {
+		name        string
+		envVar      string
+		expectMount bool
+	}{
+		{
+			name: "not set",
+		},
+		{
+			name:        "set env var true",
+			envVar:      "true",
+			expectMount: true,
+		},
+		{
+			name:        "set env var false",
+			envVar:      "false",
+			expectMount: false,
+		},
+		{
+			name:        "bad env var",
+			envVar:      "foo",
+			expectMount: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			currentVal, isSet := os.LookupEnv("BUILD_MOUNT_ETC_PKI_CATRUST")
+			if !isSet {
+				defer os.Unsetenv("BUILD_MOUNT_ETC_PKI_CATRUST")
+			} else {
+				defer os.Setenv("BUILD_MOUNT_ETC_PKI_CATRUST", currentVal)
+			}
+			if len(tc.envVar) > 0 {
+				os.Setenv("BUILD_MOUNT_ETC_PKI_CATRUST", tc.envVar)
+			}
+
+			// If stat fails in our test environment, always expect the function to not mount
+			_, err := os.Stat("/etc/pki/ca-trust")
+			if err != nil {
+				tc.expectMount = false
+			}
+			mounts := []string{}
+			mounts = appendCATrustMount(mounts)
+
+			if tc.expectMount && len(mounts) == 0 {
+				t.Fatal("expected mount for /etc/pki/ca-trust")
+			}
+			expectedMount := "/etc/pki/ca-trust:/etc/pki/ca-trust:ro"
+			if tc.expectMount && mounts[0] != expectedMount {
+				t.Errorf("expected mount %q, got %q", expectedMount, mounts[0])
+			}
+		})
+	}
+}

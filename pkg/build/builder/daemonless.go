@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -259,24 +260,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		}
 	}
 
-	var transientMounts []string
-	if st, err := os.Stat("/run/secrets/rhsm"); err == nil && st.IsDir() {
-		// Add a bind of /run/secrets/rhsm, to pass along anything that the
-		// runtime mounted from the node into our /run/secrets/rhsm.
-		log.V(0).Infof("Adding transient rw bind mount for /run/secrets/rhsm")
-		tmpDir, err := ioutil.TempDir("/tmp", "rhsm-copy")
-		if err != nil {
-			log.V(0).Infof("Error creating tmpdir to set up /run/secrets/rhsm in build container: %s", err.Error())
-			return err
-		}
-		fs := s2ifs.NewFileSystem()
-		err = fs.CopyContents("/run/secrets/rhsm", tmpDir, map[string]string{})
-		if err != nil {
-			log.V(0).Infof("Error copying /run/secrets/rhsm to tmpdir %s: %s", tmpDir, err.Error())
-			return err
-		}
-		transientMounts = append(transientMounts, fmt.Sprintf("%s:/run/secrets/rhsm:rw,nodev,noexec,nosuid", tmpDir))
-	}
+	transientMounts := generateTransientMounts()
 
 	// Use a profile provided in the image instead of the default provided
 	// in runtime-tools's generator logic.
@@ -315,6 +299,72 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 
 	_, _, err := imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
 	return err
+}
+
+func generateTransientMounts() []string {
+	mounts := []string{}
+	mounts = appendRHSMMount(mounts)
+	mounts = appendCATrustMount(mounts)
+	return mounts
+}
+
+func appendRHSMMount(mounts []string) []string {
+	st, err := os.Stat("/run/secrets/rhsm")
+	if err != nil {
+		log.V(0).Infof("Red Hat entitlements will not be available in this build: failed to stat RHSM secrets directory /run/secrets/rhsm: %v", err)
+		return mounts
+	}
+	if !st.IsDir() {
+		log.V(0).Infof("Red Hat entitlements will not be available in this build: rhsm secrets location /run/secrets/rhsm is not a directory")
+		return mounts
+	}
+
+	// Add a bind of /run/secrets/rhsm, to pass along anything that the
+	// runtime mounted from the node into our /run/secrets/rhsm.
+	log.V(0).Infof("Adding transient rw bind mount for /run/secrets/rhsm")
+	tmpDir, err := ioutil.TempDir("/tmp", "rhsm-copy")
+	if err != nil {
+		log.V(0).Infof("Red Hat entitlements will not be available in this build: failed to create tmpdir for rhsm secrets: %v", err)
+		return mounts
+	}
+	fs := s2ifs.NewFileSystem()
+	err = fs.CopyContents("/run/secrets/rhsm", tmpDir, map[string]string{})
+	if err != nil {
+		log.V(0).Infof("Red Hat entitlements will not be available in this build: failed to copy rhsm secrets: %v", err)
+		return mounts
+	}
+	mounts = append(mounts, fmt.Sprintf("%s:/run/secrets/rhsm:rw,nodev,noexec,nosuid", tmpDir))
+	return mounts
+}
+
+func appendCATrustMount(mounts []string) []string {
+	mountCAEnv, exists := os.LookupEnv("BUILD_MOUNT_ETC_PKI_CATRUST")
+	if !exists {
+		return mounts
+	}
+
+	mountCA, err := strconv.ParseBool(mountCAEnv)
+	if err != nil {
+		log.V(0).Infof("custom PKI trust bundle will not be available in this build: failed to parse BUILD_MOUNT_ETC_PKI_CATRUST: %v", err)
+		return mounts
+	}
+	if !mountCA {
+		return mounts
+	}
+
+	st, err := os.Stat("/etc/pki/ca-trust")
+	if err != nil {
+		log.V(0).Infof("custom PKI trust bundle will not be available in this build: failed to stat /etc/pki/ca-trust: %v", err)
+		return mounts
+	}
+	if !st.IsDir() {
+		log.V(0).Infof("custom PKI trust bundle will not be available in this build: /etc/pki/ca-trust is not a directory")
+		return mounts
+	}
+
+	log.V(0).Infof("Adding transient ro bind mount for /etc/pki/ca-trust")
+	mounts = append(mounts, "/etc/pki/ca-trust:/etc/pki/ca-trust:ro")
+	return mounts
 }
 
 func tagDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag, pushTag string) error {
