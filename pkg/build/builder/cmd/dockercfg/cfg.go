@@ -10,6 +10,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/spf13/pflag"
 
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
@@ -116,46 +117,49 @@ func GetDockercfgFile(path string) string {
 	return cfgPath
 }
 
-func readSpecificDockerConfigJSONFile(filePath string) bool {
+func readSpecificDockerConfigJSONFile(filePath string) error {
 	var contents []byte
 	var err error
 
 	if contents, err = ioutil.ReadFile(filePath); err != nil {
 		log.V(4).Infof("error reading file: %v", err)
-		return false
+		return err
 	}
-	return readDockerConfigJSONFileFromBytes(contents)
+	return readDockerConfigJSONFileFromBytes(filePath, contents)
 }
 
-func readDockerConfigJSONFileFromBytes(contents []byte) bool {
+func readDockerConfigJSONFileFromBytes(filePath string, contents []byte) error {
 	var cfgJSON credentialprovider.DockerConfigJSON
 	if err := json.Unmarshal(contents, &cfgJSON); err != nil {
-		log.V(4).Infof("while trying to parse blob %q: %v", contents, err)
-		return false
+		log.V(0).Infof("error trying to parse file %s: %s", filePath, err.Error())
+		return err
 	}
-	return true
+	return nil
 }
 
 // GetDockerConfigPath returns the first path that provides a valid DockerConfig;
 // modified elements from credentialprovider methods called from GetDockerConfig, following the same order of precedenced
 // articulated in GetDockerConfig, via the order of file names set in dockerFilesToExamine
-func GetDockerConfigPath(paths []string) string {
+func GetDockerConfigPath(paths []string) (string, error) {
+	errList := []error{}
 	for _, configPath := range paths {
 		for _, file := range dockerFilesToExamine {
 			absDockerConfigFileLocation, err := filepath.Abs(filepath.Join(configPath, file))
 			if err != nil {
 				log.V(4).Infof("while trying to canonicalize %s: %v", configPath, err)
+				errList = append(errList)
 				continue
 			}
 			log.V(4).Infof("looking for %s at %s", file, absDockerConfigFileLocation)
-			found := readSpecificDockerConfigJSONFile(absDockerConfigFileLocation)
-			if found {
+			err = readSpecificDockerConfigJSONFile(absDockerConfigFileLocation)
+			if err == nil {
 				log.V(4).Infof("found valid %s at %s", file, absDockerConfigFileLocation)
-				return absDockerConfigFileLocation
+				return absDockerConfigFileLocation, nil
 			}
+			errList = append(errList, err)
 		}
 	}
-	return ""
+	return "", kerrors.NewAggregate(errList)
 }
 
 // GetDockerConfig return docker config info by checking given paths
