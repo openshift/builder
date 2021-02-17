@@ -242,7 +242,7 @@ func daemonlessProcessLimits() (defaultProcessLimits []string) {
 	return defaultProcessLimits
 }
 
-func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation buildah.Isolation, contextDir string, optimization buildapiv1.ImageOptimizationPolicy, opts *docker.BuildImageOptions, blobCacheDirectory string) error {
+func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation buildah.Isolation, ociRuntime, contextDir string, optimization buildapiv1.ImageOptimizationPolicy, opts *docker.BuildImageOptions, blobCacheDirectory string) error {
 	log.V(2).Infof("Building...")
 
 	args := make(map[string]string)
@@ -295,6 +295,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		ContextDirectory: contextDir,
 		PullPolicy:       pullPolicy,
 		Isolation:        isolation,
+		Runtime:          ociRuntime,
 		TransientMounts:  transientMounts,
 		Args:             args,
 		Output:           opts.Name,
@@ -686,7 +687,7 @@ func inspectDaemonlessImage(sc types.SystemContext, store storage.Store, name st
 
 // daemonlessRun mimics the 'docker run --rm' CLI command well enough. It creates and
 // starts a container and streams its logs. The container is removed after it terminates.
-func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.Isolation, createOpts docker.CreateContainerOptions, attachOpts docker.AttachToContainerOptions, blobCacheDirectory string) error {
+func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.Isolation, ociRuntime string, createOpts docker.CreateContainerOptions, attachOpts docker.AttachToContainerOptions, blobCacheDirectory string) error {
 	if createOpts.Config == nil {
 		return fmt.Errorf("error calling daemonlessRun: expected a Config")
 	}
@@ -725,6 +726,7 @@ func daemonlessRun(ctx context.Context, store storage.Store, isolation buildah.I
 	}
 	runOptions := buildah.RunOptions{
 		Isolation:        isolation,
+		Runtime:          ociRuntime,
 		Entrypoint:       entrypoint,
 		Cmd:              createOpts.Config.Cmd,
 		Stdout:           attachOpts.OutputStream,
@@ -740,6 +742,7 @@ type DaemonlessClient struct {
 	SystemContext           types.SystemContext
 	Store                   storage.Store
 	Isolation               buildah.Isolation
+	OCIRuntime              string
 	BlobCacheDirectory      string
 	ImageOptimizationPolicy buildapiv1.ImageOptimizationPolicy
 	builders                map[string]*buildah.Builder
@@ -747,15 +750,29 @@ type DaemonlessClient struct {
 
 // GetDaemonlessClient returns a valid implemenatation of the DockerClient
 // interface, or an error if the implementation couldn't be created.
-func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, blobCacheDirectory string, imageOptimizationPolicy buildapiv1.ImageOptimizationPolicy) (client DockerClient, err error) {
+func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store, blobCacheDirectory string, isolationSpec, ociRuntime string, imageOptimizationPolicy buildapiv1.ImageOptimizationPolicy) (client DockerClient, err error) {
 	if blobCacheDirectory != "" {
 		log.V(0).Infof("Caching blobs under %q.", blobCacheDirectory)
+	}
+
+	var isolation buildah.Isolation
+	switch isolationSpec {
+	case "", "oci":
+		isolation = buildah.IsolationOCI
+	case "rootless":
+		isolation = buildah.IsolationOCIRootless
+	case "chroot":
+		isolation = buildah.IsolationChroot
+	default:
+		log.V(0).Infof("Unrecognized isolation type %q.", isolationSpec)
+		return nil, errors.Errorf("Unrecognized isolation type %q.", isolationSpec)
 	}
 
 	return &DaemonlessClient{
 		SystemContext:           systemContext,
 		Store:                   store,
-		Isolation:               buildah.IsolationOCI,
+		Isolation:               isolation,
+		OCIRuntime:              ociRuntime,
 		BlobCacheDirectory:      blobCacheDirectory,
 		ImageOptimizationPolicy: imageOptimizationPolicy,
 		builders:                make(map[string]*buildah.Builder),
@@ -763,7 +780,7 @@ func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store,
 }
 
 func (d *DaemonlessClient) BuildImage(opts docker.BuildImageOptions) error {
-	return buildDaemonlessImage(d.SystemContext, d.Store, d.Isolation, opts.ContextDir, d.ImageOptimizationPolicy, &opts, d.BlobCacheDirectory)
+	return buildDaemonlessImage(d.SystemContext, d.Store, d.Isolation, d.OCIRuntime, opts.ContextDir, d.ImageOptimizationPolicy, &opts, d.BlobCacheDirectory)
 }
 
 func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.AuthConfiguration) (string, error) {

@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/reexec"
 	"github.com/spf13/cobra"
 
 	"k8s.io/component-base/logs"
+	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 
 	"github.com/openshift/builder/pkg/build/builder"
 	"github.com/openshift/builder/pkg/version"
@@ -52,19 +54,37 @@ func main() {
 	fs := s2ifs.NewFileSystem()
 	err := fs.Copy(clusterCASrc, clusterCADst, map[string]string{})
 	if err != nil {
-		fmt.Printf("Error setting up cluster CA cert: %v", err)
+		fmt.Printf("Error setting up cluster CA cert: %v\n", err)
 		os.Exit(1)
 	}
 
 	runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
 	err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, map[string]string{})
 	if err != nil {
-		fmt.Printf("Error setting up service CA cert: %v", err)
+		fmt.Printf("Error setting up service CA cert: %v\n", err)
 		os.Exit(1)
 	}
 
 	basename := filepath.Base(os.Args[0])
 	command := CommandFor(basename)
+
+	flags := command.Flags()
+	var uidmap, gidmap string
+	var useNewuidmap, useNewgidmap bool
+	flags.StringVar(&uidmap, "uidmap", "", "re-exec in a user namespace using the specified UID map")
+	flags.StringVar(&gidmap, "gidmap", "", "re-exec in a user namespace using the specified GID map")
+	flags.BoolVar(&useNewuidmap, "use-newuidmap", os.Geteuid() != 0, "use newuidmap to set up UID mappings")
+	flags.BoolVar(&useNewgidmap, "use-newgidmap", os.Geteuid() != 0, "use newgidmap to set up GID mappings")
+	wrapped := command.Run
+	command.Run = func(c *cobra.Command, args []string) {
+		storeOptions, err := storage.DefaultStoreOptions(false, 0)
+		kcmdutil.CheckErr(err)
+		os.MkdirAll(storeOptions.GraphRoot, 0775)
+		os.MkdirAll(storeOptions.RunRoot, 0775)
+		maybeReexecUsingUserNamespace(uidmap, useNewuidmap, gidmap, useNewgidmap)
+		wrapped(c, args)
+	}
+
 	if err := command.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -76,15 +96,15 @@ func CommandFor(basename string) *cobra.Command {
 	var cmd *cobra.Command
 
 	switch basename {
-	case "openshift-sti-build":
+	case "openshift-sti-build", "openshift-sti-build-in-a-user-namespace":
 		cmd = NewCommandS2IBuilder(basename)
-	case "openshift-docker-build":
+	case "openshift-docker-build", "openshift-docker-build-in-a-user-namespace":
 		cmd = NewCommandDockerBuilder(basename)
-	case "openshift-git-clone":
+	case "openshift-git-clone", "openshift-git-clone-in-a-user-namespace":
 		cmd = NewCommandGitClone(basename)
-	case "openshift-manage-dockerfile":
+	case "openshift-manage-dockerfile", "openshift-manage-dockerfile-in-a-user-namespace":
 		cmd = NewCommandManageDockerfile(basename)
-	case "openshift-extract-image-content":
+	case "openshift-extract-image-content", "openshift-extract-image-content-in-a-user-namespace":
 		cmd = NewCommandExtractImageContent(basename)
 	default:
 		fmt.Printf("unknown command name: %s\n", basename)

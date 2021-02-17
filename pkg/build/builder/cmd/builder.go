@@ -61,7 +61,7 @@ type builderConfig struct {
 	blobCache       string
 }
 
-func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderConfig, error) {
+func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool, isolation, ociRuntime, storageDriver, storageOptions string) (*builderConfig, error) {
 	cfg := &builderConfig{}
 	var err error
 
@@ -108,12 +108,12 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 		if err != nil {
 			return nil, err
 		}
-		if driver, ok := os.LookupEnv("BUILD_STORAGE_DRIVER"); ok {
-			storeOptions.GraphDriverName = driver
+		if storageDriver != "" {
+			storeOptions.GraphDriverName = storageDriver
 		}
-		if storageOptions, ok := os.LookupEnv("BUILD_STORAGE_OPTIONS"); ok {
+		if storageOptions != "" {
 			if err := json.Unmarshal([]byte(storageOptions), &storeOptions.GraphDriverOptions); err != nil {
-				log.V(0).Infof("Error parsing BUILD_STORAGE_OPTIONS (%q): %v", storageOptions, err)
+				log.V(0).Infof("Error parsing storage options (%q): %v", storageOptions, err)
 				return nil, err
 			}
 		}
@@ -155,7 +155,7 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 			imageOptimizationPolicy = buildapiv1.ImageOptimizationSkipLayers
 		}
 
-		dockerClient, err := bld.GetDaemonlessClient(systemContext, store, cfg.blobCache, imageOptimizationPolicy)
+		dockerClient, err := bld.GetDaemonlessClient(systemContext, store, cfg.blobCache, isolation, ociRuntime, imageOptimizationPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("no daemonless store: %v", err)
 		}
@@ -363,9 +363,9 @@ func (s2iBuilder) Build(dockerClient bld.DockerClient, sock string, buildsClient
 	return bld.NewS2IBuilder(dockerClient, sock, buildsClient, build, cgLimits).Build()
 }
 
-func runBuild(out io.Writer, builder builder) error {
+func runBuild(out io.Writer, builder builder, isolation, ociRuntime, storageDriver, storageOptions string) error {
 	logVersion()
-	cfg, err := newBuilderConfigFromEnvironment(out, true)
+	cfg, err := newBuilderConfigFromEnvironment(out, true, isolation, ociRuntime, storageDriver, storageOptions)
 	if err != nil {
 		return err
 	}
@@ -376,7 +376,7 @@ func runBuild(out io.Writer, builder builder) error {
 }
 
 // RunDockerBuild creates a docker builder and runs its build
-func RunDockerBuild(out io.Writer) error {
+func RunDockerBuild(out io.Writer, isolation, ociRuntime, storageDriver, storageOptions string) error {
 	switch {
 	case log.Is(6):
 		serviceability.InitLogrus("DEBUG")
@@ -385,11 +385,11 @@ func RunDockerBuild(out io.Writer) error {
 	case log.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
-	return runBuild(out, dockerBuilder{})
+	return runBuild(out, dockerBuilder{}, isolation, ociRuntime, storageDriver, storageOptions)
 }
 
 // RunS2IBuild creates a S2I builder and runs its build
-func RunS2IBuild(out io.Writer) error {
+func RunS2IBuild(out io.Writer, isolation, ociRuntime, storageDriver, storageOptions string) error {
 	switch {
 	case log.Is(6):
 		serviceability.InitLogrus("DEBUG")
@@ -398,7 +398,7 @@ func RunS2IBuild(out io.Writer) error {
 	case log.Is(0):
 		serviceability.InitLogrus("WARN")
 	}
-	return runBuild(out, s2iBuilder{})
+	return runBuild(out, s2iBuilder{}, isolation, ociRuntime, storageDriver, storageOptions)
 }
 
 // RunGitClone performs a git clone using the build defined in the environment
@@ -412,7 +412,7 @@ func RunGitClone(out io.Writer) error {
 		serviceability.InitLogrus("WARN")
 	}
 	logVersion()
-	cfg, err := newBuilderConfigFromEnvironment(out, false)
+	cfg, err := newBuilderConfigFromEnvironment(out, false, "", "", "", "")
 	if err != nil {
 		return err
 	}
@@ -439,7 +439,7 @@ func RunManageDockerfile(out io.Writer) error {
 		serviceability.InitLogrus("WARN")
 	}
 	logVersion()
-	cfg, err := newBuilderConfigFromEnvironment(out, false)
+	cfg, err := newBuilderConfigFromEnvironment(out, false, "", "", "", "")
 	if err != nil {
 		return err
 	}
@@ -461,7 +461,7 @@ func RunExtractImageContent(out io.Writer) error {
 		serviceability.InitLogrus("WARN")
 	}
 	logVersion()
-	cfg, err := newBuilderConfigFromEnvironment(out, true)
+	cfg, err := newBuilderConfigFromEnvironment(out, true, "", "", "", "")
 	if err != nil {
 		return err
 	}

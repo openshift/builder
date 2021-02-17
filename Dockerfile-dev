@@ -3,7 +3,6 @@ LABEL io.k8s.display-name="OpenShift Origin Builder" \
       io.k8s.description="This is a component of OpenShift Origin and is responsible for executing image builds." \
       io.openshift.tags="openshift,builder"
 
-# TODO: Add fuse-overlayfs once we build off of RHEL-8 UBI
 RUN INSTALL_PKGS=" \
       bind-utils bsdtar findutils fuse-overlayfs git hostname lsof \
       procps-ng runc socat tar tree util-linux wget which \
@@ -15,7 +14,9 @@ COPY imagecontent/etc/containers /etc/containers
 COPY imagecontent/usr/share/containers /usr/share/containers
 RUN mkdir -p /var/cache/blobs \
     /var/lib/shared/overlay-images \
-    /var/lib/shared/overlay-layers && \
+    /var/lib/shared/overlay-layers \
+    /etc/pki/tls/certs /etc/docker/certs.d && \
+    chmod g+w /etc/pki/tls/certs /etc/docker/certs.d && \
     touch /var/lib/shared/overlay-images/images.lock \
     /var/lib/shared/overlay-layers/layers.lock
 
