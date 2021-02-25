@@ -387,7 +387,7 @@ github.com/opencontainers/runtime-tools/validate
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
 github.com/opencontainers/selinux/pkg/pwalk
-# github.com/openshift/api v0.0.0-20201019163320-c6a5ec25f267
+# github.com/openshift/api v0.0.0-20210222200543-70b287c0a0a5
 github.com/openshift/api/build/v1
 # github.com/openshift/client-go v0.0.0-20201020074620-f8fd44879f7c
 github.com/openshift/client-go/build/clientset/versioned

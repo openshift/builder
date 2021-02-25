@@ -14,7 +14,7 @@ require (
 	github.com/fsouza/go-dockerclient v1.6.5
 	github.com/opencontainers/runc v1.0.0-rc91.0.20200707015106-819fcc687efb
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200710190001-3e4195d92445
-	github.com/openshift/api v0.0.0-20201019163320-c6a5ec25f267
+	github.com/openshift/api v0.0.0-20210222200543-70b287c0a0a5
 	github.com/openshift/client-go v0.0.0-20201020074620-f8fd44879f7c
 	github.com/openshift/imagebuilder v1.1.7
 	github.com/openshift/library-go v0.0.0-20201123212217-43f358922ea0
