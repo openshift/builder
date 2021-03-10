@@ -58,9 +58,6 @@ func (d *FakeDocker) RemoveImage(name string) error {
 	}
 	return nil
 }
-func (d *FakeDocker) CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error) {
-	return &docker.Container{}, nil
-}
 func (d *FakeDocker) PullImage(opts docker.PullImageOptions, searchPaths []string) error {
 	if d.pullImageFunc != nil {
 		return d.pullImageFunc(opts, searchPaths)

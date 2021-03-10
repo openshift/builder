@@ -778,29 +778,6 @@ func (d *DaemonlessClient) RemoveImage(name string) error {
 	return removeDaemonlessImage(d.SystemContext, d.Store, name)
 }
 
-func (d *DaemonlessClient) CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error) {
-	options := buildah.BuilderOptions{
-		FromImage:      opts.Config.Image,
-		Container:      opts.Name,
-		BlobDirectory:  d.BlobCacheDirectory,
-		MaxPullRetries: DefaultPushOrPullRetryCount,
-		PullRetryDelay: DefaultPushOrPullRetryDelay,
-	}
-	builder, err := buildah.NewBuilder(opts.Context, d.Store, options)
-	if err != nil {
-		return nil, err
-	}
-	builder.SetCmd(opts.Config.Cmd)
-	builder.SetEntrypoint(opts.Config.Entrypoint)
-	if builder.Container != "" {
-		d.builders[builder.Container] = builder
-	}
-	if builder.ContainerID != "" {
-		d.builders[builder.ContainerID] = builder
-	}
-	return &docker.Container{ID: builder.ContainerID}, nil
-}
-
 func (d *DaemonlessClient) RemoveContainer(opts docker.RemoveContainerOptions) error {
 	builder, ok := d.builders[opts.ID]
 	if !ok {
