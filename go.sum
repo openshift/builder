@@ -189,6 +189,8 @@ github.com/containers/common v0.21.0 h1:v2U9MrGw0vMgefQf0/uJYBsSnengxLbSORYqhCVE
 github.com/containers/common v0.21.0/go.mod h1:8w8SVwc+P2p1MOnRMbSKNWXt1Iwd2bKFu2LLZx55DTM=
 github.com/containers/image/v5 v5.10.1 h1:tHhGQ8RCMxJfJLD/PEW1qrOKX8nndledW9qz6UiAxns=
 github.com/containers/image/v5 v5.10.1/go.mod h1:JlRLJZv7elVbtHaaaR6Kz8i6G3k2ttj4t7fubwxD9Hs=
+github.com/containers/image/v5 v5.10.5 h1:VK1UbsZMzjdw5Xqr3Im9h4iOqHWU0naFs+I78kavc7I=
+github.com/containers/image/v5 v5.10.5/go.mod h1:SgIbWEedCNBbn2FI5cH0/jed1Ecy2s8XK5zTxvJTzII=
 github.com/containers/libtrust v0.0.0-20190913040956-14b96171aa3b h1:Q8ePgVfHDplZ7U33NwHZkrVELsZP5fYj9pM5WBZB2GE=
 github.com/containers/libtrust v0.0.0-20190913040956-14b96171aa3b/go.mod h1:9rfv8iPl1ZP7aqh9YA68wnZv2NUDbXdcdPHVz0pFbPY=
 github.com/containers/ocicrypt v1.0.3 h1:vYgl+RZ9Q3DPMuTfxmN+qp0X2Bj52uuY2vnt6GzVe1c=
@@ -197,6 +199,8 @@ github.com/containers/storage v1.23.3 h1:6ZeQi+xKBXrbUXSSZvSs8HuKoNCPfRkXR4f+8Tk
 github.com/containers/storage v1.23.3/go.mod h1:0azTMiuBhArp/VUmH1o4DJAGaaH+qLtEu17pJ/iKJCg=
 github.com/containers/storage v1.24.5 h1:BusfdU0rCS2/Daa/DPw+0iLfGRlYA7UVF7D0el3N7Vk=
 github.com/containers/storage v1.24.5/go.mod h1:YC+2pY8SkfEAcZkwycxYbpK8EiRbx5soPPwz9dxe4IQ=
+github.com/containers/storage v1.24.8 h1:v3pliVY5Jx1ZNJDoyCvRBrXMxlGLakBsxbBVWoaCI8Q=
+github.com/containers/storage v1.24.8/go.mod h1:YC+2pY8SkfEAcZkwycxYbpK8EiRbx5soPPwz9dxe4IQ=
 github.com/coredns/corefile-migration v1.0.10/go.mod h1:RMy/mXdeDlYwzt0vdMEJvT2hGJ2I86/eO0UdXmH9XNI=
 github.com/coreos/bbolt v1.3.2/go.mod h1:iRUV2dpdMOn7Bo10OQBFzIJO9kkE559Wcmn+qkEiiKk=
 github.com/coreos/etcd v3.3.10+incompatible h1:jFneRYjIvLMLhDLCzuTuU4rSJUjRplcJQ7pD7MnhC04=
