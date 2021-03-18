@@ -7,8 +7,8 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/containers/buildah v1.16.4
 	github.com/containers/common v0.21.0
-	github.com/containers/image/v5 v5.5.2
-	github.com/containers/storage v1.24.5
+	github.com/containers/image/v5 v5.10.5
+	github.com/containers/storage v1.24.8
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/fsouza/go-dockerclient v1.6.5
@@ -34,8 +34,6 @@ require (
 
 replace (
 	github.com/containerd/containerd => github.com/containerd/containerd v1.3.2
-	// needed to force a newer containers/image than we'd pull in via buildah, to get its #1089
-	github.com/containers/image/v5 => github.com/containers/image/v5 v5.10.1
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
 	github.com/docker/libnetwork => github.com/docker/libnetwork v0.8.0-dev.2.0.20171107005402-dcf79f8c7fcb
 	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
