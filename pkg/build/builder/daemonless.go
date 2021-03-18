@@ -32,7 +32,6 @@ import (
 
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
-	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
 )
 
 var (
@@ -216,25 +215,6 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		}
 	}
 
-	var transientMounts []string
-	if st, err := os.Stat("/run/secrets/rhsm"); err == nil && st.IsDir() {
-		// Add a bind of /run/secrets/rhsm, to pass along anything that the
-		// runtime mounted from the node into our /run/secrets/rhsm.
-		log.V(0).Infof("Adding transient rw bind mount for /run/secrets/rhsm")
-		tmpDir, err := ioutil.TempDir("/tmp", "rhsm-copy")
-		if err != nil {
-			log.V(0).Infof("Error creating tmpdir to set up /run/secrets/rhsm in build container: %s", err.Error())
-			return err
-		}
-		fs := s2ifs.NewFileSystem()
-		err = fs.CopyContents("/run/secrets/rhsm", tmpDir, map[string]string{})
-		if err != nil {
-			log.V(0).Infof("Error copying /run/secrets/rhsm to tmpdir %s: %s", tmpDir, err.Error())
-			return err
-		}
-		transientMounts = append(transientMounts, fmt.Sprintf("%s:/run/secrets/rhsm:rw,nodev,noexec,nosuid", tmpDir))
-	}
-
 	// Use a profile provided in the image instead of the default provided
 	// in runtime-tools's generator logic.
 	seccompProfilePath := "/usr/share/containers/seccomp.json"
@@ -243,7 +223,6 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		ContextDirectory: contextDir,
 		PullPolicy:       pullPolicy,
 		Isolation:        isolation,
-		TransientMounts:  transientMounts,
 		Args:             args,
 		Output:           opts.Name,
 		Out:              opts.OutputStream,
