@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containers/buildah/manifests"
 	"github.com/containers/buildah/pkg/blobcache"
 	"github.com/containers/buildah/util"
 	"github.com/containers/image/v5/docker"
@@ -18,6 +19,7 @@ import (
 	"github.com/containers/image/v5/signature"
 	is "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/transports"
+	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
 	encconfig "github.com/containers/ocicrypt/config"
 	"github.com/containers/storage"
@@ -83,6 +85,8 @@ type CommitOptions struct {
 	OmitTimestamp bool
 	// SignBy is the fingerprint of a GPG key to use for signing the image.
 	SignBy string
+	// Manifest list to add the image to.
+	Manifest string
 	// MaxRetries is the maximum number of attempts we'll make to commit
 	// the image to an external registry if the first attempt fails.
 	MaxRetries int
@@ -167,17 +171,17 @@ var (
 // variable, if it's set.  The contents are expected to be a JSON-encoded
 // github.com/openshift/api/config/v1.Image, set by an OpenShift build
 // controller that arranged for us to be run in a container.
-func checkRegistrySourcesAllows(forWhat string, dest types.ImageReference) error {
+func checkRegistrySourcesAllows(forWhat string, dest types.ImageReference) (insecure bool, err error) {
 	transport := dest.Transport()
 	if transport == nil {
-		return nil
+		return false, nil
 	}
 	if transport.Name() != docker.Transport.Name() {
-		return nil
+		return false, nil
 	}
 	dref := dest.DockerReference()
 	if dref == nil || reference.Domain(dref) == "" {
-		return nil
+		return false, nil
 	}
 
 	if registrySources, ok := os.LookupEnv("BUILD_REGISTRY_SOURCES"); ok && len(registrySources) > 0 {
@@ -188,7 +192,7 @@ func checkRegistrySourcesAllows(forWhat string, dest types.ImageReference) error
 			AllowedRegistries  []string `json:"allowedRegistries,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(registrySources), &sources); err != nil {
-			return errors.Wrapf(err, "error parsing $BUILD_REGISTRY_SOURCES (%q) as JSON", registrySources)
+			return false, errors.Wrapf(err, "error parsing $BUILD_REGISTRY_SOURCES (%q) as JSON", registrySources)
 		}
 		blocked := false
 		if len(sources.BlockedRegistries) > 0 {
@@ -199,7 +203,7 @@ func checkRegistrySourcesAllows(forWhat string, dest types.ImageReference) error
 			}
 		}
 		if blocked {
-			return errors.Errorf("%s registry at %q denied by policy: it is in the blocked registries list", forWhat, reference.Domain(dref))
+			return false, errors.Errorf("%s registry at %q denied by policy: it is in the blocked registries list", forWhat, reference.Domain(dref))
 		}
 		allowed := true
 		if len(sources.AllowedRegistries) > 0 {
@@ -211,10 +215,55 @@ func checkRegistrySourcesAllows(forWhat string, dest types.ImageReference) error
 			}
 		}
 		if !allowed {
-			return errors.Errorf("%s registry at %q denied by policy: not in allowed registries list", forWhat, reference.Domain(dref))
+			return false, errors.Errorf("%s registry at %q denied by policy: not in allowed registries list", forWhat, reference.Domain(dref))
+		}
+		if len(sources.InsecureRegistries) > 0 {
+			return true, nil
 		}
 	}
-	return nil
+	return false, nil
+}
+
+func (b *Builder) addManifest(ctx context.Context, manifestName string, imageSpec string) (string, error) {
+	var create bool
+	systemContext := &types.SystemContext{}
+	var list manifests.List
+	_, listImage, err := util.FindImage(b.store, "", systemContext, manifestName)
+	if err != nil {
+		create = true
+		list = manifests.Create()
+	} else {
+		_, list, err = manifests.LoadFromImage(b.store, listImage.ID)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	names, err := util.ExpandNames([]string{manifestName}, "", systemContext, b.store)
+	if err != nil {
+		return "", errors.Wrapf(err, "error encountered while expanding image name %q", manifestName)
+	}
+
+	ref, err := alltransports.ParseImageName(imageSpec)
+	if err != nil {
+		if ref, err = alltransports.ParseImageName(util.DefaultTransport + imageSpec); err != nil {
+			// check if the local image exists
+			if ref, _, err = util.FindImage(b.store, "", systemContext, imageSpec); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	if _, err = list.Add(ctx, systemContext, ref, true); err != nil {
+		return "", err
+	}
+	var imageID string
+	if create {
+		imageID, err = list.SaveToImage(b.store, "", names, manifest.DockerV2ListMediaType)
+	} else {
+		imageID, err = list.SaveToImage(b.store, listImage.ID, nil, "")
+	}
+	return imageID, err
 }
 
 // Commit writes the contents of the container, along with its updated
@@ -222,7 +271,9 @@ func checkRegistrySourcesAllows(forWhat string, dest types.ImageReference) error
 // add any additional tags that were specified. Returns the ID of the new image
 // if commit was successful and the image destination was local.
 func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options CommitOptions) (string, reference.Canonical, digest.Digest, error) {
-	var imgID string
+	var (
+		imgID string
+	)
 
 	// If we weren't given a name, build a destination reference using a
 	// temporary name that we'll remove later.  The correct thing to do
@@ -278,8 +329,17 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 	}()
 
 	// Check if the commit is blocked by $BUILDER_REGISTRY_SOURCES.
-	if err := checkRegistrySourcesAllows("commit to", dest); err != nil {
+	insecure, err := checkRegistrySourcesAllows("commit to", dest)
+	if err != nil {
 		return imgID, nil, "", err
+	}
+	if insecure {
+		if systemContext.DockerInsecureSkipTLSVerify == types.OptionalBoolFalse {
+			return imgID, nil, "", errors.Errorf("can't require tls verification on an insecured registry")
+		}
+		systemContext.DockerInsecureSkipTLSVerify = types.OptionalBoolTrue
+		systemContext.OCIInsecureSkipTLSVerify = true
+		systemContext.DockerDaemonInsecureSkipTLSVerify = true
 	}
 	if len(options.AdditionalTags) > 0 {
 		names, err := util.ExpandNames(options.AdditionalTags, "", systemContext, b.store)
@@ -291,8 +351,17 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 			if err != nil {
 				return imgID, nil, "", errors.Wrapf(err, "error parsing image name %q as an image reference", name)
 			}
-			if err := checkRegistrySourcesAllows("commit to", additionalDest); err != nil {
+			insecure, err := checkRegistrySourcesAllows("commit to", additionalDest)
+			if err != nil {
 				return imgID, nil, "", err
+			}
+			if insecure {
+				if systemContext.DockerInsecureSkipTLSVerify == types.OptionalBoolFalse {
+					return imgID, nil, "", errors.Errorf("can't require tls verification on an insecured registry")
+				}
+				systemContext.DockerInsecureSkipTLSVerify = types.OptionalBoolTrue
+				systemContext.OCIInsecureSkipTLSVerify = true
+				systemContext.DockerDaemonInsecureSkipTLSVerify = true
 			}
 		}
 	}
@@ -397,8 +466,8 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 			dest = dest2
 		}
 		if options.IIDFile != "" {
-			if err = ioutil.WriteFile(options.IIDFile, []byte(img.ID), 0644); err != nil {
-				return imgID, nil, "", errors.Wrapf(err, "failed to write image ID to file %q", options.IIDFile)
+			if err = ioutil.WriteFile(options.IIDFile, []byte("sha256:"+img.ID), 0644); err != nil {
+				return imgID, nil, "", err
 			}
 		}
 	}
@@ -416,6 +485,14 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 		}
 	}
 
+	if options.Manifest != "" {
+		manifestID, err := b.addManifest(ctx, options.Manifest, imgID)
+		if err != nil {
+			return imgID, nil, "", err
+		}
+		logrus.Debugf("added imgID %s to manifestID %s", imgID, manifestID)
+
+	}
 	return imgID, ref, manifestDigest, nil
 }
 
@@ -471,8 +548,17 @@ func Push(ctx context.Context, image string, dest types.ImageReference, options 
 	}
 
 	// Check if the push is blocked by $BUILDER_REGISTRY_SOURCES.
-	if err := checkRegistrySourcesAllows("push to", dest); err != nil {
+	insecure, err := checkRegistrySourcesAllows("push to", dest)
+	if err != nil {
 		return nil, "", err
+	}
+	if insecure {
+		if systemContext.DockerInsecureSkipTLSVerify == types.OptionalBoolFalse {
+			return nil, "", errors.Errorf("can't require tls verification on an insecured registry")
+		}
+		systemContext.DockerInsecureSkipTLSVerify = types.OptionalBoolTrue
+		systemContext.OCIInsecureSkipTLSVerify = true
+		systemContext.DockerDaemonInsecureSkipTLSVerify = true
 	}
 	logrus.Debugf("pushing image to reference %q is allowed by policy", transports.ImageName(dest))
 

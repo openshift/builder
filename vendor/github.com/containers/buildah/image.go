@@ -321,10 +321,7 @@ func (i *containerImageRef) NewImageSource(ctx context.Context, sc *types.System
 		}
 		// If we're not re-exporting the data, and we're reusing layers individually, reuse
 		// the blobsum and diff IDs.
-		if !i.exporting && !i.squash && layerID != i.layerID {
-			if layer.UncompressedDigest == "" {
-				return nil, errors.Errorf("unable to look up size of layer %q", layerID)
-			}
+		if !i.exporting && !i.squash && layerID != i.layerID && layer.UncompressedDigest != "" {
 			layerBlobSum := layer.UncompressedDigest
 			layerBlobSize := layer.UncompressedSize
 			diffID := layer.UncompressedDigest
@@ -620,7 +617,7 @@ func (i *containerImageRef) Transport() types.ImageTransport {
 func (i *containerImageSource) Close() error {
 	err := os.RemoveAll(i.path)
 	if err != nil {
-		return errors.Wrapf(err, "error removing layer blob directory %q", i.path)
+		return errors.Wrapf(err, "error removing layer blob directory")
 	}
 	return nil
 }

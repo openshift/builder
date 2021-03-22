@@ -5,18 +5,18 @@ go 1.13
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/containers/buildah v1.16.4
-	github.com/containers/common v0.21.0
+	github.com/containers/buildah v1.19.8
+	github.com/containers/common v0.33.4
 	github.com/containers/image/v5 v5.10.5
 	github.com/containers/storage v1.24.8
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
-	github.com/fsouza/go-dockerclient v1.6.5
+	github.com/fsouza/go-dockerclient v1.6.6
 	github.com/opencontainers/runc v1.0.0-rc91.0.20200707015106-819fcc687efb
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200710190001-3e4195d92445
 	github.com/openshift/api v0.0.0-20210222200543-70b287c0a0a5
 	github.com/openshift/client-go v0.0.0-20201020074620-f8fd44879f7c
-	github.com/openshift/imagebuilder v1.1.7
+	github.com/openshift/imagebuilder v1.1.8
 	github.com/openshift/library-go v0.0.0-20201123212217-43f358922ea0
 	github.com/openshift/source-to-image v1.3.1
 	github.com/pkg/errors v0.9.1
