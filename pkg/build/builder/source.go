@@ -448,6 +448,8 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 		CommonBuildOpts: &buildah.CommonBuildOptions{
 			HTTPProxy: true,
 		},
+		MaxPullRetries: DefaultPushOrPullRetryCount,
+		PullRetryDelay: DefaultPushOrPullRetryDelay,
 	}
 
 	builder, err := buildah.NewBuilder(ctx, store, builderOptions)
