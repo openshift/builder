@@ -81,7 +81,7 @@ func (s *StageExecutor) Preserve(path string) error {
 		// except ensure that it exists.
 		archivedPath := filepath.Join(s.mountPoint, path)
 		if err := os.MkdirAll(archivedPath, 0755); err != nil {
-			return errors.Wrapf(err, "error ensuring volume path %q exists", archivedPath)
+			return errors.Wrapf(err, "error ensuring volume path exists")
 		}
 		if err := s.volumeCacheInvalidate(path); err != nil {
 			return errors.Wrapf(err, "error ensuring volume path %q is preserved", archivedPath)
@@ -110,13 +110,13 @@ func (s *StageExecutor) Preserve(path string) error {
 	st, err := os.Stat(archivedPath)
 	if os.IsNotExist(err) {
 		if err = os.MkdirAll(archivedPath, 0755); err != nil {
-			return errors.Wrapf(err, "error ensuring volume path %q exists", archivedPath)
+			return errors.Wrapf(err, "error ensuring volume path exists")
 		}
 		st, err = os.Stat(archivedPath)
 	}
 	if err != nil {
 		logrus.Debugf("error reading info about %q: %v", archivedPath, err)
-		return errors.Wrapf(err, "error reading info about volume path %q", archivedPath)
+		return err
 	}
 	s.volumeCacheInfo[path] = st
 	if !s.volumes.Add(path) {
@@ -152,7 +152,7 @@ func (s *StageExecutor) Preserve(path string) error {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return errors.Wrapf(err, "error removing %q", s.volumeCache[cachedPath])
+			return err
 		}
 		delete(s.volumeCache, cachedPath)
 	}
@@ -173,7 +173,7 @@ func (s *StageExecutor) volumeCacheInvalidate(path string) error {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return errors.Wrapf(err, "error removing volume cache %q", s.volumeCache[cachedPath])
+			return err
 		}
 		archivedPath := filepath.Join(s.mountPoint, cachedPath)
 		logrus.Debugf("invalidated volume cache for %q from %q", archivedPath, s.volumeCache[cachedPath])
@@ -193,15 +193,15 @@ func (s *StageExecutor) volumeCacheSave() error {
 			continue
 		}
 		if !os.IsNotExist(err) {
-			return errors.Wrapf(err, "error checking for cache of %q in %q", archivedPath, cacheFile)
+			return err
 		}
 		if err := os.MkdirAll(archivedPath, 0755); err != nil {
-			return errors.Wrapf(err, "error ensuring volume path %q exists", archivedPath)
+			return errors.Wrapf(err, "error ensuring volume path exists")
 		}
 		logrus.Debugf("caching contents of volume %q in %q", archivedPath, cacheFile)
 		cache, err := os.Create(cacheFile)
 		if err != nil {
-			return errors.Wrapf(err, "error creating archive at %q", cacheFile)
+			return err
 		}
 		defer cache.Close()
 		rc, err := archive.Tar(archivedPath, archive.Uncompressed)
@@ -224,14 +224,14 @@ func (s *StageExecutor) volumeCacheRestore() error {
 		logrus.Debugf("restoring contents of volume %q from %q", archivedPath, cacheFile)
 		cache, err := os.Open(cacheFile)
 		if err != nil {
-			return errors.Wrapf(err, "error opening archive at %q", cacheFile)
+			return err
 		}
 		defer cache.Close()
 		if err := os.RemoveAll(archivedPath); err != nil {
-			return errors.Wrapf(err, "error clearing volume path %q", archivedPath)
+			return err
 		}
 		if err := os.MkdirAll(archivedPath, 0755); err != nil {
-			return errors.Wrapf(err, "error recreating volume path %q", archivedPath)
+			return err
 		}
 		err = archive.Untar(cache, archivedPath, nil)
 		if err != nil {
@@ -239,7 +239,7 @@ func (s *StageExecutor) volumeCacheRestore() error {
 		}
 		if st, ok := s.volumeCacheInfo[cachedPath]; ok {
 			if err := os.Chmod(archivedPath, st.Mode()); err != nil {
-				return errors.Wrapf(err, "error restoring permissions on %q", archivedPath)
+				return err
 			}
 			uid := 0
 			gid := 0
@@ -248,10 +248,10 @@ func (s *StageExecutor) volumeCacheRestore() error {
 				gid = util.GID(st)
 			}
 			if err := os.Chown(archivedPath, uid, gid); err != nil {
-				return errors.Wrapf(err, "error setting ownership on %q", archivedPath)
+				return err
 			}
 			if err := os.Chtimes(archivedPath, st.ModTime(), st.ModTime()); err != nil {
-				return errors.Wrapf(err, "error restoring datestamps on %q", archivedPath)
+				return err
 			}
 		}
 	}
@@ -368,6 +368,7 @@ func (s *StageExecutor) Run(run imagebuilder.Run, config docker.Config) error {
 		Stderr:           s.executor.err,
 		Quiet:            s.executor.quiet,
 		NamespaceOptions: s.executor.namespaceOptions,
+		Terminal:         buildah.WithoutTerminal,
 	}
 	if config.NetworkDisabled {
 		options.ConfigureNetwork = buildah.NetworkDisabled
@@ -789,8 +790,11 @@ func (s *StageExecutor) Execute(ctx context.Context, base string) (imgID string,
 				// for this stage.  Make a note of the
 				// instruction in the history that we'll write
 				// for the image when we eventually commit it.
-				now := time.Now()
-				s.builder.AddPrependedEmptyLayer(&now, s.getCreatedBy(node, addedContentSummary), "", "")
+				timestamp := time.Now().UTC()
+				if s.executor.timestamp != nil {
+					timestamp = *s.executor.timestamp
+				}
+				s.builder.AddPrependedEmptyLayer(&timestamp, s.getCreatedBy(node, addedContentSummary), "", "")
 				continue
 			} else {
 				// This is the last instruction for this stage,
@@ -830,7 +834,12 @@ func (s *StageExecutor) Execute(ctx context.Context, base string) (imgID string,
 		// Check if there's already an image based on our parent that
 		// has the same change that we're about to make, so far as we
 		// can tell.
-		if checkForLayers {
+		// Only do this if the step we are on is not an ARG step,
+		// we need to call ib.Run() to correctly put the args together before
+		// determining if a cached layer with the same build args already exists
+		// and that is done in the if block below.
+		if checkForLayers && step.Command != "arg" {
+
 			cacheID, err = s.intermediateImageExists(ctx, node, addedContentSummary, s.stepRequiresLayer(step))
 			if err != nil {
 				return "", nil, errors.Wrap(err, "error checking if cached image exists from a previous build")
@@ -1018,6 +1027,9 @@ func (s *StageExecutor) getCreatedBy(node *parser.Node, addedContentSummary stri
 		return "/bin/sh"
 	}
 	switch strings.ToUpper(node.Value) {
+	case "ARG":
+		buildArgs := s.getBuildArgs()
+		return "/bin/sh -c #(nop) ARG " + buildArgs
 	case "RUN":
 		buildArgs := s.getBuildArgs()
 		if buildArgs != "" {
@@ -1107,7 +1119,7 @@ func (s *StageExecutor) intermediateImageExists(ctx context.Context, currNode *p
 	var baseHistory []v1.History
 	var baseDiffIDs []digest.Digest
 	if s.builder.FromImageID != "" {
-		baseHistory, baseDiffIDs, err = s.executor.getImageHistoryAndDiffIDs(ctx, s.builder.FromImageID)
+		_, baseHistory, baseDiffIDs, err = s.executor.getImageTypeAndHistoryAndDiffIDs(ctx, s.builder.FromImageID)
 		if err != nil {
 			return "", errors.Wrapf(err, "error getting history of base image %q", s.builder.FromImageID)
 		}
@@ -1139,9 +1151,18 @@ func (s *StageExecutor) intermediateImageExists(ctx context.Context, currNode *p
 		}
 		// Next we double check that the history of this image is equivalent to the previous
 		// lines in the Dockerfile up till the point we are at in the build.
-		history, diffIDs, err := s.executor.getImageHistoryAndDiffIDs(ctx, image.ID)
+		manifestType, history, diffIDs, err := s.executor.getImageTypeAndHistoryAndDiffIDs(ctx, image.ID)
 		if err != nil {
-			return "", errors.Wrapf(err, "error getting history of %q", image.ID)
+			// It's possible that this image is for another architecture, which results
+			// in a custom-crafted error message that we'd have to use substring matching
+			// to recognize.  Instead, ignore the image.
+			logrus.Debugf("error getting history of %q (%v), ignoring it", image.ID, err)
+			continue
+		}
+		// If this candidate isn't of the type that we're building, then it may have lost
+		// some format-specific information that a building-without-cache run wouldn't lose.
+		if manifestType != s.executor.outputFormat {
+			continue
 		}
 		// children + currNode is the point of the Dockerfile we are currently at.
 		if s.historyAndDiffIDsMatch(baseHistory, baseDiffIDs, currNode, history, diffIDs, addedContentDigest, buildAddsLayer) {
@@ -1256,6 +1277,7 @@ func (s *StageExecutor) commit(ctx context.Context, createdBy string, emptyLayer
 		MaxRetries:            s.executor.maxPullPushRetries,
 		RetryDelay:            s.executor.retryPullPushDelay,
 		HistoryTimestamp:      s.executor.timestamp,
+		Manifest:              s.executor.manifest,
 	}
 	imgID, _, manifestDigest, err := s.builder.Commit(ctx, imageRef, options)
 	if err != nil {
@@ -1273,5 +1295,5 @@ func (s *StageExecutor) commit(ctx context.Context, createdBy string, emptyLayer
 }
 
 func (s *StageExecutor) EnsureContainerPath(path string) error {
-	return copier.Mkdir(s.mountPoint, path, copier.MkdirOptions{})
+	return copier.Mkdir(s.mountPoint, filepath.Join(s.mountPoint, path), copier.MkdirOptions{})
 }

@@ -58,6 +58,8 @@ type BuildOptions struct {
 	// IgnoreUnrecognizedInstructions tells us to just log instructions we
 	// don't recognize, and try to keep going.
 	IgnoreUnrecognizedInstructions bool
+	// Manifest Name to which the image will be added.
+	Manifest string
 	// Quiet tells us whether or not to announce steps as we go through them.
 	Quiet bool
 	// Isolation controls how Run() runs things.
@@ -185,6 +187,11 @@ type BuildOptions struct {
 	Jobs *int
 	// LogRusage logs resource usage for each step.
 	LogRusage bool
+	// Excludes is a list of excludes to be used instead of the .dockerignore file.
+	Excludes []string
+	// From is the image name to use to replace the value specified in the first
+	// FROM instruction in the Containerfile
+	From string
 }
 
 // BuildDockerfiles parses a set of one or more Dockerfiles (which may be
@@ -208,7 +215,7 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 			logrus.Debugf("reading remote Dockerfile %q", dfile)
 			resp, err := http.Get(dfile)
 			if err != nil {
-				return "", nil, errors.Wrapf(err, "error getting %q", dfile)
+				return "", nil, err
 			}
 			if resp.ContentLength == 0 {
 				resp.Body.Close()
@@ -216,16 +223,19 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 			}
 			data = resp.Body
 		} else {
-			// If the Dockerfile isn't found try prepending the
-			// context directory to it.
 			dinfo, err := os.Stat(dfile)
-			if os.IsNotExist(err) {
-				dfile = filepath.Join(options.ContextDirectory, dfile)
-				dinfo, err = os.Stat(dfile)
-				if err != nil {
-					return "", nil, errors.Wrapf(err, "error reading info about %q", dfile)
+			if err != nil {
+				// If the Dockerfile isn't available, try again with
+				// context directory prepended (if not prepended yet).
+				if !strings.HasPrefix(dfile, options.ContextDirectory) {
+					dfile = filepath.Join(options.ContextDirectory, dfile)
+					dinfo, err = os.Stat(dfile)
 				}
 			}
+			if err != nil {
+				return "", nil, err
+			}
+
 			// If given a directory, add '/Dockerfile' to it.
 			if dinfo.Mode().IsDir() {
 				dfile = filepath.Join(dfile, "Dockerfile")
@@ -233,7 +243,7 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 			logrus.Debugf("reading local Dockerfile %q", dfile)
 			contents, err := os.Open(dfile)
 			if err != nil {
-				return "", nil, errors.Wrapf(err, "error reading %q", dfile)
+				return "", nil, err
 			}
 			dinfo, err = contents.Stat()
 			if err != nil {
@@ -242,7 +252,7 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 			}
 			if dinfo.Mode().IsRegular() && dinfo.Size() == 0 {
 				contents.Close()
-				return "", nil, errors.Wrapf(err, "no contents in %q", dfile)
+				return "", nil, errors.Errorf("no contents in %q", dfile)
 			}
 			data = contents
 		}
@@ -261,7 +271,7 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 
 	mainNode, err := imagebuilder.ParseDockerfile(dockerfiles[0])
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "error parsing main Dockerfile")
+		return "", nil, errors.Wrapf(err, "error parsing main Dockerfile: %s", dockerfiles[0])
 	}
 
 	warnOnUnsetBuildArgs(mainNode, options.Args)
@@ -269,7 +279,7 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options BuildOpt
 	for _, d := range dockerfiles[1:] {
 		additionalNode, err := imagebuilder.ParseDockerfile(d)
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "error parsing additional Dockerfile")
+			return "", nil, errors.Wrapf(err, "error parsing additional Dockerfile %s", d)
 		}
 		mainNode.Children = append(mainNode.Children, additionalNode.Children...)
 	}
