@@ -469,7 +469,9 @@ func pushDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 			}
 		}
 	}
-	log.V(0).Infof("Successfully pushed %s", logName)
+	if err == nil {
+		log.V(0).Infof("Successfully pushed %s", logName)
+	}
 	return string(digest), err
 }
 
