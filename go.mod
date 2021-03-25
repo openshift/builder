@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
+	github.com/containernetworking/cni v0.8.1 // indirect
 	github.com/containers/buildah v1.16.4
 	github.com/containers/common v0.21.0
 	github.com/containers/image/v5 v5.10.5
