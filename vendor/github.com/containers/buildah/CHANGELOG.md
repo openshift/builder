@@ -2,22 +2,186 @@
 
 # Changelog
 
-## v1.16.4 (2020-10-01)
+## v1.19.0 (2021-01-08)
+    Update vendor of containers/storage and containers/common
+    Buildah inspect should be able to inspect manifests
+    Make buildah push support pushing manifests lists and digests
+    Fix handling of TMPDIR environment variable
+    Add support for --manifest flags
+    Upper directory should match mode of destination directory
+    Only grab the OS, Arch if the user actually specified them
+    Use --arch and --os and --variant options to select architecture and os
+    Cirrus: Track libseccomp and golang version
+    copier.PutOptions: add an "IgnoreDevices" flag
+    fix: `rmi --prune` when parent image is in store.
+    build(deps): bump github.com/containers/storage from 1.24.3 to 1.24.4
+    build(deps): bump github.com/containers/common from 0.31.1 to 0.31.2
+    Allow users to specify stdin into containers
+    Drop log message on failure to mount on /sys file systems to info
+    Spelling
+    SELinux no longer requires a tag.
+    build(deps): bump github.com/opencontainers/selinux from 1.6.0 to 1.8.0
+    build(deps): bump github.com/containers/common from 0.31.0 to 0.31.1
+    Update nix pin with `make nixpkgs`
+    Switch references of /var/run -> /run
+    Allow FROM to be overriden with from option
+    copier: don't assume we can chroot() on Unixy systems
+    copier: add PutOptions.NoOverwriteDirNonDir, Get/PutOptions.Rename
+    copier: handle replacing directories with not-directories
+    copier: Put: skip entries with zero-length names
+    build(deps): bump github.com/containers/storage from 1.24.2 to 1.24.3
+    Add U volume flag to chown source volumes
+    Turn off PRIOR_UBUNTU Test until vm is updated
+    pkg, cli: rootless uses correct isolation
+    build(deps): bump github.com/onsi/gomega from 1.10.3 to 1.10.4
+    update installation doc to reflect current status
+    Move away from using docker.io
+    enable short-name aliasing
+    build(deps): bump github.com/containers/storage from 1.24.1 to 1.24.2
+    build(deps): bump github.com/containers/common from 0.30.0 to 0.31.0
+    Throw errors when using bogus --network flags
+    pkg/supplemented test: replace our null blobinfocache
+    build(deps): bump github.com/containers/common from 0.29.0 to 0.30.0
+    inserts forgotten quotation mark
+    Not prefer use local image create/add manifest
+    Add container information to .containerenv
+    Add --ignorefile flag to use alternate .dockerignore flags
+    Add a source debug build
+    Fix crash on invalid filter commands
+    build(deps): bump github.com/containers/common from 0.27.0 to 0.29.0
+    Switch to using containers/common pkg's
+    fix: non-portable shebang #2812
+    Remove copy/paste errors that leaked `Podman` into man pages.
+    Add suggests cpp to spec file
+    Apply suggestions from code review
+    update docs for debian testing and unstable
+    imagebuildah: disable pseudo-terminals for RUN
+    Compute diffID for mapped-layer at creating image source
+    intermediateImageExists: ignore images whose history we can't read
+    Bump to v1.19.0-dev
+    build(deps): bump github.com/containers/common from 0.26.3 to 0.27.0
+
+## v1.18.0 (2020-11-16)
+    Fix testing error caused by simultanious merge
+    Vendor in containers/storage v1.24.0
+    short-names aliasing
+    Add --policy flag to buildah pull
+    Stop overwrapping and stuttering
+    copier.Get(): ignore ENOTSUP/ENOSYS when listing xattrs
+    Run: don't forcibly disable UTS namespaces in rootless mode
+    test: ensure non-directory in a Dockerfile path is handled correctly
+    Add a few tests for `pull` command
+    Fix buildah config --cmd to handle array
+    build(deps): bump github.com/containers/storage from 1.23.8 to 1.23.9
+    Fix NPE when Dockerfile path contains non-directory entries
+    Update buildah bud man page from podman build man page
+    Move declaration of decryption-keys to common cli
+    Run: correctly call copier.Mkdir
+    util: digging UID/GID out of os.FileInfo should work on Unix
+    imagebuildah.getImageTypeAndHistoryAndDiffIDs: cache results
+    Verify userns-uid-map and userns-gid-map input
+    Use CPP, CC and flags in dep check scripts
+    Avoid overriding LDFLAGS in Makefile
+    ADD: handle --chown on URLs
+    Update nix pin with `make nixpkgs`
+    (*Builder).Run: MkdirAll: handle EEXIST error
+    copier: try to force loading of nsswitch modules before chroot()
+    fix MkdirAll usage
+    build(deps): bump github.com/containers/common from 0.26.2 to 0.26.3
+    build(deps): bump github.com/containers/storage from 1.23.7 to 1.23.8
+    Use osusergo build tag for static build
+    imagebuildah: cache should take image format into account
+    Bump to v1.18.0-dev
+
+## v1.17.0 (2020-10-29)
+    Handle cases where other tools mount/unmount containers
+    overlay.MountReadOnly: support RO overlay mounts
+    overlay: use fusermount for rootless umounts
+    overlay: fix umount
+    Switch default log level of Buildah to Warn. Users need to see these messages
+    Drop error messages about OCI/Docker format to Warning level
+    build(deps): bump github.com/containers/common from 0.26.0 to 0.26.2
+    tests/testreport: adjust for API break in storage v1.23.6
+    build(deps): bump github.com/containers/storage from 1.23.5 to 1.23.7
+    build(deps): bump github.com/fsouza/go-dockerclient from 1.6.5 to 1.6.6
+    copier: put: ignore Typeflag="g"
+    Use curl to get repo file (fix #2714)
+    build(deps): bump github.com/containers/common from 0.25.0 to 0.26.0
+    build(deps): bump github.com/spf13/cobra from 1.0.0 to 1.1.1
+    Remove docs that refer to bors, since we're not using it
+    Buildah bud should not use stdin by default
+    bump containerd, docker, and golang.org/x/sys
+    Makefile: cross: remove windows.386 target
+    copier.copierHandlerPut: don't check length when there are errors
+    Stop excessive wrapping
+    CI: require that conformance tests pass
+    bump(github.com/openshift/imagebuilder) to v1.1.8
+    Skip tlsVerify insecure BUILD_REGISTRY_SOURCES
+    Fix build path wrong https://github.com/containers/podman/issues/7993
+    refactor pullpolicy to avoid deps
+    build(deps): bump github.com/containers/common from 0.24.0 to 0.25.0
+    CI: run gating tasks with a lot more memory
+    ADD and COPY: descend into excluded directories, sometimes
+    copier: add more context to a couple of error messages
+    copier: check an error earlier
+    copier: log stderr output as debug on success
+    Update nix pin with `make nixpkgs`
+    Set directory ownership when copied with ID mapping
+    build(deps): bump github.com/sirupsen/logrus from 1.6.0 to 1.7.0
+    build(deps): bump github.com/containers/common from 0.23.0 to 0.24.0
+    Cirrus: Remove bors artifacts
+    Sort build flag definitions alphabetically
     ADD: only expand archives at the right time
-
-## v1.16.3 (2020-09-30)
-    Lint: Use same linters as podman
+    Remove configuration for bors
+    Shell Completion for podman build flags
+    Bump c/common to v0.24.0
+    New CI check: xref --help vs man pages
+    CI: re-enable several linters
+    Move --userns-uid-map/--userns-gid-map  description into buildah man page
     add: preserve ownerships and permissions on ADDed archives
-    chroot: fix handling of errno seccomp rules
-    git-validation.sh: set the base for comparison to v1.16.0
+    Makefile: tweak the cross-compile target
+    Bump containers/common to v0.23.0
     chroot: create bind mount targets 0755 instead of 0700
-
-## v1.16.2 (2020-09-21)
+    Change call to Split() to safer SplitN()
+    chroot: fix handling of errno seccomp rules
+    build(deps): bump github.com/containers/image/v5 from 5.5.2 to 5.6.0
+    Add In Progress section to contributing
+    integration tests: make sure tests run in ${topdir}/tests
+    Run(): ignore containers.conf's environment configuration
+    Warn when setting healthcheck in OCI format
+    Cirrus: Skip git-validate on branches
+    tools: update git-validation to the latest commit
+    tools: update golangci-lint to v1.18.0
+    Add a few tests of push command
     Add(): fix handling of relative paths with no ContextDir
-
-## v1.16.1 (2020-09-10)
-    CI: use release-1.16 as the basis for validation tests
+    build(deps): bump github.com/containers/common from 0.21.0 to 0.22.0
+    Lint: Use same linters as podman
+    Validate: reference HEAD
+    Fix buildah mount to display container names not ids
+    Update nix pin with `make nixpkgs`
+    Add missing --format option in buildah from man page
+    Fix up code based on codespell
+    build(deps): bump github.com/openshift/imagebuilder from 1.1.6 to 1.1.7
+    build(deps): bump github.com/containers/storage from 1.23.4 to 1.23.5
+    Improve buildah completions
+    Cirrus: Fix validate commit epoch
+    Fix bash completion of manifest flags
+    Uniform some man pages
+    Update Buildah Tutorial to address BZ1867426
+    Update bash completion of `manifest add` sub command
     copier.Get(): hard link targets shouldn't be relative paths
+    build(deps): bump github.com/onsi/gomega from 1.10.1 to 1.10.2
+    Pass timestamp down to history lines
+    Timestamp gets updated everytime you inspect an image
+    bud.bats: use absolute paths in newly-added tests
+    contrib/cirrus/lib.sh: don't use CN for the hostname
+    tests: Add some tests
+    Update `manifest add` man page
+    Extend flags of `manifest add`
+    build(deps): bump github.com/containers/storage from 1.23.3 to 1.23.4
+    build(deps): bump github.com/onsi/ginkgo from 1.14.0 to 1.14.1
+    Bump to v1.17.0-dev
+    CI: expand cross-compile checks
 
 ## v1.16.0 (2020-09-03)
     fix build on 32bit arches

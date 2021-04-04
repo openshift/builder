@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/containers/buildah"
+	"github.com/containers/buildah/define"
 	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/buildah/util"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/docker/reference"
+	"github.com/containers/image/v5/manifest"
 	is "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/transports/alltransports"
@@ -26,7 +28,6 @@ import (
 	"github.com/containers/storage/pkg/archive"
 	digest "github.com/opencontainers/go-digest"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/openshift/imagebuilder"
 	"github.com/openshift/imagebuilder/dockerfile/parser"
 	"github.com/pkg/errors"
@@ -56,7 +57,7 @@ type Executor struct {
 	stages                         map[string]*StageExecutor
 	store                          storage.Store
 	contextDir                     string
-	pullPolicy                     buildah.PullPolicy
+	pullPolicy                     define.PullPolicy
 	registry                       string
 	ignoreUnrecognizedInstructions bool
 	quiet                          bool
@@ -74,13 +75,13 @@ type Executor struct {
 	signaturePolicyPath            string
 	systemContext                  *types.SystemContext
 	reportWriter                   io.Writer
-	isolation                      buildah.Isolation
-	namespaceOptions               []buildah.NamespaceOption
-	configureNetwork               buildah.NetworkConfigurationPolicy
+	isolation                      define.Isolation
+	namespaceOptions               []define.NamespaceOption
+	configureNetwork               define.NetworkConfigurationPolicy
 	cniPluginPath                  string
 	cniConfigDir                   string
-	idmappingOptions               *buildah.IDMappingOptions
-	commonBuildOptions             *buildah.CommonBuildOptions
+	idmappingOptions               *define.IDMappingOptions
+	commonBuildOptions             *define.CommonBuildOptions
 	defaultMountsFilePath          string
 	iidfile                        string
 	squash                         bool
@@ -98,7 +99,7 @@ type Executor struct {
 	excludes                       []string
 	unusedArgs                     map[string]struct{}
 	capabilities                   []string
-	devices                        []configs.Device
+	devices                        define.ContainerDevices
 	signBy                         string
 	architecture                   string
 	timestamp                      *time.Time
@@ -112,25 +113,39 @@ type Executor struct {
 	stagesSemaphore                *semaphore.Weighted
 	jobs                           int
 	logRusage                      bool
+	imageInfoLock                  sync.Mutex
+	imageInfoCache                 map[string]imageTypeAndHistoryAndDiffIDs
+	fromOverride                   string
+	manifest                       string
+}
+
+type imageTypeAndHistoryAndDiffIDs struct {
+	manifestType string
+	history      []v1.History
+	diffIDs      []digest.Digest
+	err          error
 }
 
 // NewExecutor creates a new instance of the imagebuilder.Executor interface.
-func NewExecutor(store storage.Store, options BuildOptions, mainNode *parser.Node) (*Executor, error) {
+func NewExecutor(store storage.Store, options define.BuildOptions, mainNode *parser.Node) (*Executor, error) {
 	defaultContainerConfig, err := config.Default()
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get container config")
 	}
 
-	excludes, err := imagebuilder.ParseDockerignore(options.ContextDirectory)
-	if err != nil {
-		return nil, err
+	excludes := options.Excludes
+	if len(excludes) == 0 {
+		excludes, err = imagebuilder.ParseDockerignore(options.ContextDirectory)
+		if err != nil {
+			return nil, err
+		}
 	}
 	capabilities, err := defaultContainerConfig.Capabilities("", options.AddCapabilities, options.DropCapabilities)
 	if err != nil {
 		return nil, err
 	}
 
-	devices := []configs.Device{}
+	devices := define.ContainerDevices{}
 	for _, device := range append(defaultContainerConfig.Containers.Devices, options.Devices...) {
 		dev, err := parse.DeviceFromPath(device)
 		if err != nil {
@@ -216,6 +231,9 @@ func NewExecutor(store storage.Store, options BuildOptions, mainNode *parser.Nod
 		terminatedStage:                make(map[string]struct{}),
 		jobs:                           jobs,
 		logRusage:                      options.LogRusage,
+		imageInfoCache:                 make(map[string]imageTypeAndHistoryAndDiffIDs),
+		fromOverride:                   options.From,
+		manifest:                       options.Manifest,
 	}
 	if exec.err == nil {
 		exec.err = os.Stderr
@@ -232,6 +250,7 @@ func NewExecutor(store storage.Store, options BuildOptions, mainNode *parser.Nod
 			fmt.Fprintf(exec.out, prefix+format+suffix, args...)
 		}
 	}
+
 	for arg := range options.Args {
 		if _, isBuiltIn := builtinAllowedBuildArgs[arg]; !isBuiltIn {
 			exec.unusedArgs[arg] = struct{}{}
@@ -336,22 +355,43 @@ func (b *Executor) waitForStage(ctx context.Context, name string, stages imagebu
 	}
 }
 
-// getImageHistoryAndDiffIDs returns the history and diff IDs list of imageID.
-func (b *Executor) getImageHistoryAndDiffIDs(ctx context.Context, imageID string) ([]v1.History, []digest.Digest, error) {
+// getImageTypeAndHistoryAndDiffIDs returns the manifest type, history, and diff IDs list of imageID.
+func (b *Executor) getImageTypeAndHistoryAndDiffIDs(ctx context.Context, imageID string) (string, []v1.History, []digest.Digest, error) {
+	b.imageInfoLock.Lock()
+	imageInfo, ok := b.imageInfoCache[imageID]
+	b.imageInfoLock.Unlock()
+	if ok {
+		return imageInfo.manifestType, imageInfo.history, imageInfo.diffIDs, imageInfo.err
+	}
 	imageRef, err := is.Transport.ParseStoreReference(b.store, "@"+imageID)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "error getting image reference %q", imageID)
+		return "", nil, nil, errors.Wrapf(err, "error getting image reference %q", imageID)
 	}
 	ref, err := imageRef.NewImage(ctx, nil)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "error creating new image from reference to image %q", imageID)
+		return "", nil, nil, errors.Wrapf(err, "error creating new image from reference to image %q", imageID)
 	}
 	defer ref.Close()
 	oci, err := ref.OCIConfig(ctx)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "error getting possibly-converted OCI config of image %q", imageID)
+		return "", nil, nil, errors.Wrapf(err, "error getting possibly-converted OCI config of image %q", imageID)
 	}
-	return oci.History, oci.RootFS.DiffIDs, nil
+	manifestBytes, manifestFormat, err := ref.Manifest(ctx)
+	if err != nil {
+		return "", nil, nil, errors.Wrapf(err, "error getting manifest of image %q", imageID)
+	}
+	if manifestFormat == "" && len(manifestBytes) > 0 {
+		manifestFormat = manifest.GuessMIMEType(manifestBytes)
+	}
+	b.imageInfoLock.Lock()
+	b.imageInfoCache[imageID] = imageTypeAndHistoryAndDiffIDs{
+		manifestType: manifestFormat,
+		history:      oci.History,
+		diffIDs:      oci.RootFS.DiffIDs,
+		err:          nil,
+	}
+	b.imageInfoLock.Unlock()
+	return manifestFormat, oci.History, oci.RootFS.DiffIDs, nil
 }
 
 func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageExecutor, stages imagebuilder.Stages, stageIndex int) (imageID string, ref reference.Canonical, err error) {
@@ -380,7 +420,8 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 	// build and b.forceRmIntermediateCtrs is set, make sure we
 	// remove the intermediate/build containers, regardless of
 	// whether or not the stage's build fails.
-	if b.forceRmIntermediateCtrs || !b.layers {
+	// Skip cleanup if the stage has no instructions.
+	if b.forceRmIntermediateCtrs || !b.layers && len(stage.Node.Children) > 0 {
 		b.stagesLock.Lock()
 		cleanupStages[stage.Position] = stageExecutor
 		b.stagesLock.Unlock()
@@ -394,7 +435,8 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 	// The stage succeeded, so remove its build container if we're
 	// told to delete successful intermediate/build containers for
 	// multi-layered builds.
-	if b.removeIntermediateCtrs {
+	// Skip cleanup if the stage has no instructions.
+	if b.removeIntermediateCtrs && len(stage.Node.Children) > 0 {
 		b.stagesLock.Lock()
 		cleanupStages[stage.Position] = stageExecutor
 		b.stagesLock.Unlock()
@@ -488,6 +530,12 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 				switch strings.ToUpper(child.Value) { // first token - instruction
 				case "FROM":
 					if child.Next != nil { // second token on this line
+						// If we have a fromOverride, replace the value of
+						// image name for the first FROM in the Containerfile.
+						if b.fromOverride != "" {
+							child.Next.Value = b.fromOverride
+							b.fromOverride = ""
+						}
 						base := child.Next.Value
 						if base != "scratch" {
 							// TODO: this didn't undergo variable and arg
@@ -636,7 +684,7 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 	}
 	logrus.Debugf("printing final image id %q", imageID)
 	if b.iidfile != "" {
-		if err = ioutil.WriteFile(b.iidfile, []byte(imageID), 0644); err != nil {
+		if err = ioutil.WriteFile(b.iidfile, []byte("sha256:"+imageID), 0644); err != nil {
 			return imageID, ref, errors.Wrapf(err, "failed to write image ID to file %q", b.iidfile)
 		}
 	} else {
