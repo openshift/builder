@@ -377,40 +377,19 @@ func runBuild(out io.Writer, builder builder, isolation, ociRuntime, storageDriv
 
 // RunDockerBuild creates a docker builder and runs its build
 func RunDockerBuild(out io.Writer, isolation, ociRuntime, storageDriver, storageOptions string) error {
-	switch {
-	case log.Is(6):
-		serviceability.InitLogrus("DEBUG")
-	case log.Is(2):
-		serviceability.InitLogrus("INFO")
-	case log.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrusFromKlog()
 	return runBuild(out, dockerBuilder{}, isolation, ociRuntime, storageDriver, storageOptions)
 }
 
 // RunS2IBuild creates a S2I builder and runs its build
 func RunS2IBuild(out io.Writer, isolation, ociRuntime, storageDriver, storageOptions string) error {
-	switch {
-	case log.Is(6):
-		serviceability.InitLogrus("DEBUG")
-	case log.Is(2):
-		serviceability.InitLogrus("INFO")
-	case log.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrusFromKlog()
 	return runBuild(out, s2iBuilder{}, isolation, ociRuntime, storageDriver, storageOptions)
 }
 
 // RunGitClone performs a git clone using the build defined in the environment
 func RunGitClone(out io.Writer) error {
-	switch {
-	case log.Is(6):
-		serviceability.InitLogrus("DEBUG")
-	case log.Is(2):
-		serviceability.InitLogrus("INFO")
-	case log.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrusFromKlog()
 	logVersion()
 	cfg, err := newBuilderConfigFromEnvironment(out, false, "", "", "", "")
 	if err != nil {
@@ -430,14 +409,7 @@ func RunGitClone(out io.Writer) error {
 // and also adds some env and label values to the dockerfile based on
 // the build information.
 func RunManageDockerfile(out io.Writer) error {
-	switch {
-	case log.Is(6):
-		serviceability.InitLogrus("DEBUG")
-	case log.Is(2):
-		serviceability.InitLogrus("INFO")
-	case log.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrusFromKlog()
 	logVersion()
 	cfg, err := newBuilderConfigFromEnvironment(out, false, "", "", "", "")
 	if err != nil {
@@ -452,14 +424,7 @@ func RunManageDockerfile(out io.Writer) error {
 // RunExtractImageContent extracts files from existing images
 // into the build working directory.
 func RunExtractImageContent(out io.Writer) error {
-	switch {
-	case log.Is(6):
-		serviceability.InitLogrus("DEBUG")
-	case log.Is(2):
-		serviceability.InitLogrus("INFO")
-	case log.Is(0):
-		serviceability.InitLogrus("WARN")
-	}
+	serviceability.InitLogrusFromKlog()
 	logVersion()
 	cfg, err := newBuilderConfigFromEnvironment(out, true, "", "", "", "")
 	if err != nil {
