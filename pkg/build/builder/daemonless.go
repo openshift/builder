@@ -151,7 +151,7 @@ func mergeNodeCredentialsDockerAuth(credsPath string) *docker.AuthConfigurations
 }
 
 func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName string, searchPaths []string, blobCacheDirectory string) error {
-	log.V(2).Infof("Asked to pull fresh copy of %q.", imageName)
+	log.V(2).Infof("Attempting pull of image %q.", imageName)
 
 	if imageName == "" {
 		return fmt.Errorf("unable to pull using empty image name")
@@ -192,8 +192,13 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		BlobDirectory: blobCacheDirectory,
 	}
 	_, err = buildah.Pull(context.TODO(), "docker://"+imageName, options)
+	if err == nil {
+		log.V(2).Infof("Finished pulling image %q", imageName)
+	} else {
+		log.V(2).Infof("Error pulling image %q: %s", imageName, err.Error())
+	}
 	if err != nil && dockerConfigCredsErr != nil {
-		err = fmt.Errorf("%s; also, error processing dockerconfigjson: %s", err.Error(), dockerConfigCredsErr.Error())
+		err = fmt.Errorf("Error pulling image %q: %s; also, error processing dockerconfigjson: %s", imageName, err.Error(), dockerConfigCredsErr.Error())
 	}
 	return err
 }
