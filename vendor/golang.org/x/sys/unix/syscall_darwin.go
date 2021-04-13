@@ -119,13 +119,16 @@ type attrList struct {
 	Forkattr    uint32
 }
 
-//sysnb pipe() (r int, w int, err error)
+//sysnb pipe(p *[2]int32) (err error)
 
 func Pipe(p []int) (err error) {
 	if len(p) != 2 {
 		return EINVAL
 	}
-	p[0], p[1], err = pipe()
+	var x [2]int32
+	err = pipe(&x)
+	p[0] = int(x[0])
+	p[1] = int(x[1])
 	return
 }
 
@@ -373,6 +376,15 @@ func Sendfile(outfd int, infd int, offset *int64, count int) (written int, err e
 	err = sendfile(infd, outfd, *offset, &length, nil, 0)
 	written = int(length)
 	return
+}
+
+// GetsockoptXucred is a getsockopt wrapper that returns an Xucred struct.
+// The usual level and opt are SOL_LOCAL and LOCAL_PEERCRED, respectively.
+func GetsockoptXucred(fd, level, opt int) (*Xucred, error) {
+	x := new(Xucred)
+	vallen := _Socklen(unsafe.Sizeof(Xucred{}))
+	err := getsockopt(fd, level, opt, unsafe.Pointer(x), &vallen)
+	return x, err
 }
 
 //sys	sendfile(infd int, outfd int, offset int64, len *int64, hdtr unsafe.Pointer, flags int) (err error)

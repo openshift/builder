@@ -11,9 +11,9 @@ import (
 
 	"github.com/containers/common/pkg/apparmor"
 	"github.com/containers/common/pkg/cgroupv2"
-	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/homedir"
 	"github.com/containers/storage/pkg/unshare"
+	"github.com/containers/storage/types"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -45,7 +45,7 @@ var (
 	// DefaultInitPath is the default path to the container-init binary
 	DefaultInitPath = "/usr/libexec/podman/catatonit"
 	// DefaultInfraImage to use for infra container
-	DefaultInfraImage = "k8s.gcr.io/pause:3.2"
+	DefaultInfraImage = "k8s.gcr.io/pause:3.4.1"
 	// DefaultRootlessSHMLockPath is the default path for rootless SHM locks
 	DefaultRootlessSHMLockPath = "/libpod_rootless_lock"
 	// DefaultDetachKeys is the default keys sequence for detaching a
@@ -224,9 +224,9 @@ func defaultConfigFromMemory() (*EngineConfig, error) {
 	c.EventsLogFilePath = filepath.Join(c.TmpDir, "events", "events.log")
 
 	if path, ok := os.LookupEnv("CONTAINERS_STORAGE_CONF"); ok {
-		storage.SetDefaultConfigFilePath(path)
+		types.SetDefaultConfigFilePath(path)
 	}
-	storeOpts, err := storage.DefaultStoreOptions(unshare.IsRootless(), unshare.GetRootlessUID())
+	storeOpts, err := types.DefaultStoreOptions(unshare.IsRootless(), unshare.GetRootlessUID())
 	if err != nil {
 		return nil, err
 	}
