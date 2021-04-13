@@ -5,10 +5,10 @@ go 1.13
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/containers/buildah v1.20.0
-	github.com/containers/common v0.35.3
+	github.com/containers/buildah v1.20.1
+	github.com/containers/common v0.35.4
 	github.com/containers/image/v5 v5.10.5
-	github.com/containers/storage v1.28.1
+	github.com/containers/storage v1.29.0
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/fsouza/go-dockerclient v1.7.2
@@ -22,7 +22,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/sys v0.0.0-20210216224549-f992740a1bac
+	golang.org/x/sys v0.0.0-20210324051608-47abb6519492
 	k8s.io/api v0.20.0
 	k8s.io/apimachinery v0.20.0
 	k8s.io/client-go v0.20.0
