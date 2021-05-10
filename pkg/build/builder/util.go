@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
 	docker "github.com/fsouza/go-dockerclient"
 
+	kvalidation "k8s.io/apimachinery/pkg/util/validation"
+
 	buildapiv1 "github.com/openshift/api/build/v1"
+	"github.com/openshift/library-go/pkg/build/naming"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 	s2iutil "github.com/openshift/source-to-image/pkg/util"
 
@@ -149,4 +153,16 @@ func ParseProxyURL(proxy string) (*url.URL, error) {
 	}
 
 	return proxyURL, err
+}
+
+// NameForBuildVolume returns a valid pod volume name for the provided build volume name.
+func NameForBuildVolume(objName string) string {
+	// Volume names must be a valid DNS Label - see https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
+	return naming.GetName(strings.ToLower(objName), buildVolumeSuffix, kvalidation.DNS1123LabelMaxLength)
+}
+
+// PathForBuildVolume returns the path in the builder container where the build volume is mounted.
+// This should not be confused with the destination path for the volume inside buildah's runtime environment.
+func PathForBuildVolume(objName string) string {
+	return filepath.Join(buildVolumeMountPath, NameForBuildVolume(objName))
 }

@@ -8,10 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"k8s.io/kubernetes/pkg/credentialprovider"
-
 	docker "github.com/fsouza/go-dockerclient"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+	"k8s.io/kubernetes/pkg/credentialprovider"
 )
 
 func TestMergeNodeCredentials(t *testing.T) {
@@ -226,7 +225,7 @@ func TestParseDropCapabilities(t *testing.T) {
 	}
 }
 
-type appendFunc func(string, []string) []string
+type appendFunc func(string, *TransientMounts) error
 
 func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 	cases := []struct {
@@ -307,7 +306,11 @@ func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 					t.Fatalf(err.Error())
 				}
 			}
-			mounts := fn(tmpDir, []string{})
+			mountsMap := make(TransientMounts)
+			if err := fn(tmpDir, &mountsMap); err != nil {
+				t.Errorf("%v", err)
+			}
+			mounts := mountsMap.asSlice()
 			if tc.mode.IsRegular() && len(mounts) != 0 {
 				t.Fatalf("bad mounts len %d for %s", len(mounts), tc.name)
 			}
@@ -345,7 +348,11 @@ func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 				t.Fatalf("bad mount string for %s: %s", tc.name, mounts[0])
 			}
 		} else {
-			mounts := fn(filepath.Join(tmpDir, "does-not-exist"), []string{})
+			mountsMap := make(TransientMounts)
+			if err := fn(filepath.Join(tmpDir, "does-not-exist"), &mountsMap); err != nil {
+				t.Errorf("%v", err)
+			}
+			mounts := mountsMap.asSlice()
 			if len(mounts) != 0 {
 				t.Fatalf("returned mount when it did not exist")
 			}
@@ -435,7 +442,13 @@ func TestRHRepoMount(t *testing.T) {
 					t.Fatalf(err.Error())
 				}
 			}
-			mounts := appendRHRepoMount(tmpDir, []string{})
+
+			mountsMap := make(TransientMounts)
+			if err := appendRHRepoMount(tmpDir, &mountsMap); err != nil {
+				t.Errorf("error occurred appending mount: %v", err)
+			}
+			mounts := mountsMap.asSlice()
+
 			if tc.mode.IsDir() && len(mounts) != 0 {
 				t.Fatalf("bad mounts len %d for %s", len(mounts), tc.name)
 			}
@@ -458,7 +471,11 @@ func TestRHRepoMount(t *testing.T) {
 				t.Fatalf("bad mount string for %s: %s", tc.name, mounts[0])
 			}
 		} else {
-			mounts := appendRHRepoMount(filepath.Join(tmpDir, "does-not-exist"), []string{})
+			mountsMap := make(TransientMounts)
+			if err := appendRHRepoMount(filepath.Join(tmpDir, "does-not-exist"), &mountsMap); err != nil {
+				t.Errorf("error occurred appending mount: %v", err)
+			}
+			mounts := mountsMap.asSlice()
 			if len(mounts) != 0 {
 				t.Fatalf("returned mount when it did not exist")
 			}
@@ -509,9 +526,13 @@ func TestAppendCATrustMount(t *testing.T) {
 			if err != nil {
 				tc.expectMount = false
 			}
-			mounts := []string{}
-			mounts = appendCATrustMount(mounts)
 
+			mountsMap := make(TransientMounts)
+			if err = appendCATrustMount(&mountsMap); err != nil {
+				t.Errorf("error occurred appending mount: %v", err)
+			}
+
+			mounts := mountsMap.asSlice()
 			if tc.expectMount && len(mounts) == 0 {
 				t.Fatal("expected mount for /etc/pki/ca-trust")
 			}
