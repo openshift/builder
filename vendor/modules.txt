@@ -420,9 +420,9 @@ github.com/opencontainers/runtime-tools/validate
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
 github.com/opencontainers/selinux/pkg/pwalk
-# github.com/openshift/api v0.0.0-20210331193751-3acddb19d360
+# github.com/openshift/api v0.0.0-20210621103532-064fc2f78417
 github.com/openshift/api/build/v1
-# github.com/openshift/client-go v0.0.0-20210331195552-cf6c2669e01f
+# github.com/openshift/client-go v0.0.0-20210521082421-73d9475a9142
 github.com/openshift/client-go/build/clientset/versioned
 github.com/openshift/client-go/build/clientset/versioned/fake
 github.com/openshift/client-go/build/clientset/versioned/scheme
@@ -435,6 +435,8 @@ github.com/openshift/imagebuilder/dockerfile/parser
 github.com/openshift/imagebuilder/signal
 github.com/openshift/imagebuilder/strslice
 # github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708
+github.com/openshift/library-go/pkg/build/buildutil
+github.com/openshift/library-go/pkg/build/naming
 github.com/openshift/library-go/pkg/git
 github.com/openshift/library-go/pkg/image/internal/digest
 github.com/openshift/library-go/pkg/image/internal/reference
@@ -709,7 +711,7 @@ gopkg.in/square/go-jose.v2/json
 gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
-# k8s.io/api v0.21.0 => k8s.io/api v0.21.0
+# k8s.io/api v0.21.1 => k8s.io/api v0.21.0
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
 k8s.io/api/admissionregistration/v1
@@ -756,7 +758,7 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.21.0 => k8s.io/apimachinery v0.21.0
+# k8s.io/apimachinery v0.21.1 => k8s.io/apimachinery v0.21.0
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
 k8s.io/apimachinery/pkg/api/resource
@@ -809,7 +811,7 @@ k8s.io/apimachinery/third_party/forked/golang/reflect
 k8s.io/cli-runtime/pkg/genericclioptions
 k8s.io/cli-runtime/pkg/printers
 k8s.io/cli-runtime/pkg/resource
-# k8s.io/client-go v0.21.0 => k8s.io/client-go v0.21.0
+# k8s.io/client-go v0.21.1 => k8s.io/client-go v0.21.0
 k8s.io/client-go/applyconfigurations/admissionregistration/v1
 k8s.io/client-go/applyconfigurations/admissionregistration/v1beta1
 k8s.io/client-go/applyconfigurations/apiserverinternal/v1alpha1
@@ -936,7 +938,7 @@ k8s.io/client-go/util/homedir
 k8s.io/client-go/util/jsonpath
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/workqueue
-# k8s.io/component-base v0.21.0 => k8s.io/component-base v0.21.0
+# k8s.io/component-base v0.21.1 => k8s.io/component-base v0.21.0
 k8s.io/component-base/logs
 k8s.io/component-base/logs/datapol
 k8s.io/component-base/logs/json
