@@ -1,9 +1,9 @@
-FROM registry.svc.ci.openshift.org/ocp/builder:rhel-8-golang-1.15-openshift-4.6 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.15-openshift-4.7 AS builder
 WORKDIR /go/src/github.com/openshift/builder
 COPY . .
 RUN hack/build.sh
 
-FROM registry.svc.ci.openshift.org/ocp/builder:rhel-8-base-openshift-4.6
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-base-openshift-4.7
 RUN INSTALL_PKGS=" \
       bind-utils bsdtar findutils fuse-overlayfs git hostname lsof \
       procps-ng runc socat tar tree util-linux wget which \
