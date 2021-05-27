@@ -102,16 +102,23 @@ func tagImage(dockerClient DockerClient, image, name string) error {
 	})
 }
 
-// readInt64 reads a file containing a 64 bit integer value
+// readMaxStringOrInt64 reads a file containing a 64 bit integer value, or string "max",
 // and returns the value as an int64.  If the file contains
-// a value larger than an int64, it returns MaxInt64,
+// a value larger than an int64, or the string "max", it returns MaxInt64,
 // if the value is smaller than an int64, it returns MinInt64.
-func readInt64(filePath string) (int64, error) {
+func readMaxStringOrInt64(filePath string) (int64, error) {
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return -1, err
 	}
 	s := strings.TrimSpace(string(data))
+	if s == "max" {
+		return math.MaxInt64, nil
+	}
+	return parseInt64(s)
+}
+
+func parseInt64(s string) (int64, error) {
 	val, err := strconv.ParseInt(s, 10, 64)
 	// overflow errors are ok, we'll get return a math.MaxInt64 value which is more
 	// than enough anyway.  For underflow we'll return MinInt64 and the error.

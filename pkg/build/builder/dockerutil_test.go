@@ -1,6 +1,10 @@
 package builder
 
 import (
+	"io/ioutil"
+	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -211,6 +215,63 @@ func TestCGroupParentExtraction(t *testing.T) {
 		}
 		if parent != tc.expect {
 			t.Errorf("[%s] expected cgroup parent= %s, got %s", tc.name, tc.expect, parent)
+		}
+	}
+}
+
+func TestReadMaxStringOrInt64(t *testing.T) {
+	tests := []struct {
+		name        string
+		fileContent string
+		expectedVal int64
+		expectedErr bool
+	}{
+		{
+			name:        "bad-data",
+			fileContent: "wqertwert",
+			expectedErr: true,
+		},
+		{
+			name:        "use-of-max",
+			fileContent: "max",
+			expectedVal: math.MaxInt64,
+		},
+		{
+			name:        "normal-int",
+			fileContent: "1234567891011",
+			expectedVal: int64(1234567891011),
+		},
+		{
+			name:        "file-missing",
+			expectedErr: true,
+		},
+	}
+	tmpDir, err := ioutil.TempDir(os.TempDir(), t.Name())
+	if err != nil {
+		t.Fatalf("error creating tmp dir: %s", err.Error())
+	}
+	defer os.RemoveAll(tmpDir)
+	for _, tc := range tests {
+		t.Logf("running tc %s", tc.name)
+		fileName := filepath.Join(tmpDir, tc.name)
+		if len(tc.fileContent) > 0 {
+			err = ioutil.WriteFile(fileName, []byte(tc.fileContent), 0644)
+			if err != nil {
+				t.Errorf("error writing data to file %s: %s", fileName, err.Error())
+			}
+		}
+		val, err := readMaxStringOrInt64(fileName)
+		if tc.expectedErr {
+			if err == nil {
+				t.Errorf("test %s expected error and did not get one", tc.name)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("test %s did not expect error and got: %s", tc.name, err.Error())
+		}
+		if tc.expectedVal != val {
+			t.Errorf("test %s expected val %v and got %v", tc.name, tc.expectedVal, val)
 		}
 	}
 }

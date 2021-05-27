@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/opencontainers/runc/libcontainer/cgroups"
-
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
 )
 
@@ -13,7 +12,15 @@ import (
 // from the local /sys/fs/cgroup filesystem.  Overflow values are set to
 // math.MaxInt64.
 func GetCGroupLimits() (*s2iapi.CGroupLimits, error) {
-	byteLimit, err := readInt64("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+	// see https://git.kernel.org/pub/scm/linux/kernel/git/tj/cgroup.git/tree/Documentation/admin-guide/cgroup-v2.rst
+	// for list of cgroupv2 files to try, but Nalin relayed that examination of the crun and runc code that 'memory.high'
+	// is not used.
+	file := "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	if cgroups.IsCgroup2UnifiedMode() {
+		file = "/sys/fs/cgroup/memory.max"
+	}
+	byteLimit, err := readMaxStringOrInt64(file)
+
 	if err != nil {
 		// for systems without cgroups builds should succeed
 		if _, err := os.Stat("/sys/fs/cgroup"); os.IsNotExist(err) {
