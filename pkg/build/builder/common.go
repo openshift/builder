@@ -56,6 +56,10 @@ const (
 	secretBuildSourceBaseMountPath = "/var/run/secrets/openshift.io/build"
 	// BuildWorkDirMount is the working directory within the build pod, mounted as a volume.
 	buildWorkDirMount = "/tmp/build"
+	// buildVolumeMountPath is where user defined BuildVolumes get mounted
+	buildVolumeMountPath = "/var/run/openshift.io/volumes"
+	// buildVolumeSuffix is a suffix for BuildVolume names
+	buildVolumeSuffix = "user-build-volume"
 )
 
 var (

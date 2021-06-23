@@ -27,13 +27,16 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
+	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
 
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
-	builderutil "github.com/openshift/builder/pkg/build/builder/util"
-	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
+	buildutil "github.com/openshift/builder/pkg/build/builder/util"
 )
 
 const (
@@ -45,15 +48,22 @@ const (
 
 var (
 	nodeCredentialsFile = "/var/lib/kubelet/config.json"
+	buildScheme         = runtime.NewScheme()
+	buildCodecFactory   = serializer.NewCodecFactory(buildscheme.Scheme)
+	buildJSONCodec      runtime.Codec
 )
+
+func init() {
+	buildJSONCodec = buildCodecFactory.LegacyCodec(buildapiv1.SchemeGroupVersion)
+}
 
 // The build controller doesn't expect the CAP_ prefix to be used in the
 // entries in the list in the environment, but our runtime configuration
 // expects it to be provided, so massage the values into a suitabe list.
 func dropCapabilities() []string {
 	var dropCapabilities []string
-	if dropCaps, ok := os.LookupEnv(builderutil.DropCapabilities); ok && dropCaps != "" {
-		dropCapabilities = strings.Split(os.Getenv(builderutil.DropCapabilities), ",")
+	if dropCaps, ok := os.LookupEnv(buildutil.DropCapabilities); ok && dropCaps != "" {
+		dropCapabilities = strings.Split(os.Getenv(buildutil.DropCapabilities), ",")
 		for i := range dropCapabilities {
 			dropCapabilities[i] = strings.ToUpper(dropCapabilities[i])
 			if !strings.HasPrefix(dropCapabilities[i], "CAP_") {
@@ -272,7 +282,10 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		}
 	}
 
-	transientMounts := generateTransientMounts()
+	transientMounts, err := generateTransientMounts()
+	if err != nil {
+		return err
+	}
 
 	// Use a profile provided in the image instead of the default provided
 	// in runtime-tools's generator logic.
@@ -311,31 +324,67 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		PullPushRetryDelay:      DefaultPushOrPullRetryDelay,
 	}
 
-	_, _, err := imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
+	_, _, err = imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
 	return err
 }
 
-func generateTransientMounts() []string {
-	mounts := []string{}
-	mounts = appendRHSMMount(defaultMountStart, mounts)
-	mounts = appendETCPKIMount(defaultMountStart, mounts)
-	mounts = appendRHRepoMount(defaultMountStart, mounts)
-	mounts = appendCATrustMount(mounts)
-	return mounts
+// appendBuildVolumeMounts appends the Build Volume Mounts to the Transient Mounts Map
+func appendBuildVolumeMounts(mountsMap *TransientMounts) error {
+	build := &buildapiv1.Build{}
+
+	if err := buildutil.GetBuildFromEnv(build); err != nil {
+		return err
+	}
+
+	var buildVolumes []buildapiv1.BuildVolume
+	switch {
+	case build.Spec.Strategy.Type == buildapiv1.SourceBuildStrategyType:
+		buildVolumes = append(buildVolumes, build.Spec.Strategy.SourceStrategy.Volumes...)
+	case build.Spec.Strategy.Type == buildapiv1.DockerBuildStrategyType:
+		buildVolumes = append(buildVolumes, build.Spec.Strategy.DockerStrategy.Volumes...)
+	}
+
+	for _, bv := range buildVolumes {
+		t := true
+		var sourcePath string
+		switch bv.Source.Type {
+
+		case buildapiv1.BuildVolumeSourceTypeSecret:
+			sourcePath = PathForBuildVolume(bv.Source.Secret.SecretName)
+		case buildapiv1.BuildVolumeSourceTypeConfigMap:
+			sourcePath = PathForBuildVolume(bv.Source.ConfigMap.Name)
+		}
+
+		for _, bvm := range bv.Mounts {
+
+			if err := mountsMap.append(TransientMount{
+				Destination: bvm.DestinationPath,
+				Source:      sourcePath,
+				Options: TransientMountOptions{
+					ReadOnly: &t,
+				},
+			}); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
 }
 
-func appendRHRepoMount(pathStart string, mounts []string) []string {
+func appendRHRepoMount(pathStart string, mountsMap *TransientMounts) error {
 	path := filepath.Join(pathStart, repoFile)
 	st, err := os.Stat(path)
 	if err != nil {
 		// since the presence of the repo file is not a given, we won't log this a V(0)
 		log.V(4).Infof("Failed to stat %s, falling back to the Red Hat yum repository configuration in the build's base image. Error: %v", path, err)
-		return mounts
+		return nil
 	}
 	if !st.Mode().IsRegular() {
 		// if the file is there, but an unexpected type, then always have log show up via V(0)
 		log.V(0).Infof("Falling back to the Red Hat yum repository configuration in the build's base image: %s secrets location %s is a directory.", repoFile, path)
-		return mounts
+		return nil
 	}
 
 	// Add a bind of repo file, to pass along anything that the runtime mounted from the node
@@ -343,30 +392,37 @@ func appendRHRepoMount(pathStart string, mounts []string) []string {
 	tmpDir, err := ioutil.TempDir("/tmp", repoFile+"-copy")
 	if err != nil {
 		log.V(0).Infof("Falling back to the Red Hat yum repository configuration in the base image: failed to create tmpdir for %s secret: %v", repoFile, err)
-		return mounts
+		return nil
 	}
 	fs := s2ifs.NewFileSystem()
 	err = fs.Copy(path, filepath.Join(tmpDir, repoFile), map[string]string{})
 	if err != nil {
 		log.V(0).Infof("Falling back to the Red Hat yum repository configuration in the base image: failed to copy %s secret: %v", repoFile, err)
-		return mounts
+		return nil
 	}
-	mounts = append(mounts, fmt.Sprintf("%s:/run/secrets/%s:rw,nodev,noexec,nosuid", filepath.Join(tmpDir, repoFile), repoFile))
-	return mounts
+	return mountsMap.append(TransientMount{
+		Source:      filepath.Join(tmpDir, repoFile),
+		Destination: filepath.Join("/run/secrets", repoFile),
+		Options: TransientMountOptions{
+			NoDev:  true,
+			NoExec: true,
+			NoSuid: true,
+		},
+	})
 }
 
-func coreAppendSecretLinksToDirs(pathStart, pathEnd string, mounts []string) []string {
+func coreAppendSecretLinksToDirs(pathStart, pathEnd string, mountsMap *TransientMounts) error {
 	path := filepath.Join(pathStart, pathEnd)
 	st, err := os.Stat(path)
 	if err != nil {
 		// since the presence of dir secret is not a given, we won't log this a V(0)
 		log.V(4).Infof("Red Hat subscription content will not be available in this build: failed to stat directory %s: %v", path, err)
-		return mounts
+		return nil
 	}
 	if !st.IsDir() && (st.Mode()&os.ModeSymlink == 0) {
 		// if the file is there, but an unexpected type, then always have log show up via V(0)
 		log.V(0).Infof("Red Hat subscription content will not be available in this build: %s is not a directory", path)
-		return mounts
+		return nil
 	}
 
 	// Add a bind of dir secret, to pass along anything that the runtime mounted from the node
@@ -374,55 +430,69 @@ func coreAppendSecretLinksToDirs(pathStart, pathEnd string, mounts []string) []s
 	tmpDir, err := ioutil.TempDir("/tmp", pathEnd+"-copy")
 	if err != nil {
 		log.V(0).Infof("Red Hat subscription content will not be available in this build: failed to create tmpdir for %s secrets: %v", pathEnd, err)
-		return mounts
+		return nil
 	}
 	fs := s2ifs.NewFileSystem()
 	err = fs.CopyContents(path, tmpDir, map[string]string{})
 	if err != nil {
 		log.V(0).Infof("Red Hat subscription content will not be available in this build: failed to copy %s secrets: %v", pathEnd, err)
-		return mounts
+		return nil
 	}
-	mounts = append(mounts, fmt.Sprintf("%s:/run/secrets/%s:rw,nodev,noexec,nosuid", tmpDir, pathEnd))
-	return mounts
+
+	return mountsMap.append(TransientMount{
+		Destination: filepath.Join("/run/secrets", pathEnd),
+		Source:      tmpDir,
+		Options: TransientMountOptions{
+			NoDev:  true,
+			NoExec: true,
+			NoSuid: true,
+		},
+	})
 }
 
-func appendETCPKIMount(pathStart string, mounts []string) []string {
-	return coreAppendSecretLinksToDirs(pathStart, etcPkiEntitle, mounts)
+func appendETCPKIMount(pathStart string, mountsMap *TransientMounts) error {
+	return coreAppendSecretLinksToDirs(pathStart, etcPkiEntitle, mountsMap)
 
 }
 
-func appendRHSMMount(pathStart string, mounts []string) []string {
-	return coreAppendSecretLinksToDirs(pathStart, subMgrCertDir, mounts)
+func appendRHSMMount(pathStart string, mountsMap *TransientMounts) error {
+	return coreAppendSecretLinksToDirs(pathStart, subMgrCertDir, mountsMap)
 }
 
-func appendCATrustMount(mounts []string) []string {
+func appendCATrustMount(mountsMap *TransientMounts) error {
 	mountCAEnv, exists := os.LookupEnv("BUILD_MOUNT_ETC_PKI_CATRUST")
 	if !exists {
-		return mounts
+		return nil
 	}
 
 	mountCA, err := strconv.ParseBool(mountCAEnv)
 	if err != nil {
 		log.V(0).Infof("custom PKI trust bundle will not be available in this build: failed to parse BUILD_MOUNT_ETC_PKI_CATRUST: %v", err)
-		return mounts
+		return nil
 	}
 	if !mountCA {
-		return mounts
+		return nil
 	}
 
 	st, err := os.Stat("/etc/pki/ca-trust")
 	if err != nil {
 		log.V(0).Infof("custom PKI trust bundle will not be available in this build: failed to stat /etc/pki/ca-trust: %v", err)
-		return mounts
+		return nil
 	}
 	if !st.IsDir() {
 		log.V(0).Infof("custom PKI trust bundle will not be available in this build: /etc/pki/ca-trust is not a directory")
-		return mounts
+		return nil
 	}
 
 	log.V(0).Infof("Adding transient ro bind mount for /etc/pki/ca-trust")
-	mounts = append(mounts, "/etc/pki/ca-trust:/etc/pki/ca-trust:ro")
-	return mounts
+	t := true
+	return mountsMap.append(TransientMount{
+		Destination: "/etc/pki/ca-trust",
+		Source:      "/etc/pki/ca-trust",
+		Options: TransientMountOptions{
+			ReadOnly: &t,
+		},
+	})
 }
 
 func tagDaemonlessImage(sc types.SystemContext, store storage.Store, buildTag, pushTag string) error {

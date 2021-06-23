@@ -17,6 +17,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
+	buildutil "github.com/openshift/builder/pkg/build/builder/util"
 	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/library-go/pkg/git"
@@ -66,19 +67,12 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool) (*builderC
 
 	cfg.out = out
 
-	buildStr := os.Getenv("BUILD")
-
 	cfg.build = &buildapiv1.Build{}
 
-	obj, _, err := buildJSONCodec.Decode([]byte(buildStr), nil, cfg.build)
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse build string: %v", err)
+	if err := buildutil.GetBuildFromEnv(cfg.build); err != nil {
+		return nil, err
 	}
-	ok := false
-	cfg.build, ok = obj.(*buildapiv1.Build)
-	if !ok {
-		return nil, fmt.Errorf("build string %s is not a build: %#v", buildStr, obj)
-	}
+
 	if log.Is(4) {
 		redactedBuild := builderutil.SafeForLoggingBuild(cfg.build)
 		bytes, err := runtime.Encode(buildJSONCodec, redactedBuild)

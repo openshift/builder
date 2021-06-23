@@ -14,8 +14,8 @@ require (
 	github.com/fsouza/go-dockerclient v1.7.2
 	github.com/opencontainers/runc v1.0.0-rc93
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
-	github.com/openshift/api v0.0.0-20210331193751-3acddb19d360
-	github.com/openshift/client-go v0.0.0-20210331195552-cf6c2669e01f
+	github.com/openshift/api v0.0.0-20210621103532-064fc2f78417
+	github.com/openshift/client-go v0.0.0-20210521082421-73d9475a9142
 	github.com/openshift/imagebuilder v1.2.0
 	github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708
 	github.com/openshift/source-to-image v1.3.1
@@ -23,16 +23,17 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/sys v0.0.0-20210324051608-47abb6519492
-	k8s.io/api v0.21.0
-	k8s.io/apimachinery v0.21.0
-	k8s.io/client-go v0.21.0
-	k8s.io/component-base v0.21.0
+	k8s.io/api v0.21.1
+	k8s.io/apimachinery v0.21.1
+	k8s.io/client-go v0.21.1
+	k8s.io/component-base v0.21.1
 	k8s.io/klog/v2 v2.8.0
 	k8s.io/kubectl v0.21.0
 	k8s.io/kubernetes v1.21.0
 )
 
 replace (
+	// temporary replacement for development purposes
 	github.com/containerd/containerd => github.com/containerd/containerd v1.5.0
 	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
 	github.com/docker/libnetwork => github.com/docker/libnetwork v0.8.0-dev.2.0.20171107005402-dcf79f8c7fcb
