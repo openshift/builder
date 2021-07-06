@@ -208,6 +208,8 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, string, error) 
 		if err != nil {
 			return "", nil, "", fmt.Errorf("cannot parse build URL: %s", gitSource.URI)
 		}
+		// even though s2i's Parse will strip ssh:// from url's because of golang's inability to parse those
+		// URLs, the scmauth.GithAuths call does not need the sourceURL for correlation with SSHPrivateKey.
 		scmAuths := scmauth.GitAuths(sourceURL)
 
 		secretsEnv, overrideURL, gitConfigFile, err := scmAuths.Setup(c.sourceSecretDir)
