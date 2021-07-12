@@ -31,9 +31,6 @@ func (d *DaemonlessClient) PushImage(opts docker.PushImageOptions, auth docker.A
 func (d *DaemonlessClient) RemoveImage(name string) error {
 	return errors.New("removing images not supported on this platform")
 }
-func (d *DaemonlessClient) CreateContainer(opts docker.CreateContainerOptions) (*docker.Container, error) {
-	return nil, errors.New("creating containers not supported on this platform")
-}
 func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, searchPaths []string) error {
 	return errors.New("pulling images not supported on this platform")
 }

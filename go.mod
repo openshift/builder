@@ -22,6 +22,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
+	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	golang.org/x/sys v0.0.0-20210324051608-47abb6519492
 	k8s.io/api v0.21.1
 	k8s.io/apimachinery v0.21.1

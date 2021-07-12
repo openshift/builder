@@ -11,6 +11,7 @@ import (
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
+	"github.com/containers/common/pkg/config"
 	"github.com/openshift/builder/pkg/build/builder/cmd"
 	"github.com/openshift/builder/pkg/version"
 )
@@ -65,15 +66,35 @@ func NewCmdVersion(fullName string, versionInfo k8sversion.Info, buildahVersion 
 
 // NewCommandS2IBuilder provides a CLI handler for S2I build type
 func NewCommandS2IBuilder(name string) *cobra.Command {
+	var isolation, ociRuntime, storageDriver, storageOptions string
+
+	defaultConfig, err := config.DefaultConfig()
+	kcmdutil.CheckErr(err)
+
 	cmd := &cobra.Command{
 		Use:   name,
 		Short: "Run a Source-to-Image build",
 		Long:  s2iBuilderLong,
 		Run: func(c *cobra.Command, args []string) {
-			err := cmd.RunS2IBuild(c.OutOrStderr())
+			var err error
+			if isolation == "" {
+				isolation, err = builderDefaultIsolation()
+				kcmdutil.CheckErr(err)
+			}
+			if storageDriver == "" {
+				storageDriver, storageOptions, err = builderDefaultStorage()
+				kcmdutil.CheckErr(err)
+			}
+			err = cmd.RunS2IBuild(c.OutOrStderr(), isolation, ociRuntime, storageDriver, storageOptions)
 			kcmdutil.CheckErr(err)
 		},
 	}
+
+	flags := cmd.Flags()
+	flags.StringVar(&isolation, "isolation", isolation, "type of process `isolation` to use for RUN instructions")
+	flags.StringVar(&ociRuntime, "oci-runtime", defaultConfig.Engine.OCIRuntime, "runtime to invoke for OCI isolation")
+	flags.StringVar(&storageDriver, "storage-driver", storageDriver, "storage driver to use for storing layers, images, and working containers")
+	flags.StringVar(&storageOptions, "storage-options", storageOptions, "storage options to use when storing layers, images, and working containers")
 
 	cmd.AddCommand(NewCmdVersion(name, version.Get(), version.BuildahVersion(), os.Stdout))
 	return cmd
@@ -81,15 +102,36 @@ func NewCommandS2IBuilder(name string) *cobra.Command {
 
 // NewCommandDockerBuilder provides a CLI handler for Docker build type
 func NewCommandDockerBuilder(name string) *cobra.Command {
+	var isolation, ociRuntime, storageDriver, storageOptions string
+
+	defaultConfig, err := config.DefaultConfig()
+	kcmdutil.CheckErr(err)
+
 	cmd := &cobra.Command{
 		Use:   name,
 		Short: "Run a Docker build",
 		Long:  dockerBuilderLong,
 		Run: func(c *cobra.Command, args []string) {
-			err := cmd.RunDockerBuild(c.OutOrStderr())
+			var err error
+			if isolation == "" {
+				isolation, err = builderDefaultIsolation()
+				kcmdutil.CheckErr(err)
+			}
+			if storageDriver == "" {
+				storageDriver, storageOptions, err = builderDefaultStorage()
+				kcmdutil.CheckErr(err)
+			}
+			err = cmd.RunDockerBuild(c.OutOrStderr(), isolation, ociRuntime, storageDriver, storageOptions)
 			kcmdutil.CheckErr(err)
 		},
 	}
+
+	flags := cmd.Flags()
+	flags.StringVar(&isolation, "isolation", isolation, "type of process `isolation` to use for RUN instructions")
+	flags.StringVar(&ociRuntime, "oci-runtime", defaultConfig.Engine.OCIRuntime, "runtime to invoke for OCI isolation")
+	flags.StringVar(&storageDriver, "storage-driver", storageDriver, "storage driver to use for storing layers, images, and working containers")
+	flags.StringVar(&storageOptions, "storage-options", storageOptions, "storage options to use when storing layers, images, and working containers")
+
 	cmd.AddCommand(NewCmdVersion(name, version.Get(), version.BuildahVersion(), os.Stdout))
 	return cmd
 }
