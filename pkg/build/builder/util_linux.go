@@ -16,17 +16,30 @@ func GetCGroupLimits() (*s2iapi.CGroupLimits, error) {
 	// for list of cgroupv2 files to try, but Nalin relayed that examination of the crun and runc code that 'memory.high'
 	// is not used.
 	file := "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	if cgroups.IsCgroup2UnifiedMode() {
+	cgroupV2 := cgroups.IsCgroup2UnifiedMode()
+	if cgroupV2 {
 		file = "/sys/fs/cgroup/memory.max"
 	}
 	byteLimit, err := readMaxStringOrInt64(file)
 
 	if err != nil {
+		_, e := os.Stat("/sys/fs/cgroup")
+		notExist := false
+		if e != nil && os.IsNotExist(e) {
+			notExist = true
+		}
 		// for systems without cgroups builds should succeed
-		if _, err := os.Stat("/sys/fs/cgroup"); os.IsNotExist(err) {
+		if notExist {
 			return &s2iapi.CGroupLimits{}, nil
 		}
-		return nil, fmt.Errorf("cannot determine cgroup limits: %v", err)
+		// otherwise for cgroupv1 error out
+		if !cgroupV2 {
+			return nil, fmt.Errorf("cannot determine cgroup limits: %v", err)
+		}
+		// if the cgroupv2 error is anything other than file does not exists, error out
+		if !notExist {
+			return nil, fmt.Errorf("cannot determine cgroup limits: %v", err)
+		}
 	}
 	// math.MaxInt64 seems to give cgroups trouble, this value is
 	// still 92 terabytes, so it ought to be sufficiently large for
