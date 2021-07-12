@@ -2,7 +2,6 @@ package storage
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	drivers "github.com/containers/storage/drivers"
@@ -247,6 +247,19 @@ type LayerStore interface {
 	// applies its changes to a specified layer.
 	ApplyDiff(to string, diff io.Reader) (int64, error)
 
+	// ApplyDiffWithDiffer applies the changes through the differ callback function.
+	// If to is the empty string, then a staging directory is created by the driver.
+	ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error)
+
+	// CleanupStagingDirectory cleanups the staging directory.  It can be used to cleanup the staging directory on errors
+	CleanupStagingDirectory(stagingDirectory string) error
+
+	// ApplyDiffFromStagingDirectory uses stagingDirectory to create the diff.
+	ApplyDiffFromStagingDirectory(id, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffOpts) error
+
+	// DifferTarget gets the location where files are stored for the layer.
+	DifferTarget(id string) (string, error)
+
 	// LoadLocked wraps Load in a locked state. This means it loads the store
 	// and cleans-up invalid layers if needed.
 	LoadLocked() error
@@ -272,6 +285,7 @@ type layerStore struct {
 	byuncompressedsum map[digest.Digest][]string
 	uidMap            []idtools.IDMap
 	gidMap            []idtools.IDMap
+	loadMut           sync.Mutex
 }
 
 func copyLayer(l *Layer) *Layer {
@@ -1142,48 +1156,51 @@ func (r *layerStore) deleteInternal(id string) error {
 	}
 	id = layer.ID
 	err := r.driver.Remove(id)
-	if err == nil {
-		os.Remove(r.tspath(id))
-		os.RemoveAll(r.datadir(id))
-		delete(r.byid, id)
-		for _, name := range layer.Names {
-			delete(r.byname, name)
+	if err != nil {
+		return err
+	}
+
+	os.Remove(r.tspath(id))
+	os.RemoveAll(r.datadir(id))
+	delete(r.byid, id)
+	for _, name := range layer.Names {
+		delete(r.byname, name)
+	}
+	r.idindex.Delete(id)
+	mountLabel := layer.MountLabel
+	if layer.MountPoint != "" {
+		delete(r.bymount, layer.MountPoint)
+	}
+	r.deleteInDigestMap(id)
+	toDeleteIndex := -1
+	for i, candidate := range r.layers {
+		if candidate.ID == id {
+			toDeleteIndex = i
+			break
 		}
-		r.idindex.Delete(id)
-		mountLabel := layer.MountLabel
-		if layer.MountPoint != "" {
-			delete(r.bymount, layer.MountPoint)
+	}
+	if toDeleteIndex != -1 {
+		// delete the layer at toDeleteIndex
+		if toDeleteIndex == len(r.layers)-1 {
+			r.layers = r.layers[:len(r.layers)-1]
+		} else {
+			r.layers = append(r.layers[:toDeleteIndex], r.layers[toDeleteIndex+1:]...)
 		}
-		r.deleteInDigestMap(id)
-		toDeleteIndex := -1
-		for i, candidate := range r.layers {
-			if candidate.ID == id {
-				toDeleteIndex = i
+	}
+	if mountLabel != "" {
+		var found bool
+		for _, candidate := range r.layers {
+			if candidate.MountLabel == mountLabel {
+				found = true
 				break
 			}
 		}
-		if toDeleteIndex != -1 {
-			// delete the layer at toDeleteIndex
-			if toDeleteIndex == len(r.layers)-1 {
-				r.layers = r.layers[:len(r.layers)-1]
-			} else {
-				r.layers = append(r.layers[:toDeleteIndex], r.layers[toDeleteIndex+1:]...)
-			}
-		}
-		if mountLabel != "" {
-			var found bool
-			for _, candidate := range r.layers {
-				if candidate.MountLabel == mountLabel {
-					found = true
-					break
-				}
-			}
-			if !found {
-				label.ReleaseLabel(mountLabel)
-			}
+		if !found {
+			label.ReleaseLabel(mountLabel)
 		}
 	}
-	return err
+
+	return nil
 }
 
 func (r *layerStore) deleteInDigestMap(id string) {
@@ -1387,6 +1404,52 @@ func (r *layerStore) Diff(from, to string, options *DiffOptions) (io.ReadCloser,
 		return maybeCompressReadCloser(diff)
 	}
 
+	if ad, ok := r.driver.(drivers.AdditionalLayerStoreDriver); ok {
+		if aLayer, err := ad.LookupAdditionalLayerByID(to); err == nil {
+			// This is an additional layer. We leverage blob API for aquiring the reproduced raw blob.
+			info, err := aLayer.Info()
+			if err != nil {
+				aLayer.Release()
+				return nil, err
+			}
+			defer info.Close()
+			layer := &Layer{}
+			if err := json.NewDecoder(info).Decode(layer); err != nil {
+				aLayer.Release()
+				return nil, err
+			}
+			blob, err := aLayer.Blob()
+			if err != nil {
+				aLayer.Release()
+				return nil, err
+			}
+			// If layer compression type is different from the expected one, decompress and convert it.
+			if compression != layer.CompressionType {
+				diff, err := archive.DecompressStream(blob)
+				if err != nil {
+					if err2 := blob.Close(); err2 != nil {
+						err = errors.Wrapf(err, "failed to close blob file: %v", err2)
+					}
+					aLayer.Release()
+					return nil, err
+				}
+				rc, err := maybeCompressReadCloser(diff)
+				if err != nil {
+					if err2 := closeAll(blob.Close, diff.Close); err2 != nil {
+						err = errors.Wrapf(err, "failed to cleanup: %v", err2)
+					}
+					aLayer.Release()
+					return nil, err
+				}
+				return ioutils.NewReadCloserWrapper(rc, func() error {
+					defer aLayer.Release()
+					return closeAll(blob.Close, rc.Close)
+				}), nil
+			}
+			return ioutils.NewReadCloserWrapper(blob, func() error { defer aLayer.Release(); return blob.Close() }), nil
+		}
+	}
+
 	tsfile, err := os.Open(r.tspath(to))
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -1553,6 +1616,93 @@ func (r *layerStore) ApplyDiff(to string, diff io.Reader) (size int64, err error
 	return size, err
 }
 
+func (r *layerStore) DifferTarget(id string) (string, error) {
+	ddriver, ok := r.driver.(drivers.DriverWithDiffer)
+	if !ok {
+		return "", ErrNotSupported
+	}
+	layer, ok := r.lookup(id)
+	if !ok {
+		return "", ErrLayerUnknown
+	}
+	return ddriver.DifferTarget(layer.ID)
+}
+
+func (r *layerStore) ApplyDiffFromStagingDirectory(id, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffOpts) error {
+	ddriver, ok := r.driver.(drivers.DriverWithDiffer)
+	if !ok {
+		return ErrNotSupported
+	}
+	layer, ok := r.lookup(id)
+	if !ok {
+		return ErrLayerUnknown
+	}
+	if options == nil {
+		options = &drivers.ApplyDiffOpts{
+			Mappings:   r.layerMappings(layer),
+			MountLabel: layer.MountLabel,
+		}
+	}
+	err := ddriver.ApplyDiffFromStagingDirectory(layer.ID, layer.Parent, stagingDirectory, diffOutput, options)
+	if err != nil {
+		return err
+	}
+	layer.UIDs = diffOutput.UIDs
+	layer.GIDs = diffOutput.GIDs
+	layer.UncompressedDigest = diffOutput.UncompressedDigest
+	layer.UncompressedSize = diffOutput.Size
+	layer.Metadata = diffOutput.Metadata
+	if err = r.Save(); err != nil {
+		return err
+	}
+	for k, v := range diffOutput.BigData {
+		if err := r.SetBigData(id, k, bytes.NewReader(v)); err != nil {
+			r.Delete(id)
+			return err
+		}
+	}
+	return err
+}
+
+func (r *layerStore) ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error) {
+	ddriver, ok := r.driver.(drivers.DriverWithDiffer)
+	if !ok {
+		return nil, ErrNotSupported
+	}
+
+	if to == "" {
+		output, err := ddriver.ApplyDiffWithDiffer("", "", options, differ)
+		return &output, err
+	}
+
+	layer, ok := r.lookup(to)
+	if !ok {
+		return nil, ErrLayerUnknown
+	}
+	if options == nil {
+		options = &drivers.ApplyDiffOpts{
+			Mappings:   r.layerMappings(layer),
+			MountLabel: layer.MountLabel,
+		}
+	}
+	output, err := ddriver.ApplyDiffWithDiffer(layer.ID, layer.Parent, options, differ)
+	if err != nil {
+		return nil, err
+	}
+	layer.UIDs = output.UIDs
+	layer.GIDs = output.GIDs
+	err = r.Save()
+	return &output, err
+}
+
+func (r *layerStore) CleanupStagingDirectory(stagingDirectory string) error {
+	ddriver, ok := r.driver.(drivers.DriverWithDiffer)
+	if !ok {
+		return ErrNotSupported
+	}
+	return ddriver.CleanupStagingDirectory(stagingDirectory)
+}
+
 func (r *layerStore) layersByDigestMap(m map[digest.Digest][]string, d digest.Digest) ([]Layer, error) {
 	var layers []Layer
 	for _, layerID := range m[d] {
@@ -1620,4 +1770,28 @@ func (r *layerStore) TouchedSince(when time.Time) bool {
 
 func (r *layerStore) Locked() bool {
 	return r.lockfile.Locked()
+}
+
+func (r *layerStore) ReloadIfChanged() error {
+	r.loadMut.Lock()
+	defer r.loadMut.Unlock()
+
+	modified, err := r.Modified()
+	if err == nil && modified {
+		return r.Load()
+	}
+	return err
+}
+
+func closeAll(closes ...func() error) (rErr error) {
+	for _, f := range closes {
+		if err := f(); err != nil {
+			if rErr == nil {
+				rErr = errors.Wrapf(err, "close error")
+				continue
+			}
+			rErr = errors.Wrapf(rErr, "%v", err)
+		}
+	}
+	return
 }
