@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -75,6 +76,7 @@ func (t TransientMounts) asSlice() []string {
 	for _, m := range t {
 		mounts = append(mounts, m.String())
 	}
+	sort.Strings(mounts)
 	return mounts
 }
 
