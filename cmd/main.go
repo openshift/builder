@@ -77,12 +77,17 @@ func main() {
 	flags.BoolVar(&useNewgidmap, "use-newgidmap", os.Geteuid() != 0, "use newgidmap to set up GID mappings")
 	wrapped := command.Run
 	command.Run = func(c *cobra.Command, args []string) {
-		storeOptions, err := storage.DefaultStoreOptions(false, 0)
-		kcmdutil.CheckErr(err)
-		os.MkdirAll(storeOptions.GraphRoot, 0775)
-		os.MkdirAll(storeOptions.RunRoot, 0775)
-		maybeReexecUsingUserNamespace(uidmap, useNewuidmap, gidmap, useNewgidmap)
-		wrapped(c, args)
+		switch basename {
+		case "openshift-sti-build", "openshift-docker-build", "openshift-extract-image-content":
+			storeOptions, err := storage.DefaultStoreOptions(false, 0)
+			kcmdutil.CheckErr(err)
+			os.MkdirAll(storeOptions.GraphRoot, 0775)
+			os.MkdirAll(storeOptions.RunRoot, 0775)
+			maybeReexecUsingUserNamespace(uidmap, useNewuidmap, gidmap, useNewgidmap)
+			wrapped(c, args)
+		default:
+			wrapped(c, args)
+		}
 	}
 
 	if err := command.Execute(); err != nil {
@@ -100,9 +105,9 @@ func CommandFor(basename string) *cobra.Command {
 		cmd = NewCommandS2IBuilder(basename)
 	case "openshift-docker-build", "openshift-docker-build-in-a-user-namespace":
 		cmd = NewCommandDockerBuilder(basename)
-	case "openshift-git-clone", "openshift-git-clone-in-a-user-namespace":
+	case "openshift-git-clone":
 		cmd = NewCommandGitClone(basename)
-	case "openshift-manage-dockerfile", "openshift-manage-dockerfile-in-a-user-namespace":
+	case "openshift-manage-dockerfile":
 		cmd = NewCommandManageDockerfile(basename)
 	case "openshift-extract-image-content", "openshift-extract-image-content-in-a-user-namespace":
 		cmd = NewCommandExtractImageContent(basename)
