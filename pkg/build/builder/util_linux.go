@@ -2,7 +2,10 @@ package builder
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	s2iapi "github.com/openshift/source-to-image/pkg/api"
@@ -16,17 +19,53 @@ func GetCGroupLimits() (*s2iapi.CGroupLimits, error) {
 	// for list of cgroupv2 files to try, but Nalin relayed that examination of the crun and runc code that 'memory.high'
 	// is not used.
 	file := "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	if cgroups.IsCgroup2UnifiedMode() {
+	cgroupV2 := cgroups.IsCgroup2UnifiedMode()
+	log.V(0).Infof("GGM cgroup2 %v", cgroupV2)
+	if cgroupV2 {
 		file = "/sys/fs/cgroup/memory.max"
 	}
 	byteLimit, err := readMaxStringOrInt64(file)
 
 	if err != nil {
+		log.V(0).Infof("GGM file %s go err %s", file, err.Error())
+		_, e := os.Stat("/sys/fs/cgroup")
+		log.V(0).Infof("GGM stat on dir got err %#v", e)
+		notExist := false
+		if e != nil && os.IsNotExist(e) {
+			notExist = true
+		}
+		log.V(0).Infof("GGM notExist %v", notExist)
 		// for systems without cgroups builds should succeed
-		if _, err := os.Stat("/sys/fs/cgroup"); os.IsNotExist(err) {
+		if notExist {
 			return &s2iapi.CGroupLimits{}, nil
 		}
-		return nil, fmt.Errorf("cannot determine cgroup limits: %v", err)
+		// otherwise for cgroupv1 error out
+		if !cgroupV2 {
+			log.V(0).Infof("GGM error out cgroup v1")
+			return nil, fmt.Errorf("cannot determine cgroup limits: %v", err)
+		}
+		// if the cgroupv2 error is anything other than file does not exists, error out
+		if !notExist && e != nil {
+			log.V(0).Infof("GGM error out cgroup v2")
+			return nil, fmt.Errorf("cannot determine cgroup limits: %v", err)
+		}
+		log.V(0).Infof("GGM performing /sys/fs/cgroup dir walk")
+		filepath.Walk("/sys/fs/cgroup", func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			log.V(0).Infof("GGM found %s", path)
+			if !info.IsDir() && strings.HasPrefix(filepath.Base(path), "memory") {
+				b, err := ioutil.ReadFile(path)
+				if err == nil {
+					log.V(0).Infof("GGM %s has contents %s", path, string(b))
+				}
+			}
+			return nil
+		})
+		// otherwise return default for cgroupv2
+		log.V(0).Infof("GGM returning default for cgroupv2")
+		return &s2iapi.CGroupLimits{}, nil
 	}
 	// math.MaxInt64 seems to give cgroups trouble, this value is
 	// still 92 terabytes, so it ought to be sufficiently large for
