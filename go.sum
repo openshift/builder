@@ -714,8 +714,8 @@ github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708 h1:Xnx252xAZa
 github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708/go.mod h1:pnz961veImKsbn7pQcuFbcVpCQosYiC1fUOjzEDeOLU=
 github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d h1:1LuQzDKgiXj1omPNDcY1E/mEOE/90jdobR+7WBfBQYA=
 github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d/go.mod h1:LJM49W8fBVSj+rvcopJZu9mgH5Tx6HwLHySIYeGeu4k=
-github.com/openshift/source-to-image v1.3.1 h1:1pVvVhjNhO7DgAjW00koS4LBg5JEblBoJMtj5eewvxs=
-github.com/openshift/source-to-image v1.3.1/go.mod h1:IMRo815MFh/VGMxGrAcjbhSspPTmSL93flz+SGJLJEU=
+github.com/openshift/source-to-image v1.3.2-0.20210719201059-4f4cb8b11f98 h1:2O9xgPyGMGBe227QLZLUi0AKfLOPv5BtKB+gNmh7DTc=
+github.com/openshift/source-to-image v1.3.2-0.20210719201059-4f4cb8b11f98/go.mod h1:IMRo815MFh/VGMxGrAcjbhSspPTmSL93flz+SGJLJEU=
 github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75/go.mod h1:PLldrQSroqzH70Xl+1DQcGnefIbqsKR7UDaiux3zV+w=
 github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/ostreedev/ostree-go v0.0.0-20190702140239-759a8c1ac913 h1:TnbXhKzrTOyuvWrjI8W6pcoI9XPbLHFXCdN2dtUw7Rw=
