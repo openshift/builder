@@ -81,11 +81,6 @@ func GetCGroupLimits() (*s2iapi.CGroupLimits, error) {
 		byteLimit = 92233720368547
 	}
 
-	parent, err := getCgroupParent()
-	if err != nil {
-		return nil, fmt.Errorf("read cgroup parent: %v", err)
-	}
-
 	return &s2iapi.CGroupLimits{
 		// Though we are capped on memory and cpu at the cgroup parent level,
 		// some build containers care what their memory limit is so they can
@@ -95,17 +90,5 @@ func GetCGroupLimits() (*s2iapi.CGroupLimits, error) {
 		// Set memoryswap==memorylimit, this ensures no swapping occurs.
 		// see: https://docs.docker.com/engine/reference/run/#runtime-constraints-on-cpu-and-memory
 		MemorySwap: byteLimit,
-		Parent:     parent,
 	}, nil
-}
-
-// getCgroupParent determines the parent cgroup for a container from
-// within that container.
-func getCgroupParent() (string, error) {
-	cgMap, err := cgroups.ParseCgroupFile("/proc/self/cgroup")
-	if err != nil {
-		return "", err
-	}
-	log.V(6).Infof("found cgroup values map: %v", cgMap)
-	return extractParentFromCgroupMap(cgMap)
 }
