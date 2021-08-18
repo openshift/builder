@@ -1,6 +1,6 @@
 module github.com/openshift/builder
 
-go 1.13
+go 1.16
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
@@ -14,8 +14,8 @@ require (
 	github.com/fsouza/go-dockerclient v1.7.2
 	github.com/opencontainers/runc v1.0.0-rc95
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
-	github.com/openshift/api v0.0.0-20210624153211-ae79113891b0
-	github.com/openshift/client-go v0.0.0-20210521082421-73d9475a9142
+	github.com/openshift/api v0.0.0-20210730095913-85e1d547cdee
+	github.com/openshift/client-go v0.0.0-20210730113412-1811c1b3fc0e
 	github.com/openshift/imagebuilder v1.2.0
 	github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708
 	github.com/openshift/source-to-image v1.3.2-0.20210719201059-4f4cb8b11f98
@@ -23,14 +23,14 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
-	golang.org/x/sys v0.0.0-20210603125802-9665404d3644
-	k8s.io/api v0.21.1
-	k8s.io/apimachinery v0.21.1
-	k8s.io/client-go v0.21.1
-	k8s.io/component-base v0.21.1
-	k8s.io/klog/v2 v2.8.0
-	k8s.io/kubectl v0.21.0
-	k8s.io/kubernetes v1.21.0
+	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22
+	k8s.io/api v0.22.0-rc.0
+	k8s.io/apimachinery v0.22.0-rc.0
+	k8s.io/client-go v0.22.0-rc.0
+	k8s.io/component-base v0.22.0-rc.0
+	k8s.io/klog/v2 v2.9.0
+	k8s.io/kubectl v0.22.0-rc.0
+	k8s.io/kubernetes v1.22.0-rc.0
 )
 
 replace (
@@ -42,29 +42,30 @@ replace (
 	// Needed to resolve broken transitive dependencies in buildkit and s2i
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for these in its go.mod
-	k8s.io/api => k8s.io/api v0.21.0
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.21.0
-	k8s.io/apimachinery => k8s.io/apimachinery v0.21.0
-	k8s.io/apiserver => k8s.io/apiserver v0.21.0
-	k8s.io/cli-runtime => k8s.io/cli-runtime v0.21.0
-	k8s.io/client-go => k8s.io/client-go v0.21.0
-	k8s.io/cloud-provider => k8s.io/cloud-provider v0.21.0
-	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.21.0
-	k8s.io/code-generator => k8s.io/code-generator v0.21.0
-	k8s.io/component-base => k8s.io/component-base v0.21.0
-	k8s.io/component-helpers => k8s.io/component-helpers v0.21.0
-	k8s.io/controller-manager => k8s.io/controller-manager v0.21.0
-	k8s.io/cri-api => k8s.io/cri-api v0.21.0
-	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.21.0
-	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.21.0
-	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.21.0
-	k8s.io/kube-proxy => k8s.io/kube-proxy v0.21.0
-	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.21.0
-	k8s.io/kubectl => k8s.io/kubectl v0.21.0
-	k8s.io/kubelet => k8s.io/kubelet v0.21.0
-	k8s.io/kubernetes => k8s.io/kubernetes v1.21.0
-	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.21.0
-	k8s.io/metrics => k8s.io/metrics v0.21.0
-	k8s.io/mount-utils => k8s.io/mount-utils v0.21.0
-	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.21.0
+	k8s.io/api => k8s.io/api v0.22.0-rc.0
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.22.0-rc.0
+	k8s.io/apimachinery => k8s.io/apimachinery v0.22.0-rc.0
+	k8s.io/apiserver => k8s.io/apiserver v0.22.0-rc.0
+	k8s.io/cli-runtime => k8s.io/cli-runtime v0.22.0-rc.0
+	k8s.io/client-go => k8s.io/client-go v0.22.0-rc.0
+	k8s.io/cloud-provider => k8s.io/cloud-provider v0.22.0-rc.0
+	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.22.0-rc.0
+	k8s.io/code-generator => k8s.io/code-generator v0.22.0-rc.0
+	k8s.io/component-base => k8s.io/component-base v0.22.0-rc.0
+	k8s.io/component-helpers => k8s.io/component-helpers v0.22.0-rc.0
+	k8s.io/controller-manager => k8s.io/controller-manager v0.22.0-rc.0
+	k8s.io/cri-api => k8s.io/cri-api v0.22.0-rc.0
+	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.22.0-rc.0
+	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.22.0-rc.0
+	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.22.0-rc.0
+	k8s.io/kube-proxy => k8s.io/kube-proxy v0.22.0-rc.0
+	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.22.0-rc.0
+	k8s.io/kubectl => k8s.io/kubectl v0.22.0-rc.0
+	k8s.io/kubelet => k8s.io/kubelet v0.22.0-rc.0
+	k8s.io/kubernetes => k8s.io/kubernetes v1.22.0-rc.0
+	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.22.0-rc.0
+	k8s.io/metrics => k8s.io/metrics v0.22.0-rc.0
+	k8s.io/mount-utils => k8s.io/mount-utils v0.22.0-rc.0
+	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.22.0-rc.0
+	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.22.0-rc.0
 )
