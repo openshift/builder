@@ -132,31 +132,6 @@ func parseInt64(s string) (int64, error) {
 	return val, nil
 }
 
-// extractParentFromCgroupMap finds the cgroup parent in the cgroup map
-func extractParentFromCgroupMap(cgMap map[string]string) (string, error) {
-	memory, ok := cgMap["memory"]
-	if !ok {
-		return "", fmt.Errorf("could not find memory cgroup subsystem in map %v", cgMap)
-	}
-	log.V(6).Infof("cgroup memory subsystem value: %s", memory)
-
-	parts := strings.Split(memory, "/")
-	if len(parts) < 2 {
-		return "", fmt.Errorf("unprocessable cgroup memory value: %s", memory)
-	}
-
-	var cgroupParent string
-	if strings.HasSuffix(memory, ".scope") {
-		// systemd system, take the second to last segment.
-		cgroupParent = parts[len(parts)-2]
-	} else {
-		// non-systemd, take everything except the last segment.
-		cgroupParent = strings.Join(parts[:len(parts)-1], "/")
-	}
-	log.V(5).Infof("found cgroup parent %v", cgroupParent)
-	return cgroupParent, nil
-}
-
 // GetDockerAuthConfiguration provides a Docker authentication configuration when the
 // PullSecret is specified.
 func GetDockerAuthConfiguration(path string) (*docker.AuthConfigurations, error) {
