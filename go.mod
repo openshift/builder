@@ -13,9 +13,9 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/fsouza/go-dockerclient v1.6.5
-	github.com/opencontainers/runc v1.0.0-rc91.0.20200707015106-819fcc687efb
-	github.com/opencontainers/runtime-spec v1.0.3-0.20200710190001-3e4195d92445
-	github.com/openshift/api v0.0.0-20201019163320-c6a5ec25f267
+	github.com/opencontainers/runc v1.0.0-rc92
+	github.com/opencontainers/runtime-spec v1.0.3-0.20200728170252-4d89ac9fbff6
+	github.com/openshift/api v0.0.0-20210428205234-a8389931bee7
 	github.com/openshift/client-go v0.0.0-20201020074620-f8fd44879f7c
 	github.com/openshift/imagebuilder v1.1.7
 	github.com/openshift/library-go v0.0.0-20201123212217-43f358922ea0
@@ -24,13 +24,13 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/sys v0.0.0-20201218084310-7d0127a74742
-	k8s.io/api v0.20.0
-	k8s.io/apimachinery v0.20.0
-	k8s.io/client-go v0.20.0
-	k8s.io/component-base v0.20.0
+	k8s.io/api v0.20.9
+	k8s.io/apimachinery v0.20.9
+	k8s.io/client-go v0.20.9
+	k8s.io/component-base v0.20.9
 	k8s.io/klog/v2 v2.4.0
-	k8s.io/kubectl v0.20.0
-	k8s.io/kubernetes v1.20.0
+	k8s.io/kubectl v0.20.9
+	k8s.io/kubernetes v1.20.9
 )
 
 replace (
@@ -45,26 +45,28 @@ replace (
 	// Needed to resolve broken transitive dependencies in buildkit and s2i
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for these in its go.mod
-	k8s.io/api => k8s.io/api v0.20.0
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.20.0
-	k8s.io/apimachinery => k8s.io/apimachinery v0.20.0
-	k8s.io/apiserver => k8s.io/apiserver v0.20.0
-	k8s.io/cli-runtime => k8s.io/cli-runtime v0.20.0
-	k8s.io/client-go => k8s.io/client-go v0.20.0
-	k8s.io/cloud-provider => k8s.io/cloud-provider v0.20.0
-	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.20.0
-	k8s.io/code-generator => k8s.io/code-generator v0.20.0
-	k8s.io/component-base => k8s.io/component-base v0.20.0
-	k8s.io/cri-api => k8s.io/cri-api v0.20.0
-	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.20.0
-	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.20.0
-	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.20.0
-	k8s.io/kube-proxy => k8s.io/kube-proxy v0.20.0
-	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.20.0
-	k8s.io/kubectl => k8s.io/kubectl v0.20.0
-	k8s.io/kubelet => k8s.io/kubelet v0.20.0
-	k8s.io/kubernetes => k8s.io/kubernetes v1.19.3
-	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.20.0
-	k8s.io/metrics => k8s.io/metrics v0.20.0
-	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.20.0
+	k8s.io/api => k8s.io/api v0.20.9
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.20.9
+	k8s.io/apimachinery => k8s.io/apimachinery v0.20.9
+	k8s.io/apiserver => k8s.io/apiserver v0.20.9
+	k8s.io/cli-runtime => k8s.io/cli-runtime v0.20.9
+	k8s.io/client-go => k8s.io/client-go v0.20.9
+	k8s.io/cloud-provider => k8s.io/cloud-provider v0.20.9
+	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.20.9
+	k8s.io/code-generator => k8s.io/code-generator v0.20.9
+	k8s.io/component-base => k8s.io/component-base v0.20.9
+	k8s.io/component-helpers => k8s.io/component-helpers v0.20.9
+	k8s.io/controller-manager => k8s.io/controller-manager v0.20.9
+	k8s.io/cri-api => k8s.io/cri-api v0.20.9
+	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.20.9
+	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.20.9
+	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.20.9
+	k8s.io/kube-proxy => k8s.io/kube-proxy v0.20.9
+	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.20.9
+	k8s.io/kubectl => k8s.io/kubectl v0.20.9
+	k8s.io/kubelet => k8s.io/kubelet v0.20.9
+	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.20.9
+	k8s.io/metrics => k8s.io/metrics v0.20.9
+	k8s.io/mount-utils => k8s.io/mount-utils v0.20.9
+	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.20.9
 )
