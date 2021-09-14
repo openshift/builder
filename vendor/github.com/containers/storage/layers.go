@@ -27,6 +27,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/vbatts/tar-split/archive/tar"
 	"github.com/vbatts/tar-split/tar/asm"
 	"github.com/vbatts/tar-split/tar/storage"
@@ -271,21 +272,22 @@ type LayerStore interface {
 }
 
 type layerStore struct {
-	lockfile          Locker
-	mountsLockfile    Locker
-	rundir            string
-	driver            drivers.Driver
-	layerdir          string
-	layers            []*Layer
-	idindex           *truncindex.TruncIndex
-	byid              map[string]*Layer
-	byname            map[string]*Layer
-	bymount           map[string]*Layer
-	bycompressedsum   map[digest.Digest][]string
-	byuncompressedsum map[digest.Digest][]string
-	uidMap            []idtools.IDMap
-	gidMap            []idtools.IDMap
-	loadMut           sync.Mutex
+	lockfile           Locker
+	mountsLockfile     Locker
+	rundir             string
+	driver             drivers.Driver
+	layerdir           string
+	layers             []*Layer
+	idindex            *truncindex.TruncIndex
+	byid               map[string]*Layer
+	byname             map[string]*Layer
+	bymount            map[string]*Layer
+	bycompressedsum    map[digest.Digest][]string
+	byuncompressedsum  map[digest.Digest][]string
+	uidMap             []idtools.IDMap
+	gidMap             []idtools.IDMap
+	loadMut            sync.Mutex
+	layerspathModified time.Time
 }
 
 func copyLayer(l *Layer) *Layer {
@@ -1406,7 +1408,7 @@ func (r *layerStore) Diff(from, to string, options *DiffOptions) (io.ReadCloser,
 
 	if ad, ok := r.driver.(drivers.AdditionalLayerStoreDriver); ok {
 		if aLayer, err := ad.LookupAdditionalLayerByID(to); err == nil {
-			// This is an additional layer. We leverage blob API for aquiring the reproduced raw blob.
+			// This is an additional layer. We leverage blob API for acquiring the reproduced raw blob.
 			info, err := aLayer.Info()
 			if err != nil {
 				aLayer.Release()
@@ -1527,6 +1529,9 @@ func (r *layerStore) ApplyDiff(to string, diff io.Reader) (size int64, err error
 	compressor, err := pgzip.NewWriterLevel(&tsdata, pgzip.BestSpeed)
 	if err != nil {
 		compressor = pgzip.NewWriter(&tsdata)
+	}
+	if err := compressor.SetConcurrency(1024*1024, 1); err != nil { // 1024*1024 is the hard-coded default; we're not changing that
+		logrus.Infof("error setting compression concurrency threads to 1: %v; ignoring", err)
 	}
 	metadata := storage.NewJSONPacker(compressor)
 	uncompressed, err := archive.DecompressStream(defragmented)
@@ -1744,7 +1749,7 @@ func (r *layerStore) Touch() error {
 }
 
 func (r *layerStore) Modified() (bool, error) {
-	var mmodified bool
+	var mmodified, tmodified bool
 	lmodified, err := r.lockfile.Modified()
 	if err != nil {
 		return lmodified, err
@@ -1757,7 +1762,23 @@ func (r *layerStore) Modified() (bool, error) {
 			return lmodified, err
 		}
 	}
-	return lmodified || mmodified, nil
+
+	if lmodified || mmodified {
+		return true, nil
+	}
+
+	// If the layers.json file has been modified manually, then we have to
+	// reload the storage in any case.
+	info, err := os.Stat(r.layerspath())
+	if err != nil && !os.IsNotExist(err) {
+		return false, errors.Wrap(err, "stat layers file")
+	}
+	if info != nil {
+		tmodified = info.ModTime() != r.layerspathModified
+		r.layerspathModified = info.ModTime()
+	}
+
+	return tmodified, nil
 }
 
 func (r *layerStore) IsReadWrite() bool {

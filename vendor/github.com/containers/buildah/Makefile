@@ -34,7 +34,7 @@ LIBSECCOMP_COMMIT := release-2.3
 
 EXTRA_LDFLAGS ?=
 BUILDAH_LDFLAGS := -ldflags '-X main.GitCommit=$(GIT_COMMIT) -X main.buildInfo=$(SOURCE_DATE_EPOCH) -X main.cniVersion=$(CNI_COMMIT) $(EXTRA_LDFLAGS)'
-SOURCES=*.go imagebuildah/*.go bind/*.go chroot/*.go cmd/buildah/*.go copier/*.go docker/*.go pkg/blobcache/*.go pkg/cli/*.go pkg/parse/*.go util/*.go
+SOURCES=*.go imagebuildah/*.go bind/*.go chroot/*.go copier/*.go docker/*.go manifests/*.go pkg/blobcache/*.go pkg/chrootuser/*.go pkg/cli/*.go pkg/formats/*.go pkg/manifests/*.go pkg/overlay/*.go pkg/parse/*.go pkg/rusage/*.go util/*.go
 
 LINTFLAGS ?=
 
@@ -46,7 +46,7 @@ endif
 #     Note: Uses the -N -l go compiler options to disable compiler optimizations
 #           and inlining. Using these build options allows you to subsequently
 #           use source debugging tools like delve.
-all: bin/buildah bin/imgtype docs
+all: bin/buildah bin/imgtype bin/copy docs
 
 # Update nix/nixpkgs.json its latest stable commit
 .PHONY: nixpkgs
@@ -55,7 +55,7 @@ nixpkgs:
 		-f channel:nixos-20.09 nix-prefetch-git \
 		-c nix-prefetch-git \
 		--no-deepClone \
-		https://github.com/nixos/nixpkgs refs/head/nixos-20.09 > nix/nixpkgs.json
+		https://github.com/nixos/nixpkgs refs/heads/nixos-20.09 > nix/nixpkgs.json
 
 # Build statically linked binary
 .PHONY: static
@@ -64,8 +64,7 @@ static:
 	mkdir -p ./bin
 	cp -rfp ./result/bin/* ./bin/
 
-.PHONY: bin/buildah
-bin/buildah:  $(SOURCES)
+bin/buildah: $(SOURCES) cmd/buildah/*.go
 	$(GO_BUILD) $(BUILDAH_LDFLAGS) -gcflags "$(GOGCFLAGS)" -o $@ $(BUILDFLAGS) ./cmd/buildah
 
 .PHONY: buildah
@@ -74,14 +73,15 @@ buildah: bin/buildah
 .PHONY: cross
 cross: bin/buildah.darwin.amd64 bin/buildah.linux.386 bin/buildah.linux.amd64 bin/buildah.linux.arm64 bin/buildah.linux.arm bin/buildah.linux.mips64 bin/buildah.linux.mips64le bin/buildah.linux.mips bin/buildah.linux.mipsle bin/buildah.linux.ppc64 bin/buildah.linux.ppc64le bin/buildah.linux.riscv64 bin/buildah.linux.s390x bin/buildah.windows.amd64.exe
 
-.PHONY: bin/buildah.%
 bin/buildah.%:
 	mkdir -p ./bin
 	GOOS=$(word 2,$(subst ., ,$@)) GOARCH=$(word 3,$(subst ., ,$@)) $(GO_BUILD) $(BUILDAH_LDFLAGS) -o $@ -tags "containers_image_openpgp" ./cmd/buildah
 
-.PHONY: bin/imgtype
-bin/imgtype: *.go docker/*.go util/*.go tests/imgtype/imgtype.go
+bin/imgtype: $(SOURCES) tests/imgtype/imgtype.go
 	$(GO_BUILD) $(BUILDAH_LDFLAGS) -o $@ $(BUILDFLAGS) ./tests/imgtype/imgtype.go
+
+bin/copy: $(SOURCES) tests/copy/copy.go
+	$(GO_BUILD) $(BUILDAH_LDFLAGS) -o $@ $(BUILDFLAGS) ./tests/copy/copy.go
 
 .PHONY: clean
 clean:
@@ -99,7 +99,7 @@ gopath:
 	test $(shell pwd) = $(shell cd ../../../../src/github.com/containers/buildah ; pwd)
 
 codespell:
-	codespell -S Makefile,build,buildah,buildah.spec,imgtype,AUTHORS,bin,vendor,.git,go.sum,CHANGELOG.md,changelog.txt,seccomp.json,.cirrus.yml,"*.xz,*.gz,*.tar,*.tgz,*ico,*.png,*.1,*.5,*.orig,*.rej" -L uint,iff,od
+	codespell -S Makefile,build,buildah,buildah.spec,imgtype,copy,AUTHORS,bin,vendor,.git,go.sum,CHANGELOG.md,changelog.txt,seccomp.json,.cirrus.yml,"*.xz,*.gz,*.tar,*.tgz,*ico,*.png,*.1,*.5,*.orig,*.rej" -L uint,iff,od
 
 .PHONY: validate
 validate: install.tools
@@ -107,6 +107,7 @@ validate: install.tools
 	./tests/validate/git-validation.sh
 	./hack/xref-helpmsgs-manpages
 	./tests/validate/pr-should-include-tests
+	./tests/validate/buildahimages-are-sane
 
 .PHONY: install.tools
 install.tools:
@@ -170,7 +171,7 @@ test-unit: tests/testreport/testreport
 	$(GO_TEST) -v -tags "$(STORAGETAGS) $(SECURITYTAGS)" -cover -race ./cmd/buildah -args --root $$tmp/root --runroot $$tmp/runroot --storage-driver vfs --signature-policy $(shell pwd)/tests/policy.json --registries-conf $(shell pwd)/tests/registries.conf
 
 vendor-in-container:
-	podman run --privileged --rm --env HOME=/root -v `pwd`:/src -w /src docker.io/library/golang:1.13 make vendor
+	podman run --privileged --rm --env HOME=/root -v `pwd`:/src -w /src docker.io/library/golang:1.16 make vendor
 
 .PHONY: vendor
 vendor:

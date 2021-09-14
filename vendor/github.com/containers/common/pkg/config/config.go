@@ -158,6 +158,13 @@ type ContainersConfig struct {
 	// PidNS indicates how to create a pid namespace for the container
 	PidNS string `toml:"pidns,omitempty"`
 
+	// Copy the content from the underlying image into the newly created
+	// volume when the container is created instead of when it is started.
+	// If false, the container engine will not copy the content until
+	// the container is started. Setting it to true may have negative
+	// performance implications.
+	PrepareVolumeOnCreate bool `toml:"prepare_volume_on_create,omitempty"`
+
 	// RootlessNetworking depicts the "kind" of networking for rootless
 	// containers.  Valid options are `slirp4netns` and `cni`. Default is
 	// `slirp4netns`
@@ -384,6 +391,10 @@ type EngineConfig struct {
 	// will refer to the plugin as) mapped to a path, which must point to a
 	// Unix socket that conforms to the Volume Plugin specification.
 	VolumePlugins map[string]string `toml:"volume_plugins,omitempty"`
+
+	// ChownCopiedFiles tells the container engine whether to chown files copied
+	// into a container to the container's primary uid/gid.
+	ChownCopiedFiles bool `toml:"chown_copied_files"`
 }
 
 // SetOptions contains a subset of options in a Config. It's used to indicate if
@@ -526,9 +537,15 @@ func NewConfig(userConfigPath string) (*Config, error) {
 // the defaults from the config parameter will be used for all other fields.
 func readConfigFromFile(path string, config *Config) error {
 	logrus.Tracef("Reading configuration file %q", path)
-	if _, err := toml.DecodeFile(path, config); err != nil {
+	meta, err := toml.DecodeFile(path, config)
+	if err != nil {
 		return errors.Wrapf(err, "decode configuration %v", path)
 	}
+	keys := meta.Undecoded()
+	if len(keys) > 0 {
+		logrus.Warningf("Failed to decode the keys %q from %q.", keys, path)
+	}
+
 	return nil
 }
 
@@ -620,9 +637,14 @@ func (c *Config) CheckCgroupsAndAdjustConfig() {
 
 	session := os.Getenv("DBUS_SESSION_BUS_ADDRESS")
 	hasSession := session != ""
-	if hasSession && strings.HasPrefix(session, "unix:path=") {
-		_, err := os.Stat(strings.TrimPrefix(session, "unix:path="))
-		hasSession = err == nil
+	if hasSession {
+		for _, part := range strings.Split(session, ",") {
+			if strings.HasPrefix(part, "unix:path=") {
+				_, err := os.Stat(strings.TrimPrefix(part, "unix:path="))
+				hasSession = err == nil
+				break
+			}
+		}
 	}
 
 	if !hasSession && unshare.GetRootlessUID() != 0 {
@@ -1053,7 +1075,7 @@ func (c *Config) Write() error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	configFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
+	configFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
