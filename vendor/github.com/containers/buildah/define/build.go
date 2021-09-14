@@ -69,6 +69,8 @@ type CommonBuildOptions struct {
 	Ulimit []string
 	// Volumes to bind mount into the container
 	Volumes []string
+	// Secrets are the available secrets to use in a build
+	Secrets []string
 }
 
 // BuildOptions can be used to alter how an image is built.
@@ -215,6 +217,8 @@ type BuildOptions struct {
 	Jobs *int
 	// LogRusage logs resource usage for each step.
 	LogRusage bool
+	// File to which the Rusage logs will be saved to instead of stdout
+	RusageLogFile string
 	// Excludes is a list of excludes to be used instead of the .dockerignore file.
 	Excludes []string
 	// From is the image name to use to replace the value specified in the first

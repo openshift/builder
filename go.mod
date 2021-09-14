@@ -4,26 +4,26 @@ go 1.13
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
-	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/containers/buildah v1.20.1
-	github.com/containers/common v0.40.0
-	github.com/containers/image/v5 v5.13.0
-	github.com/containers/storage v1.32.2
+	github.com/containers/buildah v1.22.3
+	github.com/containers/common v0.42.1
+	github.com/containers/image/v5 v5.15.2
+	github.com/containers/storage v1.34.1
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
-	github.com/fsouza/go-dockerclient v1.7.2
-	github.com/opencontainers/runc v1.0.0-rc95
+	github.com/fsouza/go-dockerclient v1.7.3
+	github.com/opencontainers/runc v1.0.1
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/openshift/api v0.0.0-20210624153211-ae79113891b0
 	github.com/openshift/client-go v0.0.0-20210521082421-73d9475a9142
-	github.com/openshift/imagebuilder v1.2.0
+	github.com/openshift/imagebuilder v1.2.2-0.20210415181909-87f3e48c2656
 	github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708
 	github.com/openshift/source-to-image v1.3.2-0.20210719201059-4f4cb8b11f98
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/cobra v1.1.3
+	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
-	golang.org/x/sys v0.0.0-20210603125802-9665404d3644
+	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
+	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22
 	k8s.io/api v0.21.1
 	k8s.io/apimachinery v0.21.1
 	k8s.io/client-go v0.21.1
@@ -36,8 +36,8 @@ require (
 replace (
 	// temporary replacement for development purposes
 	github.com/containerd/containerd => github.com/containerd/containerd v1.5.0
-	github.com/docker/docker => github.com/openshift/moby-moby v1.4.2-0.20190308215630-da810a85109d
-	github.com/docker/libnetwork => github.com/docker/libnetwork v0.8.0-dev.2.0.20171107005402-dcf79f8c7fcb
+	github.com/docker/docker => github.com/docker/docker v0.0.0-20200911110540-7ca355652fe0
+	github.com/docker/libnetwork => github.com/docker/libnetwork v0.0.0-20210525090646-64b7a4574d14
 	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
 	// Needed to resolve broken transitive dependencies in buildkit and s2i
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59
