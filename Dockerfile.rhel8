@@ -10,6 +10,7 @@ RUN INSTALL_PKGS=" \
       " && \
     yum install -y --setopt=skip_missing_names_on_install=False $INSTALL_PKGS && \
     yum clean all
+RUN rpm --setcaps shadow-utils
 COPY --from=builder /go/src/github.com/openshift/builder/openshift-builder /usr/bin/
 COPY imagecontent/bin /usr/bin
 COPY imagecontent/etc/containers /etc/containers
