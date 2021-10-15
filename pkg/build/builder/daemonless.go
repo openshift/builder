@@ -210,7 +210,7 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 		SystemContext: &systemContext,
 		BlobDirectory: blobCacheDirectory,
 	}
-	_, err = buildah.Pull(context.TODO(), "docker://"+imageName, options)
+	_, err = buildah.Pull(context.TODO(), imageName, options)
 	if err == nil {
 		log.V(2).Infof("Finished pulling image %q", imageName)
 	} else {
