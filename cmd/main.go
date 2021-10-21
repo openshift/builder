@@ -70,9 +70,12 @@ func main() {
 
 	flags := command.Flags()
 	var uidmap, gidmap string
+	var mustMapUIDs, mustMapGIDs string
 	var useNewuidmap, useNewgidmap bool
 	flags.StringVar(&uidmap, "uidmap", "", "re-exec in a user namespace using the specified UID map")
 	flags.StringVar(&gidmap, "gidmap", "", "re-exec in a user namespace using the specified GID map")
+	flags.StringVar(&mustMapUIDs, "must-map-uid", "65534,65535", "ensure that the listed UIDs are mapped for the user namespace")
+	flags.StringVar(&mustMapGIDs, "must-map-gid", "65534,65535", "ensure that the listed GIDs are mapped for the user namespace")
 	flags.BoolVar(&useNewuidmap, "use-newuidmap", os.Geteuid() != 0, "use newuidmap to set up UID mappings")
 	flags.BoolVar(&useNewgidmap, "use-newgidmap", os.Geteuid() != 0, "use newgidmap to set up GID mappings")
 	wrapped := command.Run
@@ -83,7 +86,7 @@ func main() {
 			kcmdutil.CheckErr(err)
 			os.MkdirAll(storeOptions.GraphRoot, 0775)
 			os.MkdirAll(storeOptions.RunRoot, 0775)
-			maybeReexecUsingUserNamespace(uidmap, useNewuidmap, gidmap, useNewgidmap)
+			maybeReexecUsingUserNamespace(uidmap, mustMapUIDs, useNewuidmap, gidmap, mustMapGIDs, useNewgidmap)
 			wrapped(c, args)
 		default:
 			wrapped(c, args)
