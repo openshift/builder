@@ -600,5 +600,13 @@ func getAssembleUser(docker DockerClient, imageTag string) (string, error) {
 		// If the builder image has the assemble-user label, override with the provided value
 		assembleUser = labelAssembleUser
 	}
-	return assembleUser, nil
+	return extractUser(assembleUser), nil
+}
+
+func extractUser(userSpec string) string {
+	if strings.Contains(userSpec, ":") {
+		parts := strings.SplitN(userSpec, ":", 2)
+		return strings.TrimSpace(parts[0])
+	}
+	return strings.TrimSpace(userSpec)
 }
