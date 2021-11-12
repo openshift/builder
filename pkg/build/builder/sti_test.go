@@ -352,14 +352,30 @@ func TestGetAssembleUser(t *testing.T) {
 			expectedResult: "1002",
 		},
 		{
+			name:           "container user:group set",
+			containerUser:  "1002:1002",
+			expectedResult: "1002",
+		},
+		{
 			name:              "assemble user label set",
 			assembleUserLabel: "1003",
+			expectedResult:    "1003",
+		},
+		{
+			name:              "assemble user:group label set",
+			assembleUserLabel: "1003:1003",
 			expectedResult:    "1003",
 		},
 		{
 			name:              "assemble user override",
 			containerUser:     "1002",
 			assembleUserLabel: "1003",
+			expectedResult:    "1003",
+		},
+		{
+			name:              "assemble user:group override",
+			containerUser:     "1002:1002",
+			assembleUserLabel: "1003:1003",
 			expectedResult:    "1003",
 		},
 	}
