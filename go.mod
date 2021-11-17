@@ -7,11 +7,11 @@ require (
 	github.com/containers/buildah v1.22.3
 	github.com/containers/common v0.42.1
 	github.com/containers/image/v5 v5.15.2
-	github.com/containers/storage v1.34.1
+	github.com/containers/storage v1.37.1-0.20211108123020-ee6db3140c1c
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/fsouza/go-dockerclient v1.7.3
-	github.com/opencontainers/runc v1.0.1
+	github.com/opencontainers/runc v1.0.2
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/openshift/api v0.0.0-20210730095913-85e1d547cdee
 	github.com/openshift/client-go v0.0.0-20210730113412-1811c1b3fc0e
@@ -23,7 +23,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
-	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22
+	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359
 	k8s.io/api v0.22.0-rc.0
 	k8s.io/apimachinery v0.22.0-rc.0
 	k8s.io/client-go v0.22.0-rc.0
@@ -39,6 +39,7 @@ replace (
 	github.com/docker/docker => github.com/docker/docker v0.0.0-20200911110540-7ca355652fe0
 	github.com/docker/libnetwork => github.com/docker/libnetwork v0.0.0-20210525090646-64b7a4574d14
 	github.com/godbus/dbus => github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
+	github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc95
 	// Needed to resolve broken transitive dependencies in buildkit and s2i
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for these in its go.mod

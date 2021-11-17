@@ -23,6 +23,7 @@ import (
 	"github.com/containers/storage/pkg/parsers"
 	"github.com/containers/storage/pkg/stringid"
 	"github.com/containers/storage/pkg/stringutils"
+	"github.com/containers/storage/pkg/system"
 	"github.com/containers/storage/types"
 	"github.com/hashicorp/go-multierror"
 	digest "github.com/opencontainers/go-digest"
@@ -547,6 +548,15 @@ type LayerOptions struct {
 	// initialize this layer.  If set, it should be a child of the layer
 	// which we want to use as the parent of the new layer.
 	TemplateLayer string
+	// OriginalDigest specifies a digest of the tarstream (diff), if one is
+	// provided along with these LayerOptions, and reliably known by the caller.
+	// Use the default "" if this fields is not applicable or the value is not known.
+	OriginalDigest digest.Digest
+	// UncompressedDigest specifies a digest of the uncompressed version (“DiffID”)
+	// of the tarstream (diff), if one is provided along with these LayerOptions,
+	// and reliably known by the caller.
+	// Use the default "" if this fields is not applicable or the value is not known.
+	UncompressedDigest digest.Digest
 }
 
 // ImageOptions is used for passing options to a Store's CreateImage() method.
@@ -565,10 +575,11 @@ type ContainerOptions struct {
 	// container's layer will inherit settings from the image's top layer
 	// or, if it is not being created based on an image, the Store object.
 	types.IDMappingOptions
-	LabelOpts []string
-	Flags     map[string]interface{}
-	MountOpts []string
-	Volatile  bool
+	LabelOpts  []string
+	Flags      map[string]interface{}
+	MountOpts  []string
+	Volatile   bool
+	StorageOpt map[string]string
 }
 
 type store struct {
@@ -1031,20 +1042,21 @@ func (s *store) PutLayer(id, parent string, names []string, mountLabel string, w
 			gidMap = s.gidMap
 		}
 	}
-	var layerOptions *LayerOptions
+	layerOptions := LayerOptions{
+		OriginalDigest:     options.OriginalDigest,
+		UncompressedDigest: options.UncompressedDigest,
+	}
 	if s.canUseShifting(uidMap, gidMap) {
-		layerOptions = &LayerOptions{IDMappingOptions: types.IDMappingOptions{HostUIDMapping: true, HostGIDMapping: true, UIDMap: nil, GIDMap: nil}}
+		layerOptions.IDMappingOptions = types.IDMappingOptions{HostUIDMapping: true, HostGIDMapping: true, UIDMap: nil, GIDMap: nil}
 	} else {
-		layerOptions = &LayerOptions{
-			IDMappingOptions: types.IDMappingOptions{
-				HostUIDMapping: options.HostUIDMapping,
-				HostGIDMapping: options.HostGIDMapping,
-				UIDMap:         copyIDMap(uidMap),
-				GIDMap:         copyIDMap(gidMap),
-			},
+		layerOptions.IDMappingOptions = types.IDMappingOptions{
+			HostUIDMapping: options.HostUIDMapping,
+			HostGIDMapping: options.HostGIDMapping,
+			UIDMap:         copyIDMap(uidMap),
+			GIDMap:         copyIDMap(gidMap),
 		}
 	}
-	return rlstore.Put(id, parentLayer, names, mountLabel, nil, layerOptions, writeable, nil, diff)
+	return rlstore.Put(id, parentLayer, names, mountLabel, nil, &layerOptions, writeable, nil, diff)
 }
 
 func (s *store) CreateLayer(id, parent string, names []string, mountLabel string, writeable bool, options *LayerOptions) (*Layer, error) {
@@ -1120,10 +1132,6 @@ func (s *store) imageTopLayerForMapping(image *Image, ristore ROImageStore, crea
 		}
 		if options.HostGIDMapping && len(layer.GIDMap) != 0 {
 			return false
-		}
-		// If we don't care about the mapping, it's fine.
-		if len(options.UIDMap) == 0 && len(options.GIDMap) == 0 {
-			return true
 		}
 		// Compare the maps.
 		return reflect.DeepEqual(layer.UIDMap, options.UIDMap) && reflect.DeepEqual(layer.GIDMap, options.GIDMap)
@@ -1377,7 +1385,7 @@ func (s *store) CreateContainer(id string, names []string, image, layer, metadat
 		options.Flags["MountLabel"] = mountLabel
 	}
 
-	clayer, err := rlstore.Create(layer, imageTopLayer, nil, options.Flags["MountLabel"].(string), nil, layerOptions, true)
+	clayer, err := rlstore.Create(layer, imageTopLayer, nil, options.Flags["MountLabel"].(string), options.StorageOpt, layerOptions, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2492,7 +2500,15 @@ func (s *store) DeleteContainer(id string) error {
 			gcpath := filepath.Join(s.GraphRoot(), middleDir, container.ID)
 			wg.Add(1)
 			go func() {
-				errChan <- os.RemoveAll(gcpath)
+				var err error
+				for attempts := 0; attempts < 50; attempts++ {
+					err = os.RemoveAll(gcpath)
+					if err == nil || !system.IsEBUSY(err) {
+						break
+					}
+					time.Sleep(time.Millisecond * 100)
+				}
+				errChan <- err
 				wg.Done()
 			}()
 
@@ -2815,10 +2831,33 @@ func (s *store) Diff(from, to string, options *DiffOptions) (io.ReadCloser, erro
 	if err != nil {
 		return nil, err
 	}
+
+	// NaiveDiff could cause mounts to happen without a lock, so be safe
+	// and treat the .Diff operation as a Mount.
+	s.graphLock.Lock()
+	defer s.graphLock.Unlock()
+
+	modified, err := s.graphLock.Modified()
+	if err != nil {
+		return nil, err
+	}
+
+	// We need to make sure the home mount is present when the Mount is done.
+	if modified {
+		s.graphDriver = nil
+		s.layerStore = nil
+		s.graphDriver, err = s.getGraphDriver()
+		if err != nil {
+			return nil, err
+		}
+		s.lastLoaded = time.Now()
+	}
+
 	for _, s := range append([]ROLayerStore{lstore}, lstores...) {
 		store := s
 		store.RLock()
 		if err := store.ReloadIfChanged(); err != nil {
+			store.Unlock()
 			return nil, err
 		}
 		if store.Exists(to) {
@@ -3044,10 +3083,15 @@ func (s *store) Layers() ([]Layer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := lstore.LoadLocked(); err != nil {
-		return nil, err
-	}
-	layers, err := lstore.Layers()
+
+	layers, err := func() ([]Layer, error) {
+		lstore.Lock()
+		defer lstore.Unlock()
+		if err := lstore.Load(); err != nil {
+			return nil, err
+		}
+		return lstore.Layers()
+	}()
 	if err != nil {
 		return nil, err
 	}
