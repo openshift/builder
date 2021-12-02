@@ -10,9 +10,11 @@ require (
 	github.com/containers/storage v1.37.1-0.20211108123020-ee6db3140c1c
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/fsouza/go-dockerclient v1.7.3
+	github.com/go-logr/logr v1.2.2 // indirect
+	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/opencontainers/runc v1.0.2
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
-	github.com/openshift/api v0.0.0-20210730095913-85e1d547cdee
+	github.com/openshift/api v0.0.0-20211215120111-7c47a5f63470
 	github.com/openshift/client-go v0.0.0-20210730113412-1811c1b3fc0e
 	github.com/openshift/imagebuilder v1.2.2-0.20210415181909-87f3e48c2656
 	github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708
@@ -67,7 +69,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
-	github.com/go-logr/logr v1.2.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.5 // indirect
 	github.com/go-openapi/swag v0.19.14 // indirect
@@ -78,7 +79,6 @@ require (
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/go-intervals v0.0.2 // indirect
-	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
