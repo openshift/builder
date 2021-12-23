@@ -61,7 +61,7 @@ func parseIDMappings(uidmap, gidmap string) ([]specs.LinuxIDMapping, []specs.Lin
 		uid := fmt.Sprintf("%d", os.Geteuid())
 		UIDs, GIDs, err = unshare.GetSubIDMappings(uid, uid)
 		if err != nil {
-			klog.Fatalf("Error reading ID mappings for %s: %v\n", err)
+			klog.Fatalf("Error reading ID mappings for %s: %v\n", uid, err)
 		}
 	}
 	if uidMappings := parseMapping("uidmap", uidmap); len(uidMappings) != 0 {
