@@ -2,19 +2,17 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"syscall"
-	"time"
 
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/reexec"
 	"github.com/spf13/cobra"
 
-	"k8s.io/component-base/logs"
+	"k8s.io/component-base/cli"
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 
 	"github.com/openshift/builder/pkg/build/builder"
@@ -36,12 +34,9 @@ func main() {
 		os.Exit(1)
 	}()
 
-	logs.InitLogs()
-	defer logs.FlushLogs()
 	defer serviceability.BehaviorOnPanic(os.Getenv("OPENSHIFT_ON_PANIC"), version.Get())()
 	defer serviceability.Profile(os.Getenv("OPENSHIFT_PROFILE")).Stop()
 
-	rand.Seed(time.Now().UTC().UnixNano())
 	if len(os.Getenv("GOMAXPROCS")) == 0 {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
@@ -90,9 +85,8 @@ func main() {
 		}
 	}
 
-	if err := command.Execute(); err != nil {
-		os.Exit(1)
-	}
+	code := cli.Run(command)
+	os.Exit(code)
 }
 
 // CommandFor returns the appropriate command for this base name,
@@ -115,8 +109,6 @@ func CommandFor(basename string) *cobra.Command {
 		fmt.Printf("unknown command name: %s\n", basename)
 		os.Exit(1)
 	}
-
-	GLog(cmd.PersistentFlags())
 
 	return cmd
 }
