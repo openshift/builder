@@ -355,6 +355,8 @@ func appendBuildVolumeMounts(mountsMap *TransientMounts) error {
 			sourcePath = PathForBuildVolume(bv.Source.Secret.SecretName)
 		case buildapiv1.BuildVolumeSourceTypeConfigMap:
 			sourcePath = PathForBuildVolume(bv.Source.ConfigMap.Name)
+		case buildapiv1.BuildVolumeSourceTypeCSI:
+			sourcePath = PathForBuildVolume(bv.Name)
 		}
 
 		for _, bvm := range bv.Mounts {
