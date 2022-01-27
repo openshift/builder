@@ -1,6 +1,7 @@
 {
 	"defaultAction": "SCMP_ACT_ERRNO",
 	"defaultErrnoRet": 38,
+	"defaultErrno": "ENOSYS",
 	"archMap": [
 		{
 			"architecture": "SCMP_ARCH_X86_64",
@@ -87,7 +88,8 @@
 			"comment": "",
 			"includes": {},
 			"excludes": {},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -242,6 +244,7 @@
 				"madvise",
 				"mbind",
 				"memfd_create",
+				"memfd_secret",
 				"mincore",
 				"mkdir",
 				"mkdirat",
@@ -649,7 +652,8 @@
 					"CAP_DAC_READ_SEARCH"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -692,7 +696,8 @@
 					"CAP_SYS_ADMIN"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -721,7 +726,8 @@
 					"CAP_SYS_CHROOT"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -756,7 +762,8 @@
 					"CAP_SYS_MODULE"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -785,7 +792,8 @@
 					"CAP_SYS_PACCT"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -822,7 +830,8 @@
 					"CAP_SYS_PTRACE"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -853,7 +862,8 @@
 					"CAP_SYS_RAWIO"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -888,7 +898,8 @@
 					"CAP_SYS_TIME"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -917,7 +928,8 @@
 					"CAP_SYS_TTY_CONFIG"
 				]
 			},
-			"errnoRet": 1
+			"errnoRet": 1,
+			"errno": "EPERM"
 		},
 		{
 			"names": [
@@ -945,7 +957,8 @@
 					"CAP_AUDIT_WRITE"
 				]
 			},
-			"errnoRet": 22
+			"errnoRet": 22,
+			"errno": "EINVAL"
 		},
 		{
 			"names": [
