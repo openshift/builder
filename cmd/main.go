@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"k8s.io/component-base/cli"
+	klog "k8s.io/klog/v2"
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 
 	"github.com/openshift/builder/pkg/build/builder"
@@ -64,12 +65,14 @@ func main() {
 	command := CommandFor(basename)
 
 	flags := command.Flags()
+	var logLevel logLevel
 	var uidmap, gidmap string
 	var useNewuidmap, useNewgidmap bool
 	flags.StringVar(&uidmap, "uidmap", "", "re-exec in a user namespace using the specified UID map")
 	flags.StringVar(&gidmap, "gidmap", "", "re-exec in a user namespace using the specified GID map")
 	flags.BoolVar(&useNewuidmap, "use-newuidmap", os.Geteuid() != 0, "use newuidmap to set up UID mappings")
 	flags.BoolVar(&useNewgidmap, "use-newgidmap", os.Geteuid() != 0, "use newgidmap to set up GID mappings")
+	flags.Var(&logLevel, "loglevel", "logging verbosity")
 	wrapped := command.Run
 	command.Run = func(c *cobra.Command, args []string) {
 		switch basename {
@@ -111,4 +114,12 @@ func CommandFor(basename string) *cobra.Command {
 	}
 
 	return cmd
+}
+
+type logLevel struct {
+	klog.Level
+}
+
+func (l *logLevel) Type() string {
+	return "klog.Level"
 }
