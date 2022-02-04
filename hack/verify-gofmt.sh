@@ -18,5 +18,3 @@ if [[ -n "${bad_files}" ]]; then
         echo "Try running 'gofmt -s -w [path]'"
         exit 1
 fi
-
-
