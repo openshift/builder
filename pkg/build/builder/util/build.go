@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	buildapiv1 "github.com/openshift/api/build/v1"
-	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+
+	buildapiv1 "github.com/openshift/api/build/v1"
+	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
 )
 
 var (

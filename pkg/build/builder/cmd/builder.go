@@ -17,7 +17,6 @@ import (
 	restclient "k8s.io/client-go/rest"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
-	buildutil "github.com/openshift/builder/pkg/build/builder/util"
 	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	"github.com/openshift/library-go/pkg/git"
@@ -29,6 +28,7 @@ import (
 	"github.com/openshift/builder/pkg/build/builder/cmd/scmauth"
 	"github.com/openshift/builder/pkg/build/builder/timing"
 	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+	buildutil "github.com/openshift/builder/pkg/build/builder/util"
 	utillog "github.com/openshift/builder/pkg/build/builder/util/log"
 	"github.com/openshift/builder/pkg/version"
 )
