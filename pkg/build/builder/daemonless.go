@@ -326,6 +326,14 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		PullPushRetryDelay:      DefaultPushOrPullRetryDelay,
 	}
 
+	build_loglevel, err := strconv.Atoi(os.Getenv("BUILD_LOGLEVEL"))
+	if err != nil {
+		return fmt.Errorf("attempting to convert BUILD_LOGLEVEL env var value %q to integer: %s", os.Getenv("BUILD_LOGLEVEL"), err)
+	}
+	if build_loglevel < 2 {
+		options.Quiet = true
+	}
+
 	_, _, err = imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
 	return err
 }
