@@ -15,10 +15,11 @@ import (
 	"k8s.io/component-base/cli"
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 
-	"github.com/openshift/builder/pkg/build/builder"
-	"github.com/openshift/builder/pkg/version"
 	"github.com/openshift/library-go/pkg/serviceability"
 	s2ifs "github.com/openshift/source-to-image/pkg/util/fs"
+
+	"github.com/openshift/builder/pkg/build/builder"
+	"github.com/openshift/builder/pkg/version"
 )
 
 func main() {

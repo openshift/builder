@@ -9,8 +9,10 @@ import (
 	"testing"
 
 	docker "github.com/fsouza/go-dockerclient"
-	builderutil "github.com/openshift/builder/pkg/build/builder/util"
+
 	"k8s.io/kubernetes/pkg/credentialprovider"
+
+	builderutil "github.com/openshift/builder/pkg/build/builder/util"
 )
 
 func TestMergeNodeCredentials(t *testing.T) {

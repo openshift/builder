@@ -5,13 +5,13 @@ import (
 	"io"
 	"os"
 
+	"github.com/containers/common/pkg/config"
 	"github.com/spf13/cobra"
 
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
-	"github.com/containers/common/pkg/config"
 	"github.com/openshift/builder/pkg/build/builder/cmd"
 	"github.com/openshift/builder/pkg/version"
 )
