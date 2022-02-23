@@ -12,7 +12,7 @@ import (
 
 // Return "chroot" if we know we're not actually root, "oci" otherwise.
 func builderDefaultIsolation() (string, error) {
-	if inUserNamespace() {
+	if inOurUserNamespace() {
 		// We probably don't have enough privileges to use a proper
 		// runtime.
 		// Lean on the container that we're in being itself
@@ -50,7 +50,6 @@ func builderDefaultStorage() (string, string, error) {
 	}{
 		{"overlay", `["mountopt=metacopy=on"]`, nil},
 		{"overlay", ``, nil},
-		{"overlay", `["mount_program=/usr/bin/fuse-overlayfs","mountopt=metacopy=on"]`, builderCanUseOverlayFUSE},
 		{"overlay", `["mount_program=/usr/bin/fuse-overlayfs"]`, builderCanUseOverlayFUSE},
 		{"vfs", "", nil},
 	} {
