@@ -890,11 +890,18 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts, disable
 	if err != nil {
 		return err
 	}
+
+	idPair := idtools.IDPair{
+		UID: rootUID,
+		GID: rootGID,
+	}
+
 	// Make the link directory if it does not exist
-	if err := idtools.MkdirAllAs(path.Join(d.home, linkDir), 0700, rootUID, rootGID); err != nil {
+	if err := idtools.MkdirAllAndChownNew(path.Join(d.home, linkDir), 0700, idPair); err != nil {
 		return err
 	}
-	if err := idtools.MkdirAllAs(path.Dir(dir), 0700, rootUID, rootGID); err != nil {
+
+	if err := idtools.MkdirAllAndChownNew(path.Dir(dir), 0700, idPair); err != nil {
 		return err
 	}
 	if parent != "" {
@@ -905,7 +912,7 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts, disable
 		rootUID = int(st.UID())
 		rootGID = int(st.GID())
 	}
-	if err := idtools.MkdirAs(dir, 0700, rootUID, rootGID); err != nil {
+	if err := idtools.MkdirAllAndChownNew(dir, 0700, idPair); err != nil {
 		return err
 	}
 
@@ -1048,17 +1055,22 @@ func (d *Driver) getLower(parent string) (string, error) {
 }
 
 func (d *Driver) dir(id string) string {
+	p, _ := d.dir2(id)
+	return p
+}
+
+func (d *Driver) dir2(id string) (string, bool) {
 	newpath := path.Join(d.home, id)
 	if _, err := os.Stat(newpath); err != nil {
 		for _, p := range d.AdditionalImageStores() {
 			l := path.Join(p, d.name, id)
 			_, err = os.Stat(l)
 			if err == nil {
-				return l
+				return l, true
 			}
 		}
 	}
-	return newpath
+	return newpath, false
 }
 
 func (d *Driver) getLowerDirs(id string) ([]string, error) {
@@ -1253,11 +1265,11 @@ func (d *Driver) Get(id string, options graphdriver.MountOpts) (_ string, retErr
 func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountOpts) (_ string, retErr error) {
 	d.locker.Lock(id)
 	defer d.locker.Unlock(id)
-	dir := d.dir(id)
+	dir, inAdditionalStore := d.dir2(id)
 	if _, err := os.Stat(dir); err != nil {
 		return "", err
 	}
-	readWrite := true
+	readWrite := !inAdditionalStore
 
 	if !d.SupportsShifting() || options.DisableShifting {
 		disableShifting = true
@@ -1275,7 +1287,7 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		// options otherwise the kernel refuses to follow the metacopy xattr.
 		if hasMetacopyOption(strings.Split(d.options.mountOptions, ",")) && !hasMetacopyOption(options.Options) {
 			if d.usingMetacopy {
-				logrus.StandardLogger().Logf(logLevel, "Adding metacopy option, configured globally")
+				logrus.StandardLogger().Logf(logrus.DebugLevel, "Adding metacopy option, configured globally")
 				optsList = append(optsList, "metacopy=on")
 			}
 		}

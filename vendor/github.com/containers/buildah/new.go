@@ -12,10 +12,12 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/image"
 	"github.com/containers/image/v5/manifest"
+	"github.com/containers/image/v5/pkg/shortnames"
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	digest "github.com/opencontainers/go-digest"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/openshift/imagebuilder"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -111,6 +113,17 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 		options.FromImage = ""
 	}
 
+	if options.NetworkInterface == nil {
+		// create the network interface
+		// Note: It is important to do this before we pull any images/create containers.
+		// The default backend detection logic needs an empty store to correctly detect
+		// that we can use netavark, if the store was not empty it will use CNI to not break existing installs.
+		options.NetworkInterface, err = getNetworkInterface(store, options.CNIConfigDir, options.CNIPluginPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	systemContext := getSystemContext(store, options.SystemContext, options.SignaturePolicyPath)
 
 	if options.FromImage != "" && options.FromImage != "scratch" {
@@ -195,6 +208,9 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 	}
 
 	name := "working-container"
+	if options.ContainerSuffix != "" {
+		name = options.ContainerSuffix
+	}
 	if options.Container != "" {
 		name = options.Container
 	} else {
@@ -214,9 +230,20 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 
 	conflict := 100
 	for {
+
+		var flags map[string]interface{}
+		// check if we have predefined ProcessLabel and MountLabel
+		// this could be true if this is another stage in a build
+		if options.ProcessLabel != "" && options.MountLabel != "" {
+			flags = map[string]interface{}{
+				"ProcessLabel": options.ProcessLabel,
+				"MountLabel":   options.MountLabel,
+			}
+		}
 		coptions := storage.ContainerOptions{
 			LabelOpts:        options.CommonBuildOpts.LabelOpts,
 			IDMappingOptions: newContainerIDMappingOptions(options.IDMappingOptions),
+			Flags:            flags,
 			Volatile:         true,
 		}
 		container, err = store.CreateContainer("", []string{tmpName}, imageID, "", "", &coptions)
@@ -248,6 +275,15 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 	namespaceOptions := defaultNamespaceOptions
 	namespaceOptions.AddOrReplace(options.NamespaceOptions...)
 
+	// Set the base-image annotations as suggested by the OCI image spec.
+	imageAnnotations := map[string]string{}
+	imageAnnotations[v1.AnnotationBaseImageDigest] = imageDigest
+	if !shortnames.IsShortName(imageSpec) {
+		// If the base image could be resolved to a fully-qualified
+		// image name, let's set it.
+		imageAnnotations[v1.AnnotationBaseImageName] = imageSpec
+	}
+
 	builder := &Builder{
 		store:                 store,
 		Type:                  containerType,
@@ -256,7 +292,7 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 		FromImageDigest:       imageDigest,
 		Container:             name,
 		ContainerID:           container.ID,
-		ImageAnnotations:      map[string]string{},
+		ImageAnnotations:      imageAnnotations,
 		ImageCreatedBy:        "",
 		ProcessLabel:          container.ProcessLabel(),
 		MountLabel:            container.MountLabel(),
@@ -272,13 +308,15 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 			UIDMap:         uidmap,
 			GIDMap:         gidmap,
 		},
-		Capabilities:    copyStringSlice(options.Capabilities),
-		CommonBuildOpts: options.CommonBuildOpts,
-		TopLayer:        topLayer,
-		Args:            options.Args,
-		Format:          options.Format,
-		TempVolumes:     map[string]bool{},
-		Devices:         options.Devices,
+		Capabilities:     copyStringSlice(options.Capabilities),
+		CommonBuildOpts:  options.CommonBuildOpts,
+		TopLayer:         topLayer,
+		Args:             options.Args,
+		Format:           options.Format,
+		TempVolumes:      map[string]bool{},
+		Devices:          options.Devices,
+		Logger:           options.Logger,
+		NetworkInterface: options.NetworkInterface,
 	}
 
 	if options.Mount {
@@ -288,7 +326,7 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 		}
 	}
 
-	if err := builder.initConfig(ctx, src); err != nil {
+	if err := builder.initConfig(ctx, src, systemContext); err != nil {
 		return nil, errors.Wrapf(err, "error preparing image configuration")
 	}
 	err = builder.Save()

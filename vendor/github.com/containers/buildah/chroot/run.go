@@ -31,8 +31,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/syndtr/gocapability/capability"
-	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 const (
@@ -138,13 +138,13 @@ func RunUsingChroot(spec *specs.Spec, bundlePath, homeDir string, stdin io.Reade
 
 	// Set our terminal's mode to raw, to pass handling of special
 	// terminal input to the terminal in the container.
-	if spec.Process.Terminal && terminal.IsTerminal(unix.Stdin) {
-		state, err := terminal.MakeRaw(unix.Stdin)
+	if spec.Process.Terminal && term.IsTerminal(unix.Stdin) {
+		state, err := term.MakeRaw(unix.Stdin)
 		if err != nil {
 			logrus.Warnf("error setting terminal state: %v", err)
 		} else {
 			defer func() {
-				if err = terminal.Restore(unix.Stdin, state); err != nil {
+				if err = term.Restore(unix.Stdin, state); err != nil {
 					logrus.Errorf("unable to restore terminal state: %v", err)
 				}
 			}()
@@ -238,7 +238,7 @@ func runUsingChrootMain() {
 		// Set the kernel's lock to "unlocked".
 		locked := 0
 		if result, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(ptyMasterFd), unix.TIOCSPTLCK, uintptr(unsafe.Pointer(&locked))); int(result) == -1 {
-			logrus.Errorf("error locking PTY descriptor: %v", err)
+			logrus.Errorf("error unlocking PTY descriptor: %v", err)
 			os.Exit(1)
 		}
 		// Get a handle for the other end.
@@ -275,7 +275,7 @@ func runUsingChrootMain() {
 			winsize.Row = uint16(options.Spec.Process.ConsoleSize.Height)
 			winsize.Col = uint16(options.Spec.Process.ConsoleSize.Width)
 		} else {
-			if terminal.IsTerminal(unix.Stdin) {
+			if term.IsTerminal(unix.Stdin) {
 				// Use the size of our terminal.
 				winsize, err = unix.IoctlGetWinsize(unix.Stdin, unix.TIOCGWINSZ)
 				if err != nil {
@@ -883,11 +883,14 @@ func setApparmorProfile(spec *specs.Spec) error {
 
 // setCapabilities sets capabilities for ourselves, to be more or less inherited by any processes that we'll start.
 func setCapabilities(spec *specs.Spec, keepCaps ...string) error {
-	currentCaps, err := capability.NewPid(0)
+	currentCaps, err := capability.NewPid2(0)
 	if err != nil {
 		return errors.Wrapf(err, "error reading capabilities of current process")
 	}
-	caps, err := capability.NewPid(0)
+	if err := currentCaps.Load(); err != nil {
+		return errors.Wrapf(err, "error loading capabilities")
+	}
+	caps, err := capability.NewPid2(0)
 	if err != nil {
 		return errors.Wrapf(err, "error reading capabilities of current process")
 	}
@@ -899,30 +902,30 @@ func setCapabilities(spec *specs.Spec, keepCaps ...string) error {
 		capability.AMBIENT:     spec.Process.Capabilities.Ambient,
 	}
 	knownCaps := capability.List()
-	caps.Clear(capability.CAPS | capability.BOUNDS | capability.AMBS)
+	noCap := capability.Cap(-1)
 	for capType, capList := range capMap {
 		for _, capToSet := range capList {
-			cap := capability.CAP_LAST_CAP
+			cap := noCap
 			for _, c := range knownCaps {
 				if strings.EqualFold("CAP_"+c.String(), capToSet) {
 					cap = c
 					break
 				}
 			}
-			if cap == capability.CAP_LAST_CAP {
+			if cap == noCap {
 				return errors.Errorf("error mapping capability %q to a number", capToSet)
 			}
 			caps.Set(capType, cap)
 		}
 		for _, capToSet := range keepCaps {
-			cap := capability.CAP_LAST_CAP
+			cap := noCap
 			for _, c := range knownCaps {
 				if strings.EqualFold("CAP_"+c.String(), capToSet) {
 					cap = c
 					break
 				}
 			}
-			if cap == capability.CAP_LAST_CAP {
+			if cap == noCap {
 				return errors.Errorf("error mapping capability %q to a number", capToSet)
 			}
 			if currentCaps.Get(capType, cap) {
@@ -1191,21 +1194,33 @@ func setupChrootBindMounts(spec *specs.Spec, bundlePath string) (undoBinds func(
 		}
 		requestFlags := bindFlags
 		expectedFlags := uintptr(0)
-		if util.StringInSlice("nodev", m.Options) {
-			requestFlags |= unix.MS_NODEV
-			expectedFlags |= unix.ST_NODEV
-		}
-		if util.StringInSlice("noexec", m.Options) {
-			requestFlags |= unix.MS_NOEXEC
-			expectedFlags |= unix.ST_NOEXEC
-		}
-		if util.StringInSlice("nosuid", m.Options) {
-			requestFlags |= unix.MS_NOSUID
-			expectedFlags |= unix.ST_NOSUID
-		}
-		if util.StringInSlice("ro", m.Options) {
-			requestFlags |= unix.MS_RDONLY
-			expectedFlags |= unix.ST_RDONLY
+		for _, option := range m.Options {
+			switch option {
+			case "nodev":
+				requestFlags |= unix.MS_NODEV
+				expectedFlags |= unix.ST_NODEV
+			case "dev":
+				requestFlags &= ^uintptr(unix.MS_NODEV)
+				expectedFlags &= ^uintptr(unix.ST_NODEV)
+			case "noexec":
+				requestFlags |= unix.MS_NOEXEC
+				expectedFlags |= unix.ST_NOEXEC
+			case "exec":
+				requestFlags &= ^uintptr(unix.MS_NOEXEC)
+				expectedFlags &= ^uintptr(unix.ST_NOEXEC)
+			case "nosuid":
+				requestFlags |= unix.MS_NOSUID
+				expectedFlags |= unix.ST_NOSUID
+			case "suid":
+				requestFlags &= ^uintptr(unix.MS_NOSUID)
+				expectedFlags &= ^uintptr(unix.ST_NOSUID)
+			case "ro":
+				requestFlags |= unix.MS_RDONLY
+				expectedFlags |= unix.ST_RDONLY
+			case "rw":
+				requestFlags &= ^uintptr(unix.MS_RDONLY)
+				expectedFlags &= ^uintptr(unix.ST_RDONLY)
+			}
 		}
 		switch m.Type {
 		case "bind":

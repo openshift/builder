@@ -239,6 +239,7 @@ func (i *containerImageRef) createConfigsAndManifests() (v1.Image, v1.Manifest, 
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
+		MediaType: v1.MediaTypeImageManifest,
 		Config: v1.Descriptor{
 			MediaType: v1.MediaTypeImageConfig,
 		},
@@ -393,9 +394,18 @@ func (i *containerImageRef) NewImageSource(ctx context.Context, sc *types.System
 			rc.Close()
 			return nil, errors.Wrapf(err, "error opening file for %s", what)
 		}
-		destHasher := digest.Canonical.Digester()
+
 		counter := ioutils.NewWriteCounter(layerFile)
-		multiWriter := io.MultiWriter(counter, destHasher.Hash())
+		var destHasher digest.Digester
+		var multiWriter io.Writer
+		// Avoid rehashing when we do not compress.
+		if i.compression != archive.Uncompressed {
+			destHasher = digest.Canonical.Digester()
+			multiWriter = io.MultiWriter(counter, destHasher.Hash())
+		} else {
+			destHasher = srcHasher
+			multiWriter = counter
+		}
 		// Compress the layer, if we're recompressing it.
 		writeCloser, err := archive.CompressStream(multiWriter, i.compression)
 		if err != nil {
@@ -742,6 +752,10 @@ func (b *Builder) makeImageRef(options CommitOptions) (types.ImageReference, err
 	manifestType := options.PreferredManifestType
 	if manifestType == "" {
 		manifestType = define.OCIv1ImageManifest
+	}
+
+	for _, u := range options.UnsetEnvs {
+		b.UnsetEnv(u)
 	}
 	oconfig, err := json.Marshal(&b.OCIv1)
 	if err != nil {
