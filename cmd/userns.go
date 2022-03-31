@@ -64,6 +64,13 @@ func parseIDMappings(uidmap, gidmap string) ([]specs.LinuxIDMapping, []specs.Lin
 		if err != nil {
 			klog.Fatalf("Error reading ID mappings for %s: %v\n", uid, err)
 		}
+	} else {
+		for i := range UIDs {
+			UIDs[i].HostID = UIDs[i].ContainerID
+		}
+		for i := range GIDs {
+			GIDs[i].HostID = GIDs[i].ContainerID
+		}
 	}
 	if uidMappings := parseMapping("uidmap", uidmap); len(uidMappings) != 0 {
 		UIDs = uidMappings
@@ -74,13 +81,21 @@ func parseIDMappings(uidmap, gidmap string) ([]specs.LinuxIDMapping, []specs.Lin
 	return UIDs, GIDs
 }
 
-func inUserNamespace() bool {
+// inOurUserNamespace returns true if we've already set up a user namespace of
+// our own
+func inOurUserNamespace() bool {
 	return os.Getenv(usernsMarkerVariable) != ""
+}
+
+// isNodeDefaultMapping returns true if the current ID map is the default node
+// ID map: one range starting at 0, with length 2^32-1, mapped to itself
+func isNodeDefaultMapping(m []specs.LinuxIDMapping) bool {
+	return len(m) == 1 && m[0].ContainerID == 0 && m[0].HostID == 0 && m[0].Size == 0xffffffff
 }
 
 func maybeReexecUsingUserNamespace(uidmap string, useNewuidmap bool, gidmap string, useNewgidmap bool) {
 	// If we've already done all of this, there's no need to do it again.
-	if inUserNamespace() {
+	if inOurUserNamespace() {
 		return
 	}
 
@@ -89,6 +104,30 @@ func maybeReexecUsingUserNamespace(uidmap string, useNewuidmap bool, gidmap stri
 		if caps, err := capability.NewPid(0); err == nil && caps.Get(capability.EFFECTIVE, capability.CAP_SYS_ADMIN) {
 			return
 		}
+	}
+
+	// Log the ID maps we were started with.
+	UIDs, GIDs, err := unshare.GetHostIDMappings("")
+	if err != nil {
+		klog.Fatalf("Error reading current ID mappings: %v\n", err)
+	}
+	if !isNodeDefaultMapping(UIDs) || !isNodeDefaultMapping(GIDs) {
+		uidMap, gidMap := "[", "["
+		for i, entry := range UIDs {
+			if i > 0 {
+				uidMap += ", "
+			}
+			uidMap += fmt.Sprintf("(%d:%d:%d)", entry.ContainerID, entry.HostID, entry.Size)
+		}
+		for i, entry := range GIDs {
+			if i > 0 {
+				gidMap += ", "
+			}
+			gidMap += fmt.Sprintf("(%d:%d:%d)", entry.ContainerID, entry.HostID, entry.Size)
+		}
+		uidMap += "]"
+		gidMap += "]"
+		klog.V(2).Infof("Started in kernel user namespace with UID map %s and GID map %s.", uidMap, gidMap)
 	}
 
 	// Parse our --uidmap and --gidmap flags into ID mappings and re-exec ourselves.
