@@ -325,17 +325,27 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		MaxPullPushRetries:      DefaultPushOrPullRetryCount,
 		PullPushRetryDelay:      DefaultPushOrPullRetryDelay,
 	}
-
-	build_loglevel, err := strconv.Atoi(os.Getenv("BUILD_LOGLEVEL"))
-	if err != nil {
-		return fmt.Errorf("attempting to convert BUILD_LOGLEVEL env var value %q to integer: %s", os.Getenv("BUILD_LOGLEVEL"), err)
-	}
-	if build_loglevel < 2 {
-		options.Quiet = true
+	if options.Quiet, err = buildahShouldUseQuiet(os.Getenv("BUILD_LOGLEVEL")); err != nil {
+		return err
 	}
 
 	_, _, err = imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
 	return err
+}
+
+func buildahShouldUseQuiet(build_loglevel string) (bool, error) {
+	loglevel := 0
+	var err error
+	if len(build_loglevel) != 0 {
+		loglevel, err = strconv.Atoi(build_loglevel)
+		if err != nil {
+			return false, fmt.Errorf("attempting to convert BUILD_LOGLEVEL env var value %q to integer: %s", os.Getenv("BUILD_LOGLEVEL"), err)
+		}
+	}
+	if loglevel < 2 {
+		return true, nil
+	}
+	return false, nil
 }
 
 // appendBuildVolumeMounts appends the Build Volume Mounts to the Transient Mounts Map
