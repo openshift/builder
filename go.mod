@@ -15,10 +15,10 @@ require (
 	github.com/opencontainers/runc v1.1.0
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/openshift-eng/openshift-goimports v0.0.0-20220205181405-f887d6f89f13
-	github.com/openshift/api v0.0.0-20211215120111-7c47a5f63470
-	github.com/openshift/client-go v0.0.0-20210730113412-1811c1b3fc0e
+	github.com/openshift/api v0.0.0-20220315184754-d7c10d0b647e
+	github.com/openshift/client-go v0.0.0-20211209144617-7385dd6338e3
 	github.com/openshift/imagebuilder v1.2.2
-	github.com/openshift/library-go v0.0.0-20210430084706-e555322cb708
+	github.com/openshift/library-go v0.0.0-20220408183424-da6f7fb16aaf
 	github.com/openshift/source-to-image v1.3.2-0.20210719201059-4f4cb8b11f98
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.3.0
@@ -128,7 +128,7 @@ require (
 	github.com/pkg/profile v1.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/proglottis/gpgme v0.1.1 // indirect
-	github.com/prometheus/client_golang v1.11.0 // indirect
+	github.com/prometheus/client_golang v1.11.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.28.0 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
@@ -141,7 +141,7 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/viper v1.10.0 // indirect
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20201008174630-78d3cae3a980 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
+	github.com/stretchr/testify v1.7.0
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/sylabs/sif/v2 v2.3.1 // indirect
 	github.com/tchap/go-patricia v2.3.0+incompatible // indirect
@@ -183,7 +183,7 @@ require (
 	sigs.k8s.io/json v0.0.0-20211020170558-c049b76a60c6 // indirect
 	sigs.k8s.io/kustomize/api v0.10.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.13.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.2.0 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
