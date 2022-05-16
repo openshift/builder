@@ -1,10 +1,7 @@
 reviewers:
-  - gabemontero
   - coreydaley
-  - adambkaplan
 approvers:
   - bparees
   - smarterclayton
-  - adambkaplan
   - coreydaley
 component: Build
