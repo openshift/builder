@@ -7,7 +7,7 @@ FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
 # TODO: Add fuse-overlayfs once we build off of RHEL-8 UBI
 RUN INSTALL_PKGS=" \
       bind-utils bsdtar findutils git hostname lsof runc socat \
-      sysvinit-tools tar tree util-linux wget which \
+      sysvinit-tools tar tree util-linux util-linux-core wget which \
       " && \
     yum install -y --setopt=skip_missing_names_on_install=False $INSTALL_PKGS && \
     yum clean all
