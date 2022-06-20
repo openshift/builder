@@ -8,4 +8,4 @@ if [ -s "$clusterCA" ]; then
     update-ca-trust extract
 fi
 
-exec ionice -c3 "$@"
+exec ionice -c2 -n7 "$@"
