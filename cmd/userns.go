@@ -14,7 +14,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const usernsMarkerVariable = "BUILDER_USERNS_CONFIGURED"
+const usernsMarkerVariable = "_CONTAINERS_USERNS_CONFIGURED"
 
 func parseIDMappings(uidmap, gidmap string) ([]specs.LinuxIDMapping, []specs.LinuxIDMapping) {
 	// helper for parsing a string of the form "container:host:size[,container:host:size...]"
