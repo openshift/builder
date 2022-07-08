@@ -326,6 +326,11 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		PullPushRetryDelay:      DefaultPushOrPullRetryDelay,
 	}
 
+	if os.Getenv("BUILDAH_QUIET") == "true" {
+		log.V(4).Infof("Enabling Buildah's --quiet option")
+		options.Quiet = true
+	}
+
 	_, _, err = imagebuildah.BuildDockerfiles(opts.Context, store, options, opts.Dockerfile)
 	return err
 }
