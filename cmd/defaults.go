@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/containers/storage"
+	"golang.org/x/sys/unix"
 
 	"k8s.io/klog/v2"
 )
@@ -32,7 +34,15 @@ func builderDefaultIsolation() (string, error) {
 func builderCanUseOverlayFUSE() error {
 	device, err := os.Open("/dev/fuse")
 	if err != nil {
-		return fmt.Errorf("error opening device: %v", err)
+		if errors.Is(err, os.ErrNotExist) {
+			if err2 := unix.Mknod("/dev/fuse", 0o666, int(unix.Mkdev(10, 229))); err2 != nil {
+				return fmt.Errorf("error opening device: %v, error creating it: %w", err, err2)
+			}
+			device, err = os.Open("/dev/fuse")
+		}
+		if err != nil {
+			return fmt.Errorf("error opening device: %w", err)
+		}
 	}
 	defer device.Close()
 	if _, err := os.Stat("/usr/bin/fuse-overlayfs"); err != nil {
