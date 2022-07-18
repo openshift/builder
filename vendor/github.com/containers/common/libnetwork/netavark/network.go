@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package netavark
@@ -12,6 +13,7 @@ import (
 
 	"github.com/containers/common/libnetwork/internal/util"
 	"github.com/containers/common/libnetwork/types"
+	"github.com/containers/common/pkg/config"
 	"github.com/containers/storage/pkg/lockfile"
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/pkg/errors"
@@ -25,7 +27,7 @@ type netavarkNetwork struct {
 	// networkRunDir is where temporary files are stored, i.e.the ipam db, aardvark config etc
 	networkRunDir string
 
-	// tells netavark whether this is rootless mode or rootfull, "true" or "false"
+	// tells netavark whether this is rootless mode or rootful, "true" or "false"
 	networkRootless bool
 
 	// netavarkBinary is the path to the netavark binary.
@@ -37,6 +39,9 @@ type netavarkNetwork struct {
 	defaultNetwork string
 	// defaultSubnet is the default subnet for the default network.
 	defaultSubnet types.IPNet
+
+	// defaultsubnetPools contains the subnets which must be used to allocate a free subnet by network create
+	defaultsubnetPools []config.SubnetPool
 
 	// ipamDBPath is the path to the ip allocation bolt db
 	ipamDBPath string
@@ -72,6 +77,9 @@ type InitConfig struct {
 	// DefaultSubnet is the default subnet for the default network.
 	DefaultSubnet string
 
+	// DefaultsubnetPools contains the subnets which must be used to allocate a free subnet by network create
+	DefaultsubnetPools []config.SubnetPool
+
 	// Syslog describes whenever the netavark debbug output should be log to the syslog as well.
 	// This will use logrus to do so, make sure logrus is set up to log to the syslog.
 	Syslog bool
@@ -100,25 +108,31 @@ func NewNetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
 		return nil, errors.Wrap(err, "failed to parse default subnet")
 	}
 
-	if err := os.MkdirAll(conf.NetworkConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(conf.NetworkConfigDir, 0o755); err != nil {
 		return nil, err
 	}
 
-	if err := os.MkdirAll(conf.NetworkRunDir, 0755); err != nil {
+	if err := os.MkdirAll(conf.NetworkRunDir, 0o755); err != nil {
 		return nil, err
+	}
+
+	defaultSubnetPools := conf.DefaultsubnetPools
+	if defaultSubnetPools == nil {
+		defaultSubnetPools = config.DefaultSubnetPools
 	}
 
 	n := &netavarkNetwork{
-		networkConfigDir: conf.NetworkConfigDir,
-		networkRunDir:    conf.NetworkRunDir,
-		netavarkBinary:   conf.NetavarkBinary,
-		aardvarkBinary:   conf.AardvarkBinary,
-		networkRootless:  unshare.IsRootless(),
-		ipamDBPath:       filepath.Join(conf.NetworkRunDir, "ipam.db"),
-		defaultNetwork:   defaultNetworkName,
-		defaultSubnet:    defaultNet,
-		lock:             lock,
-		syslog:           conf.Syslog,
+		networkConfigDir:   conf.NetworkConfigDir,
+		networkRunDir:      conf.NetworkRunDir,
+		netavarkBinary:     conf.NetavarkBinary,
+		aardvarkBinary:     conf.AardvarkBinary,
+		networkRootless:    unshare.IsRootless(),
+		ipamDBPath:         filepath.Join(conf.NetworkRunDir, "ipam.db"),
+		defaultNetwork:     defaultNetworkName,
+		defaultSubnet:      defaultNet,
+		defaultsubnetPools: defaultSubnetPools,
+		lock:               lock,
+		syslog:             conf.Syslog,
 	}
 
 	return n, nil
@@ -231,7 +245,7 @@ func parseNetwork(network *types.Network) error {
 		return errors.Errorf("invalid network ID %q", network.ID)
 	}
 
-	// add gatway when not internal or dns enabled
+	// add gateway when not internal or dns enabled
 	addGateway := !network.Internal || network.DNSEnabled
 	return util.ValidateSubnets(network, addGateway, nil)
 }

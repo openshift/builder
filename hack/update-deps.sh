@@ -19,6 +19,7 @@ for pkg in "$GOPATH/src/k8s.io/kubernetes/staging/src/k8s.io/"*; do
 done
 
 export GO111MODULE=on
-go mod tidy
+go get -t github.com/openshift/builder/cmd github.com/containers/buildah
+go mod tidy -compat=1.17
 go mod vendor
 go mod verify

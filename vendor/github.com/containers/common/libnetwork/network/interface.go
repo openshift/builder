@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package network
@@ -13,6 +14,7 @@ import (
 	"github.com/containers/common/libnetwork/netavark"
 	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/config"
+	"github.com/containers/common/pkg/machine"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/homedir"
 	"github.com/containers/storage/pkg/ioutils"
@@ -61,11 +63,7 @@ func NetworkBackend(store storage.Store, conf *config.Config, syslog bool) (type
 			return "", nil, err
 		}
 
-		aardvarkBin, err := conf.FindHelperBinary(aardvarkBinary, false)
-		if err != nil {
-			// this is not a fatal error we can still use netavark without dns
-			logrus.Warnf("%s binary not found, container dns will not be enabled", aardvarkBin)
-		}
+		aardvarkBin, _ := conf.FindHelperBinary(aardvarkBinary, false)
 
 		confDir := conf.Network.NetworkConfigDir
 		if confDir == "" {
@@ -82,13 +80,14 @@ func NetworkBackend(store storage.Store, conf *config.Config, syslog bool) (type
 		}
 
 		netInt, err := netavark.NewNetworkInterface(&netavark.InitConfig{
-			NetworkConfigDir: confDir,
-			NetworkRunDir:    runDir,
-			NetavarkBinary:   netavarkBin,
-			AardvarkBinary:   aardvarkBin,
-			DefaultNetwork:   conf.Network.DefaultNetwork,
-			DefaultSubnet:    conf.Network.DefaultSubnet,
-			Syslog:           syslog,
+			NetworkConfigDir:   confDir,
+			NetworkRunDir:      runDir,
+			NetavarkBinary:     netavarkBin,
+			AardvarkBinary:     aardvarkBin,
+			DefaultNetwork:     conf.Network.DefaultNetwork,
+			DefaultSubnet:      conf.Network.DefaultSubnet,
+			DefaultsubnetPools: conf.Network.DefaultSubnetPools,
+			Syslog:             syslog,
 		})
 		return types.Netavark, netInt, err
 	case types.CNI:
@@ -123,8 +122,7 @@ func defaultNetworkBackend(store storage.Store, conf *config.Config) (backend ty
 	defer func() {
 		// only write when there is no error
 		if err == nil {
-			// nolint:gocritic
-			if err := ioutils.AtomicWriteFile(file, []byte(backend), 0644); err != nil {
+			if err := ioutils.AtomicWriteFile(file, []byte(backend), 0o644); err != nil {
 				logrus.Errorf("could not write network backend to file: %v", err)
 			}
 		}
@@ -171,11 +169,12 @@ func getCniInterface(conf *config.Config) (types.ContainerNetwork, error) {
 		}
 	}
 	return cni.NewCNINetworkInterface(&cni.InitConfig{
-		CNIConfigDir:   confDir,
-		CNIPluginDirs:  conf.Network.CNIPluginDirs,
-		DefaultNetwork: conf.Network.DefaultNetwork,
-		DefaultSubnet:  conf.Network.DefaultSubnet,
-		IsMachine:      conf.Engine.MachineEnabled,
+		CNIConfigDir:       confDir,
+		CNIPluginDirs:      conf.Network.CNIPluginDirs,
+		DefaultNetwork:     conf.Network.DefaultNetwork,
+		DefaultSubnet:      conf.Network.DefaultSubnet,
+		DefaultsubnetPools: conf.Network.DefaultSubnetPools,
+		IsMachine:          machine.IsGvProxyBased(),
 	})
 }
 

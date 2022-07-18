@@ -591,6 +591,8 @@ func (br badRequest) Error() string {
 }
 func (br badRequest) BadRequest() {}
 
+type maskBadRequest string
+
 type notFound string
 
 func (nf notFound) Error() string {
@@ -611,6 +613,8 @@ func (ns noService) Error() string {
 	return string(ns)
 }
 func (ns noService) NoService() {}
+
+type maskNoService string
 
 type timeout string
 

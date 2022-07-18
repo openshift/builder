@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/containers/buildah/define"
-	"github.com/containers/buildah/pkg/blobcache"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/image"
@@ -16,6 +15,7 @@ import (
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
+	"github.com/containers/storage/pkg/stringid"
 	digest "github.com/opencontainers/go-digest"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/openshift/imagebuilder"
@@ -49,6 +49,15 @@ func getImageName(name string, img *storage.Image) string {
 
 func imageNamePrefix(imageName string) string {
 	prefix := imageName
+	if d, err := digest.Parse(imageName); err == nil {
+		prefix = d.Encoded()
+		if len(prefix) > 12 {
+			prefix = prefix[:12]
+		}
+	}
+	if stringid.ValidateID(prefix) == nil {
+		prefix = stringid.TruncateID(prefix)
+	}
 	s := strings.Split(prefix, ":")
 	if len(s) > 0 {
 		prefix = s[0]
@@ -145,13 +154,10 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 		pullOptions.OciDecryptConfig = options.OciDecryptConfig
 		pullOptions.SignaturePolicyPath = options.SignaturePolicyPath
 		pullOptions.Writer = options.ReportWriter
+		pullOptions.DestinationLookupReferenceFunc = cacheLookupReferenceFunc(options.BlobDirectory, types.PreserveOriginal)
 
 		maxRetries := uint(options.MaxPullRetries)
 		pullOptions.MaxRetries = &maxRetries
-
-		if options.BlobDirectory != "" {
-			pullOptions.DestinationLookupReferenceFunc = blobcache.CacheLookupReferenceFunc(options.BlobDirectory, types.PreserveOriginal)
-		}
 
 		pulledImages, err := imageRuntime.Pull(ctx, options.FromImage, pullPolicy, &pullOptions)
 		if err != nil {
@@ -311,7 +317,7 @@ func newBuilder(ctx context.Context, store storage.Store, options BuilderOptions
 		Capabilities:     copyStringSlice(options.Capabilities),
 		CommonBuildOpts:  options.CommonBuildOpts,
 		TopLayer:         topLayer,
-		Args:             options.Args,
+		Args:             copyStringStringMap(options.Args),
 		Format:           options.Format,
 		TempVolumes:      map[string]bool{},
 		Devices:          options.Devices,
