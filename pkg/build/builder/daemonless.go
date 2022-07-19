@@ -307,6 +307,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		SystemContext:    &systemContext,
 		NamespaceOptions: buildah.NamespaceOptions{
 			{Name: string(specs.NetworkNamespace), Host: true},
+			{Name: string(specs.UserNamespace), Host: true},
 		},
 		CommonBuildOpts: &buildah.CommonBuildOptions{
 			HTTPProxy:          true,
