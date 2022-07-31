@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package netavark
@@ -58,9 +59,7 @@ func newIPAMError(cause error, msg string, args ...interface{}) *ipamError {
 // openDB will open the ipam database
 // Note that the caller has to Close it.
 func (n *netavarkNetwork) openDB() (*bbolt.DB, error) {
-	// linter complains about the octal value
-	// nolint:gocritic
-	db, err := bbolt.Open(n.ipamDBPath, 0600, nil)
+	db, err := bbolt.Open(n.ipamDBPath, 0o600, nil)
 	if err != nil {
 		return nil, newIPAMError(err, "failed to open database %s", n.ipamDBPath)
 	}
@@ -361,7 +360,7 @@ func (n *netavarkNetwork) deallocIPs(opts *types.NetworkOptions) error {
 // it checks the ipam driver and if subnets are set
 func requiresIPAMAlloc(network *types.Network) bool {
 	// only do host allocation when driver is set to HostLocalIPAMDriver or unset
-	switch network.IPAMOptions["driver"] {
+	switch network.IPAMOptions[types.Driver] {
 	case "", types.HostLocalIPAMDriver:
 	default:
 		return false

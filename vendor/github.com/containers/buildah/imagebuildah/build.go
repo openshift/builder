@@ -242,6 +242,12 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options define.B
 		if len(options.Platforms) > 1 {
 			logPrefix = "[" + platforms.Format(platformSpec) + "] "
 		}
+		// Deep copy args to prevent concurrent read/writes over Args.
+		argsCopy := make(map[string]string)
+		for key, value := range options.Args {
+			argsCopy[key] = value
+		}
+		platformOptions.Args = argsCopy
 		builds.Go(func() error {
 			thisID, thisRef, err := buildDockerfilesOnce(ctx, store, logger, logPrefix, platformOptions, paths, files)
 			if err != nil {
@@ -340,6 +346,40 @@ func buildDockerfilesOnce(ctx context.Context, store storage.Store, logger *logr
 
 	warnOnUnsetBuildArgs(logger, mainNode, options.Args)
 
+	// --platform was explicitly selected for this build
+	// so set correct TARGETPLATFORM in args if it is not
+	// already selected by the user.
+	if options.SystemContext.OSChoice != "" && options.SystemContext.ArchitectureChoice != "" {
+		// os component from --platform string populates TARGETOS
+		// buildkit parity: give priority to user's `--build-arg`
+		if _, ok := options.Args["TARGETOS"]; !ok {
+			options.Args["TARGETOS"] = options.SystemContext.OSChoice
+		}
+		// arch component from --platform string populates TARGETARCH
+		// buildkit parity: give priority to user's `--build-arg`
+		if _, ok := options.Args["TARGETARCH"]; !ok {
+			options.Args["TARGETARCH"] = options.SystemContext.ArchitectureChoice
+		}
+		// variant component from --platform string populates TARGETVARIANT
+		// buildkit parity: give priority to user's `--build-arg`
+		if _, ok := options.Args["TARGETVARIANT"]; !ok {
+			if options.SystemContext.VariantChoice != "" {
+				options.Args["TARGETVARIANT"] = options.SystemContext.VariantChoice
+			}
+		}
+		// buildkit parity: give priority to user's `--build-arg`
+		if _, ok := options.Args["TARGETPLATFORM"]; !ok {
+			// buildkit parity: TARGETPLATFORM should be always created
+			// from SystemContext and not `TARGETOS` and `TARGETARCH` because
+			// users can always override values of `TARGETOS` and `TARGETARCH`
+			// but `TARGETPLATFORM` should be set independent of those values.
+			options.Args["TARGETPLATFORM"] = options.SystemContext.OSChoice + "/" + options.SystemContext.ArchitectureChoice
+			if options.SystemContext.VariantChoice != "" {
+				options.Args["TARGETPLATFORM"] = options.Args["TARGETPLATFORM"] + "/" + options.SystemContext.VariantChoice
+			}
+		}
+	}
+
 	for i, d := range dockerfilecontents[1:] {
 		additionalNode, err := imagebuilder.ParseDockerfile(bytes.NewReader(d))
 		if err != nil {
@@ -431,8 +471,8 @@ func preprocessContainerfileContents(logger *logrus.Logger, containerfile string
 	cppCommand := "cpp"
 	cppPath, err := exec.LookPath(cppCommand)
 	if err != nil {
-		if os.IsNotExist(err) {
-			err = errors.Errorf("error: %s support requires %s to be installed", containerfile, cppPath)
+		if errors.Is(err, exec.ErrNotFound) {
+			err = fmt.Errorf("error: %v: .in support requires %s to be installed", err, cppCommand)
 		}
 		return nil, err
 	}
