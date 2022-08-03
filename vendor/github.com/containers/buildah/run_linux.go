@@ -2481,7 +2481,7 @@ func DefaultNamespaceOptions() (define.NamespaceOptions, error) {
 		{Name: string(specs.MountNamespace), Host: false},
 		{Name: string(specs.NetworkNamespace), Host: cfg.NetNS() == "host"},
 		{Name: string(specs.PIDNamespace), Host: cfg.PidNS() == "host"},
-		{Name: string(specs.UserNamespace), Host: cfg.Containers.UserNS == "host"},
+		{Name: string(specs.UserNamespace), Host: cfg.Containers.UserNS == "" || cfg.Containers.UserNS == "host"},
 		{Name: string(specs.UTSNamespace), Host: cfg.UTSNS() == "host"},
 	}
 	return options, nil
@@ -2726,10 +2726,6 @@ func getSecretMount(tokens []string, secrets map[string]define.Secret, mountlabe
 			return nil, "", err
 		}
 		ctrFileOnHost = filepath.Join(containerWorkingDir, "secrets", id)
-		_, err = os.Stat(ctrFileOnHost)
-		if !os.IsNotExist(err) {
-			return nil, "", err
-		}
 	default:
 		return nil, "", errors.New("invalid source secret type")
 	}
@@ -2898,7 +2894,7 @@ func (b *Builder) cleanupRunMounts(context *imagetypes.SystemContext, mountpoint
 				// if image is being used by something else
 				_ = i.Unmount(false)
 			}
-			if errors.Cause(err) == storagetypes.ErrImageUnknown {
+			if errors.Is(errors.Cause(err), storagetypes.ErrImageUnknown) {
 				// Ignore only if ErrImageUnknown
 				// Reason: Image is already unmounted do nothing
 				continue
