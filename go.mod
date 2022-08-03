@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
-	github.com/containers/buildah v1.26.3
+	github.com/containers/buildah v1.26.4
 	github.com/containers/common v0.49.1
 	github.com/containers/image/v5 v5.22.0
 	github.com/containers/storage v1.42.0
