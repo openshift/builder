@@ -615,8 +615,8 @@ func inspectDaemonlessImage(sc types.SystemContext, store storage.Store, name st
 
 	ref, img, err := util.FindImage(store, "", &systemContext, name)
 	if err != nil {
-		switch errors.Cause(err) {
-		case storage.ErrImageUnknown, docker.ErrNoSuchImage:
+		switch {
+		case errors.Is(errors.Cause(err), storage.ErrImageUnknown), errors.Is(errors.Cause(err), docker.ErrNoSuchImage):
 			log.V(2).Infof("Local copy of %q is not present.", name)
 			return nil, docker.ErrNoSuchImage
 		}

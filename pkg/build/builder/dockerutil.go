@@ -38,11 +38,11 @@ type DockerClient interface {
 }
 
 func unwrapUnauthorizedError(err error) error {
-	cause := errors.Cause(err)
-	if _, ok := cause.(idocker.ErrUnauthorizedForCredentials); ok {
+	var unauthorized idocker.ErrUnauthorizedForCredentials
+	if errors.As(errors.Cause(err), &unauthorized) {
 		// strip off wrappers that mainly add the image name as their added context,
 		// which just duplicates information that we're already logging
-		return cause
+		return unauthorized
 	}
 	return err
 }
@@ -59,11 +59,13 @@ func retryImageAction(actionName string, action func() error) error {
 		time.Sleep(DefaultPushOrPullRetryDelay)
 	}
 
-	if errs, ok := errors.Cause(err).(errcode.Errors); ok {
+	var errs errcode.Errors
+	if errors.As(errors.Cause(err), &errs) {
 		// if this error is a group of errors, process them all in turn
 		var unwrap bool
 		for i := range errs {
-			if registryError, ok := errs[i].(errcode.Error); ok {
+			var registryError errcode.Error
+			if errors.As(errs[i], &registryError) {
 				if registryError.Code == errcode.ErrorCodeUnauthorized {
 					// remove any Wrapf() wrapping, since we're
 					// already going to be providing context when we
