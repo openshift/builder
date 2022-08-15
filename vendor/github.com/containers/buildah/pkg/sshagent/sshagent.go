@@ -1,16 +1,17 @@
 package sshagent
 
 import (
+	"errors"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/opencontainers/selinux/go-selinux"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -40,7 +41,7 @@ func newAgentServerKeyring(keys []interface{}) (*AgentServer, error) {
 	a := agent.NewKeyring()
 	for _, k := range keys {
 		if err := a.Add(agent.AddedKey{PrivateKey: k}); err != nil {
-			return nil, errors.Wrap(err, "failed to create ssh agent")
+			return nil, fmt.Errorf("failed to create ssh agent: %w", err)
 		}
 	}
 	return &AgentServer{
@@ -67,11 +68,18 @@ func newAgentServerSocket(socketPath string) (*AgentServer, error) {
 
 // Serve starts the SSH agent on the host and returns the path of the socket where the agent is serving
 func (a *AgentServer) Serve(processLabel string) (string, error) {
+	// Calls to `selinux.SetSocketLabel` should be wrapped in
+	// runtime.LockOSThread()/runtime.UnlockOSThread() until
+	// the the socket is created to guarantee another goroutine
+	// does not migrate to the current thread before execution
+	// is complete.
+	// Ref: https://github.com/opencontainers/selinux/blob/main/go-selinux/selinux.go#L158
+	runtime.LockOSThread()
 	err := selinux.SetSocketLabel(processLabel)
 	if err != nil {
 		return "", err
 	}
-	serveDir, err := ioutil.TempDir("", ".buildah-ssh-sock")
+	serveDir, err := os.MkdirTemp("", ".buildah-ssh-sock")
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +90,12 @@ func (a *AgentServer) Serve(processLabel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Reset socket label.
 	err = selinux.SetSocketLabel("")
+	// Unlock the thread only if the process label could be restored
+	// successfully.  Otherwise leave the thread locked and the Go runtime
+	// will terminate it once it returns to the threads pool.
+	runtime.UnlockOSThread()
 	if err != nil {
 		return "", err
 	}
@@ -209,14 +222,14 @@ func NewSource(paths []string) (*Source, error) {
 		if err != nil {
 			return nil, err
 		}
-		dt, err := ioutil.ReadAll(&io.LimitedReader{R: f, N: 100 * 1024})
+		dt, err := io.ReadAll(&io.LimitedReader{R: f, N: 100 * 1024})
 		if err != nil {
 			return nil, err
 		}
 
 		k, err := ssh.ParseRawPrivateKey(dt)
 		if err != nil {
-			return nil, errors.Wrapf(err, "cannot parse ssh key")
+			return nil, fmt.Errorf("cannot parse ssh key: %w", err)
 		}
 		keys = append(keys, k)
 	}

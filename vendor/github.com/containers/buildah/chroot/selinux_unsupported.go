@@ -1,10 +1,12 @@
-// +build !linux
+//go:build !linux && !freebsd
+// +build !linux,!freebsd
 
 package chroot
 
 import (
+	"errors"
+
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 func setSelinuxLabel(spec *specs.Spec) error {
