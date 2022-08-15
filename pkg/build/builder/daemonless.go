@@ -6,6 +6,7 @@ package builder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -25,7 +26,6 @@ import (
 	"github.com/containers/storage/pkg/archive"
 	docker "github.com/fsouza/go-dockerclient"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -616,7 +616,7 @@ func inspectDaemonlessImage(sc types.SystemContext, store storage.Store, name st
 	ref, img, err := util.FindImage(store, "", &systemContext, name)
 	if err != nil {
 		switch {
-		case errors.Is(errors.Cause(err), storage.ErrImageUnknown), errors.Is(errors.Cause(err), docker.ErrNoSuchImage):
+		case errors.Is(err, storage.ErrImageUnknown), errors.Is(err, docker.ErrNoSuchImage):
 			log.V(2).Infof("Local copy of %q is not present.", name)
 			return nil, docker.ErrNoSuchImage
 		}
@@ -773,7 +773,7 @@ func GetDaemonlessClient(systemContext types.SystemContext, store storage.Store,
 		isolation = buildah.IsolationChroot
 	default:
 		log.V(0).Infof("Unrecognized isolation type %q.", isolationSpec)
-		return nil, errors.Errorf("Unrecognized isolation type %q.", isolationSpec)
+		return nil, fmt.Errorf("Unrecognized isolation type %q.", isolationSpec)
 	}
 
 	return &DaemonlessClient{
@@ -806,7 +806,7 @@ func (d *DaemonlessClient) RemoveImage(name string) error {
 func (d *DaemonlessClient) RemoveContainer(opts docker.RemoveContainerOptions) error {
 	builder, ok := d.builders[opts.ID]
 	if !ok {
-		return errors.Errorf("no such container as %q", opts.ID)
+		return fmt.Errorf("no such container as %q", opts.ID)
 	}
 	name := builder.Container
 	id := builder.ContainerID
