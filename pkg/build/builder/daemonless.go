@@ -324,6 +324,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		DropCapabilities:        dropCapabilities(),
 		MaxPullPushRetries:      DefaultPushOrPullRetryCount,
 		PullPushRetryDelay:      DefaultPushOrPullRetryDelay,
+		SkipUnusedStages:        types.OptionalBoolFalse,
 	}
 
 	if os.Getenv("BUILDAH_QUIET") == "true" {
