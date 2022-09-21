@@ -2,6 +2,29 @@
 
 # Changelog
 
+## v1.24.6 (2022-09-20)
+
+    run: add container gid to additional groups
+
+## v1.24.5 (2022-07-14)
+
+    Bump github.com/containers/storage to v1.38.5
+    drop commas from changelog dates because `rpmspec -q` doesn't like them
+
+## v1.24.4 (2022-05-11)
+
+    Bump golang.org/x/crypto to 7b82a4e (GHSA-8c26-wmh5-6g9v - CVE-2022-27191)
+    Bump c/image to v5.19.3 and c/ocicrypt to v1.1.4
+
+## v1.24.3 (2022-03-01)
+
+    vendor: bump c/common to 0.47.5
+    Add a test for CVE-2022-27651
+    do not set the inheritable capabilities
+    Bump github.com/prometheus/client_golang to v1.11.1
+    vendor: bump c/image to v5.19.2
+    vendor: bump c/storage to v1.38.3
+
 ## v1.24.2 (2022-02-16)
 
     Increase subuid/subgid to 65535
