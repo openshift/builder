@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
 	github.com/Microsoft/hcsshim v0.9.1 // indirect
-	github.com/containers/buildah v1.22.4
+	github.com/containers/buildah v1.22.5
 	github.com/containers/common v0.42.1
 	github.com/containers/image/v5 v5.16.1
 	github.com/containers/storage v1.37.1-0.20211108123020-ee6db3140c1c
