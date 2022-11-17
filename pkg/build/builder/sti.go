@@ -483,10 +483,10 @@ func (s *S2IBuilder) pushImage(name string, authConfig dockerclient.AuthConfigur
 // images produced by build. It transforms the output from buildInfo into the
 // input format expected by s2iapi.Config.Environment.
 // Note that using a map has at least two downsides:
-// 1. The order of metadata KeyValue pairs is lost;
-// 2. In case of repeated Keys, the last Value takes precedence right here,
-//    instead of deferring what to do with repeated environment variables to the
-//    Docker runtime.
+//  1. The order of metadata KeyValue pairs is lost;
+//  2. In case of repeated Keys, the last Value takes precedence right here,
+//     instead of deferring what to do with repeated environment variables to the
+//     Docker runtime.
 func buildEnvVars(build *buildapiv1.Build, sourceInfo *git.SourceInfo) s2iapi.EnvironmentList {
 	bi := buildInfo(build, sourceInfo)
 	envVars := &s2iapi.EnvironmentList{}
