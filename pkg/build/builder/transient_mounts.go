@@ -14,7 +14,7 @@ type TransientMountOptions struct {
 	ReadOnly *bool
 }
 
-//TransientMount is a structure to hold the data needed to construct a transient mount
+// TransientMount is a structure to hold the data needed to construct a transient mount
 type TransientMount struct {
 	Source      string
 	Destination string
