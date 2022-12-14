@@ -184,8 +184,8 @@ func ReadDockerConfigJsonFileGeneratedFromSecret(path []string) (cfg credentialp
 	return nil, err
 }
 
-//getExtraSearchPaths get extra paths that may contain docker-config type files.
-//this invocation we do not need to handle user.Current() since upstream k8s have handled HOME path
+// getExtraSearchPaths get extra paths that may contain docker-config type files.
+// this invocation we do not need to handle user.Current() since upstream k8s have handled HOME path
 func getExtraSearchPaths() (searchPaths []string) {
 	if dockerCfgPath := os.Getenv("DOCKERCFG_PATH"); dockerCfgPath != "" {
 		dockerCfgDir := filepath.Dir(dockerCfgPath)
