@@ -71,6 +71,7 @@ ENTRYPOINT /bin/sh
 CMD ["-c", "env"]
 USER 1001
 WORKDIR /home
+HEALTHCHECK --interval=60s --timeout=10s CMD ["/usr/bin/true"]
 `,
 			want: `FROM busybox:latest
 MAINTAINER nobody@example.com
@@ -90,6 +91,7 @@ ENTRYPOINT /bin/sh
 CMD ["-c","env"]
 USER 1001
 WORKDIR /home
+HEALTHCHECK --interval=60s --timeout=10s CMD ["/usr/bin/true"]
 `,
 		},
 	}
