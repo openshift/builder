@@ -40,7 +40,7 @@ func Write(node *parser.Node) []byte {
 				buf.Write(Write(node.Next.Children[0]))
 			}
 			return buf.Bytes()
-		case command.Env, command.Label:
+		case command.Env, command.Label, command.Healthcheck:
 			buf.Reset()
 			buf.Write([]byte(node.Original + "\n"))
 			return buf.Bytes()
