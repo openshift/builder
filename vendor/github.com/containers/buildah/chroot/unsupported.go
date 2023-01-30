@@ -1,15 +1,16 @@
-// +build !linux
+//go:build !linux && !freebsd
+// +build !linux,!freebsd
 
 package chroot
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 // RunUsingChroot is not supported.
-func RunUsingChroot(spec *specs.Spec, bundlePath string, stdin io.Reader, stdout, stderr io.Writer) (err error) {
-	return errors.Errorf("--isolation chroot is not supported on this platform")
+func RunUsingChroot(spec *specs.Spec, bundlePath, homeDir string, stdin io.Reader, stdout, stderr io.Writer) (err error) {
+	return fmt.Errorf("--isolation chroot is not supported on this platform")
 }

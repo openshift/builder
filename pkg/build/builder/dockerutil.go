@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -12,7 +13,6 @@ import (
 	idocker "github.com/containers/image/v5/docker"
 	"github.com/docker/distribution/registry/api/errcode"
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/pkg/errors"
 
 	"github.com/openshift/builder/pkg/build/builder/cmd/dockercfg"
 )
@@ -37,16 +37,6 @@ type DockerClient interface {
 	TagImage(name string, opts docker.TagImageOptions) error
 }
 
-func unwrapUnauthorizedError(err error) error {
-	var unauthorized idocker.ErrUnauthorizedForCredentials
-	if errors.As(errors.Cause(err), &unauthorized) {
-		// strip off wrappers that mainly add the image name as their added context,
-		// which just duplicates information that we're already logging
-		return unauthorized
-	}
-	return err
-}
-
 func retryImageAction(actionName string, action func() error) error {
 	var err error
 
@@ -60,26 +50,23 @@ func retryImageAction(actionName string, action func() error) error {
 	}
 
 	var errs errcode.Errors
-	if errors.As(errors.Cause(err), &errs) {
+	var unauthorized idocker.ErrUnauthorizedForCredentials
+	if errors.As(err, &errs) {
 		// if this error is a group of errors, process them all in turn
-		var unwrap bool
 		for i := range errs {
-			var registryError errcode.Error
-			if errors.As(errs[i], &registryError) {
-				if registryError.Code == errcode.ErrorCodeUnauthorized {
-					// remove any Wrapf() wrapping, since we're
-					// already going to be providing context when we
-					// print the error
-					unwrap = true
-				}
+			if errors.As(errs[i], &unauthorized) {
+				// this is the error we actually care about
+				err = errs[i]
+				break
 			}
 		}
-		if unwrap {
-			err = errors.Cause(err)
-		}
 	}
-
-	err = unwrapUnauthorizedError(err)
+	// unwrap the error if it's an "unauthorized" error -- those wrappers
+	// mainly add the image name as their added context, which just
+	// duplicates information that we're already supplying ourselves
+	if errors.As(err, &unauthorized) {
+		err = unauthorized.Err
+	}
 
 	return fmt.Errorf("After retrying %d times, %s image still failed due to error: %v", DefaultPushOrPullRetryCount, actionName, err)
 }

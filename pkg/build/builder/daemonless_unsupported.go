@@ -5,11 +5,11 @@ package builder
 
 import (
 	"context"
+	"errors"
 
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	docker "github.com/fsouza/go-dockerclient"
-	"github.com/pkg/errors"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
 )
