@@ -35,6 +35,9 @@ $ oc patch clusterversion/version --patch '{"spec":{"overrides":[{"group":"v1", 
 ```
 
 2. Make your code changes and build the binary with `make build`.
+> While running `make build` if you come across any error something like
+` OS_GIT_MAJOR: unbound variable`, make sure that you have pulled all the tags from the [openshift/builder](https://github.com/openshift/builder) repo.
+ You can use `git fetch upstream --tags` to pull all the tags.
 3. Build the image using the `Dockerfile-dev` file, giving it a unique tag:
 
 ```
@@ -54,10 +57,9 @@ $ buildah bud -t <MYREPO>/<MYIMAGE>:<MYTAG> -f Dockerfile.dev .
 $ oc patch configmap openshift-controller-manager-images -n openshift-controller-manager-operator --patch '{"data":{"builderImage":"<MYREPO>/<MYIMAGE>:<MYTAG>"}}' --type=merge
 ```
 
-6. Watch the openshift controller manager daemonset rollout (this can take a few minutes):
-
+6. Watch the openshift controller manager deployment rollout (this can take a few minutes):
 ```
-$ oc get ds controller-manager -n openshift-controller-manager -w
+$ oc get deployment controller-manager -n openshift-controller-manager -w
 ```
 
 7. Trigger an OpenShift build via `oc start-build`. You can use one of the templates suggested in `oc new-app` to populate your project with a build.
