@@ -166,3 +166,49 @@ func NameForBuildVolume(objName string) string {
 func PathForBuildVolume(objName string) string {
 	return filepath.Join(buildVolumeMountPath, NameForBuildVolume(objName))
 }
+
+// normalizeRegistryLocation munges a registry location that's mistakenly been
+// provided in the old http/https URL format, which containers/image now
+// rejects, into a proper location prefix.  Locations which don't look like
+// http: or https: URLs are returned unmodified.
+//
+// URL path components are preserved, which is a change from how this would
+// have worked in earlier 4.x, but brings behavior closer to how pushing
+// credentials are handled (and how this worked in 3.x): those credentials are
+// selected by matching the registry name using filename-style matching of the
+// host name component, and by checking if the path component is a string (not
+// path) prefix of the repository that the image will be pushed to, as is
+// typical for Kubernetes.
+//
+// The callers of this function are using its result to supply credentials to
+// containers/image to select from while pulling an image.
+// containers/image doesn't implement the wildcard or string-prefix matching
+// logic when it's deciding which of the credentials it's been passed should be
+// used, and in older versions which accepted http: and https: URLS, it ignored
+// the path component, so in addition to letting the builder accept them again,
+// this allows path components in URLs to be matched using container/image
+// rules (i.e., no wildcard and prefix matching).
+//
+// An alternate approach would have been to populate a
+// k8s.io/kubernetes/pkg/credentialprovider.BasicDockerKeyring with all of the
+// secrets we know, pass the name of every image we'll pull to its Lookup()
+// method, and pass the image library the returned credential for each image's
+// location.  The challenge of predicting which images will be pulled along
+// every code path, and factoring in search registries, made this approach more
+// attractive.
+func normalizeRegistryLocation(location string) string {
+	if !strings.HasPrefix(location, "http://") && !strings.HasPrefix(location, "https://") {
+		return location
+	}
+	cleaned := strings.Split(strings.TrimPrefix(strings.TrimPrefix(location, "http://"), "https://"), "/")
+	switch cleaned[0] {
+	case "index.docker.io", "registry-1.docker.io":
+		cleaned[0] = "docker.io"
+	}
+	if len(cleaned) > 1 {
+		if cleaned[1] == "v1" || cleaned[1] == "v2" {
+			cleaned = append(cleaned[:1], cleaned[2:]...)
+		}
+	}
+	return strings.TrimSuffix(strings.Join(cleaned, "/"), "/")
+}

@@ -460,10 +460,6 @@ func (s *S2IBuilder) pullImage(name string, searchPaths []string) error {
 	})
 }
 
-func (s *S2IBuilder) buildImage(optimization buildapiv1.ImageOptimizationPolicy, opts dockerclient.BuildImageOptions) error {
-	return s.dockerClient.BuildImage(opts)
-}
-
 func (s *S2IBuilder) pushImage(name string, authConfig dockerclient.AuthConfiguration) (string, error) {
 	repository, tag := dockerclient.ParseRepositoryTag(name)
 	options := dockerclient.PushImageOptions{

@@ -112,30 +112,30 @@ func mergeNodeCredentials(credsPath string) *credentialprovider.DockerConfigJSON
 	if err != nil {
 		log.V(2).Infof("proceeding without build pull credentials: %v", err)
 	}
-	if nodeCreds == nil || len(nodeCreds) == 0 {
-		return &credentialprovider.DockerConfigJSON{
-			Auths: pullCreds,
-		}
-	}
-	if pullCreds == nil || len(pullCreds) == 0 {
-		return &credentialprovider.DockerConfigJSON{
-			Auths: nodeCreds,
-		}
-	}
 
-	credConfigs := pullCreds
-	if credConfigs == nil {
-		credConfigs = credentialprovider.DockerConfig{}
-	}
-
-	for regurl, cfg := range nodeCreds {
-		if _, ok := pullCreds[regurl]; !ok {
-			pullCreds[regurl] = cfg
+	credConfigs := credentialprovider.DockerConfig{}
+	if pullCreds != nil {
+		for regurl, cfg := range pullCreds {
+			regurl = normalizeRegistryLocation(regurl)
+			if _, ok := credConfigs[regurl]; !ok {
+				credConfigs[regurl] = cfg
+			}
 		}
+	}
+	if nodeCreds != nil {
+		for regurl, cfg := range nodeCreds {
+			regurl = normalizeRegistryLocation(regurl)
+			if _, ok := credConfigs[regurl]; !ok {
+				credConfigs[regurl] = cfg
+			}
+		}
+	}
+	if len(credConfigs) == 0 && pullCreds == nil {
+		credConfigs = nil
 	}
 
 	return &credentialprovider.DockerConfigJSON{
-		Auths: pullCreds,
+		Auths: credConfigs,
 	}
 }
 
@@ -149,22 +149,26 @@ func mergeNodeCredentialsDockerAuth(credsPath string) *docker.AuthConfigurations
 		log.V(5).Infof("proceeding without build pull credentials: %v", err)
 	}
 
-	if nodeCreds == nil || len(nodeCreds.Configs) == 0 {
-		return pullCreds
-	}
-	if pullCreds == nil || len(pullCreds.Configs) == 0 {
-		return nodeCreds
-	}
-
-	credConfigs := pullCreds.Configs
-	if credConfigs == nil {
-		credConfigs = make(map[string]docker.AuthConfiguration)
-	}
-	for registryURL, cfg := range nodeCreds.Configs {
-		if _, ok := credConfigs[registryURL]; !ok {
-			credConfigs[registryURL] = cfg
+	credConfigs := make(map[string]docker.AuthConfiguration)
+	if pullCreds != nil && pullCreds.Configs != nil {
+		for registryURL, cfg := range pullCreds.Configs {
+			location := normalizeRegistryLocation(registryURL)
+			cfg.ServerAddress = normalizeRegistryLocation(cfg.ServerAddress)
+			if _, ok := credConfigs[location]; !ok {
+				credConfigs[location] = cfg
+			}
 		}
 	}
+	if nodeCreds != nil && nodeCreds.Configs != nil {
+		for registryURL, cfg := range nodeCreds.Configs {
+			location := normalizeRegistryLocation(registryURL)
+			cfg.ServerAddress = normalizeRegistryLocation(cfg.ServerAddress)
+			if _, ok := credConfigs[location]; !ok {
+				credConfigs[location] = cfg
+			}
+		}
+	}
+
 	return &docker.AuthConfigurations{
 		Configs: credConfigs,
 	}
@@ -278,8 +282,10 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
 			return err
 		}
-		if err := config.SetAuthentication(&systemContext, ac.ServerAddress, ac.Username, ac.Password); err != nil {
-			return err
+		if normalizedServerAddress := normalizeRegistryLocation(ac.ServerAddress); normalizedServerAddress != registry {
+			if err := config.SetAuthentication(&systemContext, normalizedServerAddress, ac.Username, ac.Password); err != nil {
+				return err
+			}
 		}
 	}
 

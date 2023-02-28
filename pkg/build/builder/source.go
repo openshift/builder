@@ -421,12 +421,15 @@ func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, stor
 	systemContext.AuthFilePath = "/tmp/config.json"
 
 	for registry, ac := range auths.Configs {
-		log.V(5).Infof("Setting authentication for registry %q using %q.", registry, ac.ServerAddress)
+		normalizedRegistry := normalizeRegistryLocation(registry)
+		log.V(5).Infof("Setting authentication for registry %q (originally %q) at %q.", normalizedRegistry, registry, ac.ServerAddress)
 		if err := config.SetAuthentication(&systemContext, registry, ac.Username, ac.Password); err != nil {
 			return err
 		}
-		if err := config.SetAuthentication(&systemContext, ac.ServerAddress, ac.Username, ac.Password); err != nil {
-			return err
+		if normalizedServerAddress := normalizeRegistryLocation(ac.ServerAddress); normalizedServerAddress != normalizedRegistry {
+			if err := config.SetAuthentication(&systemContext, normalizedServerAddress, ac.Username, ac.Password); err != nil {
+				return err
+			}
 		}
 	}
 
