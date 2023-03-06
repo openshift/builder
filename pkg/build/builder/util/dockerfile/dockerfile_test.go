@@ -308,6 +308,13 @@ COPY . /boot
 FROM centos:7`,
 			want: []string{"scratch", "centos:7"},
 		},
+		"multiple FROM with ARGS": {
+			in: `ARG CENTOS_VERSION=7
+FROM scratch
+COPY . /boot
+FROM centos:${CENTOS_VERSION}`,
+			want: []string{"scratch", "centos:${CENTOS_VERSION}"},
+		},
 	}
 	for name, tc := range testCases {
 		node, err := Parse(strings.NewReader(tc.in))
@@ -326,6 +333,58 @@ FROM centos:7`,
 func TestBaseImagesNilNode(t *testing.T) {
 	if got := baseImages(nil); got != nil {
 		t.Errorf("baseImages(nil) = %#v; want nil", got)
+	}
+}
+
+// TestHeaderArgs tests finding arguments in the header part of a Dockerfile,
+// i.e. before the first FROM instruction, which may be referenced by one or
+// more FROM instructions after the header.
+func TestHeaderArgs(t *testing.T) {
+	testCases := map[string]struct {
+		in   string
+		want []string
+	}{
+		"empty Dockerfile": {
+			in:   ``,
+			want: nil,
+		},
+		"FROM missing argument": {
+			in:   `FROM`,
+			want: nil,
+		},
+		"single FROM": {
+			in:   `FROM centos:7`,
+			want: nil,
+		},
+		"multiple FROM": {
+			in: `FROM scratch
+COPY . /boot
+FROM centos:7`,
+			want: nil,
+		},
+		"multiple FROM with ARGS": {
+			in: `ARG CENTOS_VERSION=7
+ARG UNSET SET=set
+ARG SCRATCH=scratch
+arg lowercase=lowered
+FROM ${SCRATCH}
+ARG IGNORE_ME=ignored
+ARG alsoIgnoreMe=ignored
+COPY . /boot
+FROM centos:${CENTOS_VERSION}`,
+			want: []string{"CENTOS_VERSION=7", "UNSET", "SET=set", "SCRATCH=scratch", "lowercase=lowered"},
+		},
+	}
+	for name, tc := range testCases {
+		node, err := Parse(strings.NewReader(tc.in))
+		if err != nil {
+			t.Errorf("%s: parse error: %v", name, err)
+			continue
+		}
+		got := HeaderArgs(node)
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("HeaderArgs: %s: got %#v; want %#v", name, got, tc.want)
+		}
 	}
 }
 

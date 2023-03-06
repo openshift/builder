@@ -637,6 +637,24 @@ func Test_findReferencedImages(t *testing.T) {
 				Images: []string{"other", "scratch", "test"},
 			},
 		},
+		{
+			original: heredoc.Doc(`
+				ARG headerArg=h
+				FROM other:${headerArg} AS alias
+				ARG middleArg=h
+				COPY --from=testImage /a /b
+				FROM alias as testStage
+				COPY --from=testImage /a /b
+				FROM other:${unsetArg}
+				COPY --from=testStage /a /b
+				FROM other:${headerArg}
+				COPY --from=3 /a /b
+				COPY --from=2 /a /b
+				`),
+			want: want{
+				Images: []string{"3", "other:", "other:h", "testImage"},
+			},
+		},
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {

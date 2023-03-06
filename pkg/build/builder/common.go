@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -487,12 +488,10 @@ func replaceImagesFromSource(node *parser.Node, imageSources []buildapiv1.ImageS
 				}
 				names[stage.Name] = image
 			case child.Value == dockercmd.Copy:
-				if ref, ok := nodeHasFromRef(child); ok {
-					if len(ref) > 0 {
-						if _, ok := names[ref]; !ok {
-							if replacement, ok := replacements[ref]; ok {
-								nodeReplaceFromRef(child, replacement)
-							}
+				if ref, ok := nodeHasFromRef(child); ok && len(ref) > 0 {
+					if _, ok := names[ref]; !ok {
+						if replacement, ok := replacements[ref]; ok {
+							nodeReplaceFromRef(child, replacement)
 						}
 					}
 				}
@@ -511,9 +510,15 @@ func findReferencedImages(dockerfilePath string, buildArgs []corev1.EnvVar) ([]s
 	if err != nil {
 		return nil, err
 	}
-	names := make(map[string]string)
 	images := sets.NewString()
+	headerArgs := dockerfile.HeaderArgs(node)
 	buildArgMap := make(map[string]string)
+	for _, arg := range headerArgs {
+		kv := strings.SplitN(arg, "=", 2)
+		if len(kv) == 2 {
+			buildArgMap[kv[0]] = kv[1]
+		}
+	}
 	for _, ba := range buildArgs {
 		buildArgMap[ba.Name] = ba.Value
 	}
@@ -521,25 +526,38 @@ func findReferencedImages(dockerfilePath string, buildArgs []corev1.EnvVar) ([]s
 	if err != nil {
 		return nil, err
 	}
-	for _, stage := range stages {
+	var argsSlice []string
+	for k, v := range buildArgMap {
+		argsSlice = append(argsSlice, fmt.Sprintf("%s=%s", k, v))
+	}
+	knownAliases := make(map[string]struct{})
+	for nthStage, stage := range stages {
 		for _, child := range stage.Node.Children {
 			switch {
 			case child.Value == dockercmd.From && child.Next != nil:
-				image := child.Next.Value
-				names[stage.Name] = image
-				if _, ok := names[image]; !ok {
+				image, err := imagebuilder.ProcessWord(child.Next.Value, argsSlice)
+				if err != nil {
+					return nil, err
+				}
+				if _, alias := knownAliases[image]; !alias {
 					images.Insert(image)
 				}
+				if child.Next != nil && child.Next.Next != nil && strings.ToUpper(child.Next.Next.Value) == "AS" && child.Next.Next.Next != nil {
+					knownAliases[child.Next.Next.Next.Value] = struct{}{}
+				}
 			case child.Value == dockercmd.Copy:
-				if ref, ok := nodeHasFromRef(child); ok {
-					if len(ref) > 0 {
-						if _, ok := names[ref]; !ok {
-							images.Insert(ref)
-						}
+				if ref, ok := nodeHasFromRef(child); ok && len(ref) > 0 {
+					image, err := imagebuilder.ProcessWord(ref, argsSlice)
+					if err != nil {
+						return nil, err
+					}
+					if _, alias := knownAliases[image]; !alias {
+						images.Insert(image)
 					}
 				}
 			}
 		}
+		knownAliases[strconv.Itoa(nthStage)] = struct{}{}
 	}
 	return images.List(), nil
 }
