@@ -17,7 +17,7 @@ build-image: ## Build the images and push them to the remote registry. Example: 
 .PHONY: build-image
 
 build-devel-image: build
-	${CONTAINER_ENGINE} build -t "$(IMAGE):$(TAG)" -f Dockerfile-dev .
+	${CONTAINER_ENGINE} build -t "$(IMAGE):$(TAG)" -f Dockerfile.dev .
 .PHONY: build-devel-image
 
 test: ## Run unit tests. Example: make test
