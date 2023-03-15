@@ -36,7 +36,7 @@ verify: verify-gofmt verify-imports ## Run verifications. Example: make verify
 .PHONY: verify
 
 imports: ## Organize imports in go files using openshift-goimports. Example: make imports
-	go run ./vendor/github.com/openshift-eng/openshift-goimports/ -m github.com/openshift/builder
+	go run ./vendor/github.com/go-imports-organizer/goio
 .PHONY: imports
 
 vendor: ## Vendor Go dependencies. Example: make vendor
