@@ -14,7 +14,6 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/opencontainers/runc v1.1.4
 	github.com/opencontainers/runtime-spec v1.0.3-0.20220825212826-86290f6a00fb
-	github.com/openshift-eng/openshift-goimports v0.0.0-20220205181405-f887d6f89f13
 	github.com/openshift/api v0.0.0-20230201213816-61d971884921
 	github.com/openshift/client-go v0.0.0-20230120202327-72f107311084
 	github.com/openshift/imagebuilder v1.2.4-0.20220711175835-4151e43600df
@@ -81,7 +80,6 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jinzhu/copier v0.3.5 // indirect
@@ -90,13 +88,11 @@ require (
 	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/klauspost/pgzip v1.2.6-0.20220930104621-17e8dac29df8 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
-	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/mattn/go-shellwords v1.0.12 // indirect
 	github.com/miekg/pkcs11 v1.1.1 // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/spdystream v0.2.0 // indirect
@@ -112,7 +108,6 @@ require (
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221014010322-58c91d646d86 // indirect
 	github.com/opencontainers/selinux v1.10.2 // indirect
 	github.com/ostreedev/ostree-go v0.0.0-20210805093236-719684c64e4f // indirect
-	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/profile v1.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -120,13 +115,8 @@ require (
 	github.com/rivo/uniseg v0.4.3 // indirect
 	github.com/seccomp/libseccomp-golang v0.10.0 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
-	github.com/spf13/afero v1.8.2 // indirect
-	github.com/spf13/cast v1.5.0 // indirect
-	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/spf13/viper v1.13.0 // indirect
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20201008174630-78d3cae3a980 // indirect
 	github.com/stretchr/testify v1.8.1
-	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/sylabs/sif/v2 v2.9.0 // indirect
 	github.com/tchap/go-patricia v2.3.0+incompatible // indirect
 	github.com/ulikunitz/xz v0.5.11 // indirect
@@ -143,7 +133,7 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
-	golang.org/x/mod v0.7.0 // indirect
+	golang.org/x/mod v0.9.0 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/oauth2 v0.4.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
@@ -155,7 +145,6 @@ require (
 	google.golang.org/grpc v1.51.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
@@ -169,6 +158,8 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+require github.com/go-imports-organizer/goio v1.3.2
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
@@ -192,11 +183,11 @@ require (
 	github.com/mistifyio/go-zfs/v3 v3.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/prometheus/client_golang v1.14.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
+	github.com/rogpeppe/go-internal v1.6.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sigstore/fulcio v1.0.0 // indirect
 	github.com/sigstore/rekor v1.0.1 // indirect
