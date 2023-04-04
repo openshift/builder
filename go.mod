@@ -12,7 +12,7 @@ require (
 	github.com/fsouza/go-dockerclient v1.9.3
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/opencontainers/runc v1.1.4
+	github.com/opencontainers/runc v1.1.5
 	github.com/opencontainers/runtime-spec v1.0.3-0.20220825212826-86290f6a00fb
 	github.com/openshift/api v0.0.0-20230201213816-61d971884921
 	github.com/openshift/client-go v0.0.0-20230120202327-72f107311084
