@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/containers/buildah v1.29.0
-	github.com/containers/common v0.51.0
+	github.com/containers/common v0.51.2
 	github.com/containers/image/v5 v5.24.0
 	github.com/containers/storage v1.45.3
 	github.com/docker/distribution v2.8.1+incompatible
