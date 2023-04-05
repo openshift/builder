@@ -63,6 +63,23 @@ func TestMergeNodeCredentials(t *testing.T) {
 			},
 		},
 		{
+			name:      "merge namespace with node credentials (url)",
+			nsCreds:   "testdata/credentials-https-quayio-user0.json",
+			nodeCreds: "testdata/credentials-http-redhatio-nodeuser.json",
+			expected: map[string]credentialprovider.DockerConfigEntry{
+				"quay.io": {
+					Username: "user0",
+					Password: "pass0",
+					Email:    "user0@redhat.com",
+				},
+				"registry.redhat.io": {
+					Username: "nodeuser",
+					Password: "nodepass",
+					Email:    "nodeuser@redhat.com",
+				},
+			},
+		},
+		{
 			name:      "overwriting node credentials",
 			nodeCreds: "testdata/credentials-redhatio-nodeuser.json",
 			nsCreds:   "testdata/credentials-redhatio-nsuser.json",
@@ -75,8 +92,56 @@ func TestMergeNodeCredentials(t *testing.T) {
 			},
 		},
 		{
+			name:      "overwriting node credentials (url 1)",
+			nodeCreds: "testdata/credentials-redhatio-nodeuser.json",
+			nsCreds:   "testdata/credentials-https-redhatio-nsuser.json",
+			expected: map[string]credentialprovider.DockerConfigEntry{
+				"registry.redhat.io": {
+					Username: "nsuser",
+					Password: "nspass",
+					Email:    "nsuser@redhat.com",
+				},
+			},
+		},
+		{
+			name:      "overwriting node credentials (url 2)",
+			nodeCreds: "testdata/credentials-http-redhatio-nodeuser.json",
+			nsCreds:   "testdata/credentials-redhatio-nsuser.json",
+			expected: map[string]credentialprovider.DockerConfigEntry{
+				"registry.redhat.io": {
+					Username: "nsuser",
+					Password: "nspass",
+					Email:    "nsuser@redhat.com",
+				},
+			},
+		},
+		{
+			name:      "overwriting node credentials (url 3)",
+			nodeCreds: "testdata/credentials-http-redhatio-nodeuser.json",
+			nsCreds:   "testdata/credentials-https-redhatio-nsuser.json",
+			expected: map[string]credentialprovider.DockerConfigEntry{
+				"registry.redhat.io": {
+					Username: "nsuser",
+					Password: "nspass",
+					Email:    "nsuser@redhat.com",
+				},
+			},
+		},
+		{
 			name:      "invalid node credentials",
 			nsCreds:   "testdata/credentials-quayio-user0.json",
+			nodeCreds: "testdata/empty.txt",
+			expected: map[string]credentialprovider.DockerConfigEntry{
+				"quay.io": {
+					Username: "user0",
+					Password: "pass0",
+					Email:    "user0@redhat.com",
+				},
+			},
+		},
+		{
+			name:      "invalid node credentials (url)",
+			nsCreds:   "testdata/credentials-https-quayio-user0.json",
 			nodeCreds: "testdata/empty.txt",
 			expected: map[string]credentialprovider.DockerConfigEntry{
 				"quay.io": {
@@ -135,9 +200,59 @@ func TestMergeNodeCredentialsDockerAuth(t *testing.T) {
 			},
 		},
 		{
+			name:    "valid namespace credentials (url)",
+			nsCreds: "testdata/credentials-https-quayio-user0.json",
+			expected: map[string]docker.AuthConfiguration{
+				"quay.io": {
+					Username:      "user0",
+					Password:      "pass0",
+					Email:         "user0@redhat.com",
+					ServerAddress: "quay.io",
+				},
+			},
+		},
+		{
 			name:      "merge namespace with node credentials",
 			nsCreds:   "testdata/credentials-quayio-user0.json",
 			nodeCreds: "testdata/credentials-redhatio-nodeuser.json",
+			expected: map[string]docker.AuthConfiguration{
+				"quay.io": {
+					Username:      "user0",
+					Password:      "pass0",
+					Email:         "user0@redhat.com",
+					ServerAddress: "quay.io",
+				},
+				"registry.redhat.io": {
+					Username:      "nodeuser",
+					Password:      "nodepass",
+					Email:         "nodeuser@redhat.com",
+					ServerAddress: "registry.redhat.io",
+				},
+			},
+		},
+		{
+			name:      "merge namespace with node credentials (url 1)",
+			nsCreds:   "testdata/credentials-https-quayio-user0.json",
+			nodeCreds: "testdata/credentials-redhatio-nodeuser.json",
+			expected: map[string]docker.AuthConfiguration{
+				"quay.io": {
+					Username:      "user0",
+					Password:      "pass0",
+					Email:         "user0@redhat.com",
+					ServerAddress: "quay.io",
+				},
+				"registry.redhat.io": {
+					Username:      "nodeuser",
+					Password:      "nodepass",
+					Email:         "nodeuser@redhat.com",
+					ServerAddress: "registry.redhat.io",
+				},
+			},
+		},
+		{
+			name:      "merge namespace with node credentials (url 2)",
+			nsCreds:   "testdata/credentials-quayio-user0.json",
+			nodeCreds: "testdata/credentials-http-redhatio-nodeuser.json",
 			expected: map[string]docker.AuthConfiguration{
 				"quay.io": {
 					Username:      "user0",
@@ -167,8 +282,60 @@ func TestMergeNodeCredentialsDockerAuth(t *testing.T) {
 			},
 		},
 		{
+			name:      "overwriting node credentials (url 1)",
+			nodeCreds: "testdata/credentials-http-redhatio-nodeuser.json",
+			nsCreds:   "testdata/credentials-redhatio-nsuser.json",
+			expected: map[string]docker.AuthConfiguration{
+				"registry.redhat.io": {
+					Username:      "nsuser",
+					Password:      "nspass",
+					Email:         "nsuser@redhat.com",
+					ServerAddress: "registry.redhat.io",
+				},
+			},
+		},
+		{
+			name:      "overwriting node credentials (url 2)",
+			nodeCreds: "testdata/credentials-redhatio-nodeuser.json",
+			nsCreds:   "testdata/credentials-https-redhatio-nsuser.json",
+			expected: map[string]docker.AuthConfiguration{
+				"registry.redhat.io": {
+					Username:      "nsuser",
+					Password:      "nspass",
+					Email:         "nsuser@redhat.com",
+					ServerAddress: "registry.redhat.io",
+				},
+			},
+		},
+		{
+			name:      "overwriting node credentials (url 3)",
+			nodeCreds: "testdata/credentials-http-redhatio-nodeuser.json",
+			nsCreds:   "testdata/credentials-https-redhatio-nsuser.json",
+			expected: map[string]docker.AuthConfiguration{
+				"registry.redhat.io": {
+					Username:      "nsuser",
+					Password:      "nspass",
+					Email:         "nsuser@redhat.com",
+					ServerAddress: "registry.redhat.io",
+				},
+			},
+		},
+		{
 			name:      "invalid node credentials",
 			nsCreds:   "testdata/credentials-quayio-user0.json",
+			nodeCreds: "testdata/empty.txt",
+			expected: map[string]docker.AuthConfiguration{
+				"quay.io": {
+					Username:      "user0",
+					Password:      "pass0",
+					Email:         "user0@redhat.com",
+					ServerAddress: "quay.io",
+				},
+			},
+		},
+		{
+			name:      "invalid node credentials (url)",
+			nsCreds:   "testdata/credentials-https-quayio-user0.json",
 			nodeCreds: "testdata/empty.txt",
 			expected: map[string]docker.AuthConfiguration{
 				"quay.io": {

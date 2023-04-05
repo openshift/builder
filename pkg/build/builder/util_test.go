@@ -136,3 +136,64 @@ func TestPathForBuildVolume(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeRegistryLocation(t *testing.T) {
+	tests := []struct{ have, want string }{
+		{"", ""},
+		{"https://docker.io/my-namespace/my-user/my-image", "docker.io/my-namespace/my-user/my-image"},
+		{"https://docker.io/my-namespace", "docker.io/my-namespace"},
+		{"my-registry.local", "my-registry.local"},
+		{"my-registry.local/username", "my-registry.local/username"},
+		{"my-registry.local/v1/username", "my-registry.local/v1/username"},
+		{"my-registry.local/v2/username", "my-registry.local/v2/username"},
+		{"http://my-registry.local/username/", "my-registry.local/username"},
+		{"http://my-registry.local/username", "my-registry.local/username"},
+		{"docker.io/library/alpine", "docker.io/library/alpine"},
+		{"docker.io", "docker.io"},
+		{"quay.io/openshift/art", "quay.io/openshift/art"},
+		{"quay.io/openshift", "quay.io/openshift"},
+		{"quay.io", "quay.io"},
+		{"quay.io/a/b/c", "quay.io/a/b/c"},
+		{"https://registry-1.docker.io/v2/", "docker.io"},
+		{"https://registry-1.docker.io/v2", "docker.io"},
+		{"http://registry-1.docker.io/v1/", "docker.io"},
+		{"http://registry-1.docker.io/v1", "docker.io"},
+		{"https://registry-1.docker.io/", "docker.io"},
+		{"https://registry-1.docker.io", "docker.io"},
+		{"http://registry-1.docker.io/", "docker.io"},
+		{"http://registry-1.docker.io", "docker.io"},
+		{"https://registry-1.docker.io/v2/a", "docker.io/a"},
+		{"https://registry-1.docker.io/v1/b", "docker.io/b"},
+		{"http://registry-1.docker.io/v2/c", "docker.io/c"},
+		{"http://registry-1.docker.io/v1/d", "docker.io/d"},
+		{"https://index.docker.io/v2/", "docker.io"},
+		{"https://index.docker.io/v2", "docker.io"},
+		{"https://index.docker.io/v1/", "docker.io"},
+		{"https://index.docker.io/v1", "docker.io"},
+		{"http://index.docker.io/v2/", "docker.io"},
+		{"http://index.docker.io/v2", "docker.io"},
+		{"http://index.docker.io/v1/", "docker.io"},
+		{"http://index.docker.io/v1", "docker.io"},
+		{"https://index.docker.io/v2/a", "docker.io/a"},
+		{"https://index.docker.io/v1/b", "docker.io/b"},
+		{"http://index.docker.io/v2/c", "docker.io/c"},
+		{"http://index.docker.io/v1/d", "docker.io/d"},
+		{"https://quay.io/v2/", "quay.io"},
+		{"https://quay.io/v2/a", "quay.io/a"},
+		{"https://quay.io/v2", "quay.io"},
+		{"http://quay.io/v2/", "quay.io"},
+		{"http://quay.io/v2", "quay.io"},
+		{"https://quay.io/v1/", "quay.io"},
+		{"https://quay.io/v1", "quay.io"},
+		{"http://quay.io/v1/", "quay.io"},
+		{"http://quay.io/v1/b", "quay.io/b"},
+		{"http://quay.io/v1", "quay.io"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.have, func(t *testing.T) {
+			if got := normalizeRegistryLocation(tt.have); got != tt.want {
+				t.Errorf("normalizeRegistryLocation(%q) = %q, expected %q", tt.have, got, tt.want)
+			}
+		})
+	}
+}
