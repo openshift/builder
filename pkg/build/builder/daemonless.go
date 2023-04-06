@@ -316,6 +316,9 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		},
 		CommonBuildOpts: &buildah.CommonBuildOptions{
 			HTTPProxy:          true,
+			CPUPeriod:          uint64(opts.CPUPeriod),
+			CPUShares:          uint64(opts.CPUShares),
+			CPUQuota:           opts.CPUQuota,
 			Memory:             opts.Memory,
 			MemorySwap:         opts.Memswap,
 			CgroupParent:       opts.CgroupParent,
