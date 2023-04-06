@@ -336,6 +336,9 @@ func (d *DockerBuilder) dockerBuild(ctx context.Context, dir string, tag string)
 	// adapt, thus we need to set the memory limit at the container level
 	// too, so that information is available to them.
 	if d.cgLimits != nil {
+		opts.CPUPeriod = d.cgLimits.CPUPeriod
+		opts.CPUQuota = d.cgLimits.CPUQuota
+		opts.CPUShares = d.cgLimits.CPUShares
 		opts.Memory = d.cgLimits.MemoryLimitBytes
 		opts.Memswap = d.cgLimits.MemorySwap
 		opts.CgroupParent = d.cgLimits.Parent
