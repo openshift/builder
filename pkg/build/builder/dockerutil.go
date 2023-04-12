@@ -3,7 +3,6 @@ package builder
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"strconv"
@@ -90,20 +89,40 @@ func tagImage(dockerClient DockerClient, image, name string) error {
 	})
 }
 
-// readMaxStringOrInt64 reads a file containing a 64 bit integer value, or string "max",
+// readMaxStringOrInt64 reads a buffer containing a 64 bit integer value, or string "max",
 // and returns the value as an int64.  If the file contains
 // a value larger than an int64, or the string "max", it returns MaxInt64,
 // if the value is smaller than an int64, it returns MinInt64.
-func readMaxStringOrInt64(filePath string) (int64, error) {
-	data, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return -1, err
-	}
-	s := strings.TrimSpace(string(data))
+func readMaxStringOrInt64(data string) (int64, error) {
+	s := strings.TrimSpace(data)
 	if s == "max" {
 		return math.MaxInt64, nil
 	}
 	return parseInt64(s)
+}
+
+// readMaxStringsOrInt64s returns a function which reads the nth field
+// (0-indexed) from a buffer, expecting either a 64 bit integer value or the
+// string "max", and returns the value as an int64 value.  If the field
+// contains a value larger than an int64, or the string "max", it returns
+// MaxInt64, if the value is smaller than an int64, it returns MinInt64.
+func readMaxStringsOrInt64s(field int) func(data string) (int64, error) {
+	return func(data string) (int64, error) {
+		var err error
+		s := strings.Split(strings.TrimSpace(data), " ")
+		if len(s) < field+1 {
+			return -1, fmt.Errorf("invalid format for %q, expected at least %d numerical and/or %q fields", string(data), field+1, "max")
+		}
+		v := int64(-1)
+		if s[field] == "max" {
+			v = math.MaxInt64
+		} else {
+			if v, err = parseInt64(s[field]); err != nil {
+				return -1, err
+			}
+		}
+		return v, nil
+	}
 }
 
 func parseInt64(s string) (int64, error) {
