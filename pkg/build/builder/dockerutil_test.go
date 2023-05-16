@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -153,14 +152,7 @@ func TestReadMaxStringOrInt64(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	for _, tc := range tests {
 		t.Logf("running tc %s", tc.name)
-		fileName := filepath.Join(tmpDir, tc.name)
-		if len(tc.fileContent) > 0 {
-			err = ioutil.WriteFile(fileName, []byte(tc.fileContent), 0644)
-			if err != nil {
-				t.Errorf("error writing data to file %s: %s", fileName, err.Error())
-			}
-		}
-		val, err := readMaxStringOrInt64(fileName)
+		val, err := readMaxStringOrInt64(tc.fileContent)
 		if tc.expectedErr {
 			if err == nil {
 				t.Errorf("test %s expected error and did not get one", tc.name)
