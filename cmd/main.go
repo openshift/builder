@@ -49,14 +49,14 @@ func main() {
 	clusterCASrc := fmt.Sprintf("%s/ca.crt", builder.SecretCertsMountPath)
 	clusterCADst := fmt.Sprintf("%s/cluster.crt", tlsCertRoot)
 	fs := s2ifs.NewFileSystem()
-	err := fs.Copy(clusterCASrc, clusterCADst, map[string]string{})
+	err := fs.Copy(clusterCASrc, clusterCADst, func(path string) bool { return false })
 	if err != nil {
 		fmt.Printf("Error setting up cluster CA cert: %v\n", err)
 		os.Exit(1)
 	}
 
 	runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
-	err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, map[string]string{})
+	err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, func(path string) bool { return false })
 	if err != nil {
 		fmt.Printf("Error setting up service CA cert: %v\n", err)
 		os.Exit(1)
