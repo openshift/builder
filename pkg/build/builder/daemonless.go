@@ -414,7 +414,7 @@ func appendRHRepoMount(pathStart string, mountsMap *TransientMounts) error {
 		return nil
 	}
 	fs := s2ifs.NewFileSystem()
-	err = fs.Copy(path, filepath.Join(tmpDir, repoFile), map[string]string{})
+	err = fs.Copy(path, filepath.Join(tmpDir, repoFile), func(path string) bool { return false })
 	if err != nil {
 		log.V(0).Infof("Falling back to the Red Hat yum repository configuration in the base image: failed to copy %s secret: %v", repoFile, err)
 		return nil
@@ -452,7 +452,7 @@ func coreAppendSecretLinksToDirs(pathStart, pathEnd string, mountsMap *Transient
 		return nil
 	}
 	fs := s2ifs.NewFileSystem()
-	err = fs.CopyContents(path, tmpDir, map[string]string{})
+	err = fs.CopyContents(path, tmpDir, func(path string) bool { return false })
 	if err != nil {
 		log.V(0).Infof("Red Hat subscription content will not be available in this build: failed to copy %s secrets: %v", pathEnd, err)
 		return nil
