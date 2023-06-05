@@ -101,8 +101,10 @@ func maybeReexecUsingUserNamespace(uidmap string, useNewuidmap bool, gidmap stri
 
 	// If there's nothing to do, just return.
 	if uidmap == "" && gidmap == "" && os.Geteuid() == 0 {
-		if caps, err := capability.NewPid(0); err == nil && caps.Get(capability.EFFECTIVE, capability.CAP_SYS_ADMIN) {
-			return
+		if caps, err := capability.NewPid2(0); err == nil {
+			if err := caps.Load(); err == nil && caps.Get(capability.EFFECTIVE, capability.CAP_SYS_ADMIN) {
+				return
+			}
 		}
 	}
 

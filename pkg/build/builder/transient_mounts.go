@@ -11,6 +11,7 @@ type TransientMountOptions struct {
 	NoDev    bool
 	NoExec   bool
 	NoSuid   bool
+	Overlay  bool
 	ReadOnly *bool
 }
 
@@ -22,7 +23,7 @@ type TransientMount struct {
 }
 
 // returns the string representation of a transient mount
-// format: source:destiation:option1,option2,...
+// format: source:destination:option1,option2,...
 func (tm *TransientMount) String() string {
 	var options []string
 
@@ -34,6 +35,9 @@ func (tm *TransientMount) String() string {
 	}
 	if tm.Options.NoSuid {
 		options = append(options, "nosuid")
+	}
+	if tm.Options.Overlay {
+		options = append(options, "O")
 	}
 	if tm.Options.ReadOnly != nil {
 		if *tm.Options.ReadOnly {
