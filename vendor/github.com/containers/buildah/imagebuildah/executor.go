@@ -22,7 +22,6 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/manifest"
-	is "github.com/containers/image/v5/storage"
 	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/transports/alltransports"
@@ -43,14 +42,18 @@ import (
 // instruction in the Dockerfile, since that's usually an indication of a user
 // error, but for these values we make exceptions and ignore them.
 var builtinAllowedBuildArgs = map[string]bool{
-	"HTTP_PROXY":  true,
-	"http_proxy":  true,
-	"HTTPS_PROXY": true,
-	"https_proxy": true,
-	"FTP_PROXY":   true,
-	"ftp_proxy":   true,
-	"NO_PROXY":    true,
-	"no_proxy":    true,
+	"HTTP_PROXY":     true,
+	"http_proxy":     true,
+	"HTTPS_PROXY":    true,
+	"https_proxy":    true,
+	"FTP_PROXY":      true,
+	"ftp_proxy":      true,
+	"NO_PROXY":       true,
+	"no_proxy":       true,
+	"TARGETARCH":     true,
+	"TARGETOS":       true,
+	"TARGETPLATFORM": true,
+	"TARGETVARIANT":  true,
 }
 
 // Executor is a buildah-based implementation of the imagebuilder.Executor
@@ -420,7 +423,7 @@ func (b *Executor) getImageTypeAndHistoryAndDiffIDs(ctx context.Context, imageID
 	if ok {
 		return imageInfo.manifestType, imageInfo.history, imageInfo.diffIDs, imageInfo.err
 	}
-	imageRef, err := is.Transport.ParseStoreReference(b.store, "@"+imageID)
+	imageRef, err := storageTransport.Transport.ParseStoreReference(b.store, "@"+imageID)
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("getting image reference %q: %w", imageID, err)
 	}
@@ -466,6 +469,34 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 	output := ""
 	if stageIndex == len(stages)-1 {
 		output = b.output
+		// Check if any labels were passed in via the API, and add a final line
+		// to the Dockerfile that would provide the same result.
+		// Reason: Docker adds label modification as a last step which can be
+		// processed like regular steps, and if no modification is done to
+		// layers, its easier to re-use cached layers.
+		if len(b.labels) > 0 {
+			var labelLine string
+			labels := append([]string{}, b.labels...)
+			for _, labelSpec := range labels {
+				label := strings.SplitN(labelSpec, "=", 2)
+				key := label[0]
+				value := ""
+				if len(label) > 1 {
+					value = label[1]
+				}
+				// check only for an empty key since docker allows empty values
+				if key != "" {
+					labelLine += fmt.Sprintf(" %q=%q", key, value)
+				}
+			}
+			if len(labelLine) > 0 {
+				additionalNode, err := imagebuilder.ParseDockerfile(strings.NewReader("LABEL" + labelLine + "\n"))
+				if err != nil {
+					return "", nil, fmt.Errorf("while adding additional LABEL step: %w", err)
+				}
+				stage.Node.Children = append(stage.Node.Children, additionalNode.Children...)
+			}
+		}
 	}
 
 	// If this stage is starting out with environment variables that were
@@ -480,8 +511,7 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 				value := env[1]
 				envLine += fmt.Sprintf(" %q=%q", key, value)
 			} else {
-				value := os.Getenv(key)
-				envLine += fmt.Sprintf(" %q=%q", key, value)
+				return "", nil, fmt.Errorf("BUG: unresolved environment variable: %q", key)
 			}
 		}
 		if len(envLine) > 0 {
@@ -521,8 +551,7 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 	// build and b.forceRmIntermediateCtrs is set, make sure we
 	// remove the intermediate/build containers, regardless of
 	// whether or not the stage's build fails.
-	// Skip cleanup if the stage has no instructions.
-	if b.forceRmIntermediateCtrs || !b.layers && len(stage.Node.Children) > 0 {
+	if b.forceRmIntermediateCtrs || !b.layers {
 		b.stagesLock.Lock()
 		cleanupStages[stage.Position] = stageExecutor
 		b.stagesLock.Unlock()
@@ -590,6 +619,9 @@ func (b *Executor) warnOnUnsetBuildArgs(stages imagebuilder.Stages, dependencyMa
 							if !stageDependencyInfo.NeededByTarget && b.skipUnusedStages != types.OptionalBoolFalse {
 								shouldWarn = false
 							}
+						}
+						if _, isBuiltIn := builtinAllowedBuildArgs[argName]; isBuiltIn {
+							shouldWarn = false
 						}
 						if shouldWarn {
 							b.logger.Warnf("missing %q build argument. Try adding %q to the command line", argName, fmt.Sprintf("--build-arg %s=<VALUE>", argName))
@@ -754,6 +786,17 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 							// if following ADD or COPY needs any other
 							// stage.
 							stageName := rootfs
+							headingArgs := argsMapToSlice(stage.Builder.HeadingArgs)
+							userArgs := argsMapToSlice(stage.Builder.Args)
+							// append heading args so if --build-arg key=value is not
+							// specified but default value is set in Containerfile
+							// via `ARG key=value` so default value can be used.
+							userArgs = append(headingArgs, userArgs...)
+							baseWithArg, err := imagebuilder.ProcessWord(stageName, userArgs)
+							if err != nil {
+								return "", nil, fmt.Errorf("while replacing arg variables with values for format %q: %w", stageName, err)
+							}
+							stageName = baseWithArg
 							// If --from=<index> convert index to name
 							if index, err := strconv.Atoi(stageName); err == nil {
 								stageName = stages[index].Name
@@ -948,8 +991,8 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 	// Add additional tags and print image names recorded in storage
 	if dest, err := b.resolveNameToImageRef(b.output); err == nil {
 		switch dest.Transport().Name() {
-		case is.Transport.Name():
-			img, err := is.Transport.GetStoreImage(b.store, dest)
+		case storageTransport.Transport.Name():
+			img, err := storageTransport.Transport.GetStoreImage(b.store, dest)
 			if err != nil {
 				return imageID, ref, fmt.Errorf("locating just-written image %q: %w", transports.ImageName(dest), err)
 			}
@@ -960,7 +1003,7 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 				logrus.Debugf("assigned names %v to image %q", img.Names, img.ID)
 			}
 			// Report back the caller the tags applied, if any.
-			img, err = is.Transport.GetStoreImage(b.store, dest)
+			img, err = storageTransport.Transport.GetStoreImage(b.store, dest)
 			if err != nil {
 				return imageID, ref, fmt.Errorf("locating just-written image %q: %w", transports.ImageName(dest), err)
 			}

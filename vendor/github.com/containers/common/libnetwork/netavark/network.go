@@ -15,6 +15,7 @@ import (
 	"github.com/containers/common/libnetwork/internal/util"
 	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/config"
+	cutil "github.com/containers/common/pkg/util"
 	"github.com/containers/storage/pkg/lockfile"
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/sirupsen/logrus"
@@ -46,6 +47,9 @@ type netavarkNetwork struct {
 	// dnsBindPort is set the the port to pass to netavark for aardvark
 	dnsBindPort uint16
 
+	// pluginDirs list of directories were netavark plugins are located
+	pluginDirs []string
+
 	// ipamDBPath is the path to the ip allocation bolt db
 	ipamDBPath string
 
@@ -54,7 +58,7 @@ type netavarkNetwork struct {
 	syslog bool
 
 	// lock is a internal lock for critical operations
-	lock lockfile.Locker
+	lock *lockfile.LockFile
 
 	// modTime is the timestamp when the config dir was modified
 	modTime time.Time
@@ -85,6 +89,9 @@ type InitConfig struct {
 
 	// DNSBindPort is set the the port to pass to netavark for aardvark
 	DNSBindPort uint16
+
+	// PluginDirs list of directories were netavark plugins are located
+	PluginDirs []string
 
 	// Syslog describes whenever the netavark debbug output should be log to the syslog as well.
 	// This will use logrus to do so, make sure logrus is set up to log to the syslog.
@@ -143,6 +150,7 @@ func NewNetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
 		defaultSubnet:      defaultNet,
 		defaultsubnetPools: defaultSubnetPools,
 		dnsBindPort:        conf.DNSBindPort,
+		pluginDirs:         conf.PluginDirs,
 		lock:               lock,
 		syslog:             conf.Syslog,
 	}
@@ -150,10 +158,13 @@ func NewNetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
 	return n, nil
 }
 
+var builtinDrivers = []string{types.BridgeNetworkDriver, types.MacVLANNetworkDriver, types.IPVLANNetworkDriver}
+
 // Drivers will return the list of supported network drivers
 // for this interface.
 func (n *netavarkNetwork) Drivers() []string {
-	return []string{types.BridgeNetworkDriver, types.MacVLANNetworkDriver}
+	paths := getAllPlugins(n.pluginDirs)
+	return append(builtinDrivers, paths...)
 }
 
 // DefaultNetworkName will return the default netavark network name.
@@ -324,6 +335,37 @@ func (n *netavarkNetwork) Len() int {
 // DefaultInterfaceName return the default cni bridge name, must be suffixed with a number.
 func (n *netavarkNetwork) DefaultInterfaceName() string {
 	return defaultBridgeName
+}
+
+// NetworkInfo return the network information about binary path,
+// package version and program version.
+func (n *netavarkNetwork) NetworkInfo() types.NetworkInfo {
+	path := n.netavarkBinary
+	packageVersion := cutil.PackageVersion(path)
+	programVersion, err := cutil.ProgramVersion(path)
+	if err != nil {
+		logrus.Infof("Failed to get the netavark version: %v", err)
+	}
+	info := types.NetworkInfo{
+		Backend: types.Netavark,
+		Version: programVersion,
+		Package: packageVersion,
+		Path:    path,
+	}
+
+	dnsPath := n.aardvarkBinary
+	dnsPackage := cutil.PackageVersion(dnsPath)
+	dnsProgram, err := cutil.ProgramVersion(dnsPath)
+	if err != nil {
+		logrus.Infof("Failed to get the aardvark version: %v", err)
+	}
+	info.DNS = types.DNSNetworkInfo{
+		Package: dnsPackage,
+		Path:    dnsPath,
+		Version: dnsProgram,
+	}
+
+	return info
 }
 
 func (n *netavarkNetwork) Network(nameOrID string) (*types.Network, error) {

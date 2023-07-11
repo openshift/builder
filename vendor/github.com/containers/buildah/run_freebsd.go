@@ -7,10 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"unsafe"
 
 	"github.com/containers/buildah/bind"
@@ -19,6 +17,7 @@ import (
 	"github.com/containers/buildah/define"
 	"github.com/containers/buildah/internal"
 	"github.com/containers/buildah/pkg/jail"
+	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/buildah/util"
 	"github.com/containers/common/libnetwork/resolvconf"
 	nettypes "github.com/containers/common/libnetwork/types"
@@ -98,7 +97,13 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 	if isolation == IsolationDefault {
 		isolation = b.Isolation
 		if isolation == IsolationDefault {
-			isolation = IsolationOCI
+			isolation, err = parse.IsolationOption("")
+			if err != nil {
+				logrus.Debugf("got %v while trying to determine default isolation, guessing OCI", err)
+				isolation = IsolationOCI
+			} else if isolation == IsolationDefault {
+				isolation = IsolationOCI
+			}
 		}
 	}
 	if err := checkAndOverrideIsolationOptions(isolation, &options); err != nil {
@@ -140,7 +145,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 
 	setupTerminal(g, options.Terminal, options.TerminalSize)
 
-	configureNetwork, configureNetworks, err := b.configureNamespaces(g, &options)
+	configureNetwork, networkString, err := b.configureNamespaces(g, &options)
 	if err != nil {
 		return err
 	}
@@ -191,7 +196,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 
 	hostFile := ""
 	if !options.NoHosts && !contains(volumes, config.DefaultHostsFile) && options.ConfigureNetwork != define.NetworkDisabled {
-		hostFile, err = b.generateHosts(path, rootIDPair, mountPoint)
+		hostFile, err = b.generateHosts(path, rootIDPair, mountPoint, spec)
 		if err != nil {
 			return err
 		}
@@ -275,7 +280,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 		} else {
 			moreCreateArgs = nil
 		}
-		err = b.runUsingRuntimeSubproc(isolation, options, configureNetwork, configureNetworks, moreCreateArgs, spec, mountPoint, path, containerName, b.Container, hostFile)
+		err = b.runUsingRuntimeSubproc(isolation, options, configureNetwork, networkString, moreCreateArgs, spec, mountPoint, path, containerName, b.Container, hostFile)
 	case IsolationChroot:
 		err = chroot.RunUsingChroot(spec, path, homeDir, options.Stdin, options.Stdout, options.Stderr)
 	default:
@@ -369,10 +374,15 @@ func setupCapabilities(g *generate.Generator, defaultCapabilities, adds, drops [
 	return nil
 }
 
-func (b *Builder) runConfigureNetwork(pid int, isolation define.Isolation, options RunOptions, configureNetworks []string, containerName string) (teardown func(), netStatus map[string]nettypes.StatusBlock, err error) {
+func (b *Builder) runConfigureNetwork(pid int, isolation define.Isolation, options RunOptions, networkString string, containerName string) (teardown func(), netStatus map[string]nettypes.StatusBlock, err error) {
 	//if isolation == IsolationOCIRootless {
 	//return setupRootlessNetwork(pid)
 	//}
+
+	var configureNetworks []string
+	if len(networkString) > 0 {
+		configureNetworks = strings.Split(networkString, ",")
+	}
 
 	if len(configureNetworks) == 0 {
 		configureNetworks = []string{b.NetworkInterface.DefaultNetworkName()}
@@ -408,7 +418,7 @@ func (b *Builder) runConfigureNetwork(pid int, isolation define.Isolation, optio
 	return teardown, nil, nil
 }
 
-func setupNamespaces(logger *logrus.Logger, g *generate.Generator, namespaceOptions define.NamespaceOptions, idmapOptions define.IDMappingOptions, policy define.NetworkConfigurationPolicy) (configureNetwork bool, configureNetworks []string, configureUTS bool, err error) {
+func setupNamespaces(logger *logrus.Logger, g *generate.Generator, namespaceOptions define.NamespaceOptions, idmapOptions define.IDMappingOptions, policy define.NetworkConfigurationPolicy) (configureNetwork bool, networkString string, configureUTS bool, err error) {
 	// Set namespace options in the container configuration.
 	for _, namespaceOption := range namespaceOptions {
 		switch namespaceOption.Name {
@@ -416,7 +426,7 @@ func setupNamespaces(logger *logrus.Logger, g *generate.Generator, namespaceOpti
 			configureNetwork = false
 			if !namespaceOption.Host && (namespaceOption.Path == "" || !filepath.IsAbs(namespaceOption.Path)) {
 				if namespaceOption.Path != "" && !filepath.IsAbs(namespaceOption.Path) {
-					configureNetworks = strings.Split(namespaceOption.Path, ",")
+					networkString = namespaceOption.Path
 					namespaceOption.Path = ""
 				}
 				configureNetwork = (policy != define.NetworkDisabled)
@@ -432,13 +442,13 @@ func setupNamespaces(logger *logrus.Logger, g *generate.Generator, namespaceOpti
 		// equivalents for UTS and and network namespaces.
 	}
 
-	return configureNetwork, configureNetworks, configureUTS, nil
+	return configureNetwork, networkString, configureUTS, nil
 }
 
-func (b *Builder) configureNamespaces(g *generate.Generator, options *RunOptions) (bool, []string, error) {
+func (b *Builder) configureNamespaces(g *generate.Generator, options *RunOptions) (bool, string, error) {
 	defaultNamespaceOptions, err := DefaultNamespaceOptions()
 	if err != nil {
-		return false, nil, err
+		return false, "", err
 	}
 
 	namespaceOptions := defaultNamespaceOptions
@@ -459,9 +469,9 @@ func (b *Builder) configureNamespaces(g *generate.Generator, options *RunOptions
 		}
 	}
 
-	configureNetwork, configureNetworks, configureUTS, err := setupNamespaces(options.Logger, g, namespaceOptions, b.IDMappingOptions, networkPolicy)
+	configureNetwork, networkString, configureUTS, err := setupNamespaces(options.Logger, g, namespaceOptions, b.IDMappingOptions, networkPolicy)
 	if err != nil {
-		return false, nil, err
+		return false, "", err
 	}
 
 	if configureUTS {
@@ -488,7 +498,7 @@ func (b *Builder) configureNamespaces(g *generate.Generator, options *RunOptions
 		spec.Process.Env = append(spec.Process.Env, fmt.Sprintf("HOSTNAME=%s", spec.Hostname))
 	}
 
-	return configureNetwork, configureNetworks, nil
+	return configureNetwork, networkString, nil
 }
 
 func runSetupBoundFiles(bundlePath string, bindFiles map[string]string) (mounts []specs.Mount) {
@@ -522,14 +532,6 @@ func addRlimits(ulimit []string, g *generate.Generator, defaultUlimits []string)
 		g.AddProcessRlimits("RLIMIT_"+strings.ToUpper(ul.Name), uint64(ul.Hard), uint64(ul.Soft))
 	}
 	return nil
-}
-
-// setPdeathsig sets a parent-death signal for the process
-func setPdeathsig(cmd *exec.Cmd) {
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.Pdeathsig = syscall.SIGKILL
 }
 
 // Create pipes to use for relaying stdio.

@@ -116,10 +116,6 @@ func (r *Runtime) Pull(ctx context.Context, name string, pullPolicy config.PullP
 		return nil, fmt.Errorf("pulling all tags is not supported for %s transport", ref.Transport().Name())
 	}
 
-	if r.eventChannel != nil {
-		defer r.writeEvent(&Event{ID: "", Name: name, Time: time.Now(), Type: EventTypeImagePull})
-	}
-
 	// Some callers may set the platform via the system context at creation
 	// time of the runtime.  We need this information to decide whether we
 	// need to enforce pulling from a registry (see
@@ -160,10 +156,10 @@ func (r *Runtime) Pull(ctx context.Context, name string, pullPolicy config.PullP
 	}
 
 	localImages := []*Image{}
-	for _, name := range pulledImages {
-		image, _, err := r.LookupImage(name, nil)
+	for _, iName := range pulledImages {
+		image, _, err := r.LookupImage(iName, nil)
 		if err != nil {
-			return nil, fmt.Errorf("locating pulled image %q name in containers storage: %w", name, err)
+			return nil, fmt.Errorf("locating pulled image %q name in containers storage: %w", iName, err)
 		}
 
 		// Note that we can ignore the 2nd return value here. Some
@@ -182,6 +178,11 @@ func (r *Runtime) Pull(ctx context.Context, name string, pullPolicy config.PullP
 			} else {
 				fmt.Fprintf(options.Writer, "WARNING: %v\n", matchError)
 			}
+		}
+
+		if r.eventChannel != nil {
+			// Note that we use the input name here to preserve the transport data.
+			r.writeEvent(&Event{ID: image.ID(), Name: name, Time: time.Now(), Type: EventTypeImagePull})
 		}
 
 		localImages = append(localImages, image)
@@ -441,8 +442,17 @@ func (r *Runtime) imagesIDsForManifest(manifestBytes []byte, sys *types.SystemCo
 	if err != nil {
 		return nil, fmt.Errorf("listing images by manifest digest: %w", err)
 	}
-	results := make([]string, 0, len(images))
+
+	// If you have additionStores defined and the same image stored in
+	// both storage and additional store, it can be output twice.
+	// Fixes github.com/containers/podman/issues/18647
+	results := []string{}
+	imageMap := map[string]bool{}
 	for _, image := range images {
+		if imageMap[image.ID] {
+			continue
+		}
+		imageMap[image.ID] = true
 		results = append(results, image.ID)
 	}
 	if len(results) == 0 {
