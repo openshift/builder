@@ -27,14 +27,15 @@ env:
     ####
     # GCE project where images live
     IMAGE_PROJECT: "libpod-218412"
-    FEDORA_NAME: "fedora-37"
-    PRIOR_FEDORA_NAME: "fedora-36"
-    UBUNTU_NAME: "ubuntu-2204"
+    FEDORA_NAME: "fedora-38"
+    PRIOR_FEDORA_NAME: "fedora-37"
+    DEBIAN_NAME: "debian-13"
 
-    IMAGE_SUFFIX: "c6300530360713216"
+    # Image identifiers
+    IMAGE_SUFFIX: "c20230614t132754z-f38f37d13"
     FEDORA_CACHE_IMAGE_NAME: "fedora-${IMAGE_SUFFIX}"
     PRIOR_FEDORA_CACHE_IMAGE_NAME: "prior-fedora-${IMAGE_SUFFIX}"
-    UBUNTU_CACHE_IMAGE_NAME: "ubuntu-${IMAGE_SUFFIX}"
+    DEBIAN_CACHE_IMAGE_NAME: "debian-${IMAGE_SUFFIX}"
 
     IN_PODMAN_IMAGE: "quay.io/libpod/fedora_podman:${IMAGE_SUFFIX}"
 
@@ -75,16 +76,16 @@ meta_task:
         IMGNAMES: |-
             ${FEDORA_CACHE_IMAGE_NAME}
             ${PRIOR_FEDORA_CACHE_IMAGE_NAME}
-            ${UBUNTU_CACHE_IMAGE_NAME}
+            ${DEBIAN_CACHE_IMAGE_NAME}
             build-push-${IMAGE_SUFFIX}
         BUILDID: "${CIRRUS_BUILD_ID}"
         REPOREF: "${CIRRUS_CHANGE_IN_REPO}"
         GCPJSON: ENCRYPTED[d3614d6f5cc0e66be89d4252b3365fd84f14eee0259d4eb47e25fc0bc2842c7937f5ee8c882b7e547b4c5ec4b6733b14]
         GCPNAME: ENCRYPTED[8509e6a681b859479ce6aa275bd3c4ac82de5beec6df6057925afc4cd85b7ef2e879066ae8baaa2d453b82958e434578]
         GCPPROJECT: ENCRYPTED[cc09b62d0ec6746a3df685e663ad25d9d5af95ef5fd843c96f3d0ec9d7f065dc63216b9c685c9f43a776a1d403991494]
-        CIRRUS_CLONE_DEPTH: 1  # source not used
 
-    script: '/usr/local/bin/entrypoint.sh |& ${_TIMESTAMP}'
+    clone_script: 'true'
+    script: '/usr/local/bin/entrypoint.sh'
 
 
 smoke_task:
@@ -120,7 +121,7 @@ vendor_task:
 
     # Runs within Cirrus's "community cluster"
     container:
-        image: docker.io/library/golang:1.17
+        image: docker.io/library/golang:1.18
         cpu: 1
         memory: 1
 
@@ -189,9 +190,9 @@ conformance_task:
     depends_on: *smoke_vendor_cross
 
     gce_instance:
-        image_name: "${UBUNTU_CACHE_IMAGE_NAME}"
+        image_name: "${DEBIAN_CACHE_IMAGE_NAME}"
 
-    timeout_in: 25m
+    timeout_in: 65m
 
     matrix:
         - env:
@@ -220,8 +221,8 @@ integration_task:
             IMAGE_NAME: "${PRIOR_FEDORA_CACHE_IMAGE_NAME}"
             STORAGE_DRIVER: 'vfs'
         - env:
-            DISTRO_NV: "${UBUNTU_NAME}"
-            IMAGE_NAME: "${UBUNTU_CACHE_IMAGE_NAME}"
+            DISTRO_NV: "${DEBIAN_NAME}"
+            IMAGE_NAME: "${DEBIAN_CACHE_IMAGE_NAME}"
             STORAGE_DRIVER: 'vfs'
         # OVERLAY
         - env:
@@ -233,8 +234,8 @@ integration_task:
             IMAGE_NAME: "${PRIOR_FEDORA_CACHE_IMAGE_NAME}"
             STORAGE_DRIVER: 'overlay'
         - env:
-            DISTRO_NV: "${UBUNTU_NAME}"
-            IMAGE_NAME: "${UBUNTU_CACHE_IMAGE_NAME}"
+            DISTRO_NV: "${DEBIAN_NAME}"
+            IMAGE_NAME: "${DEBIAN_CACHE_IMAGE_NAME}"
             STORAGE_DRIVER: 'overlay'
 
     gce_instance:
@@ -278,8 +279,8 @@ integration_rootless_task:
             STORAGE_DRIVER: 'overlay'
             PRIV_NAME: rootless
         - env:
-            DISTRO_NV: "${UBUNTU_NAME}"
-            IMAGE_NAME: "${UBUNTU_CACHE_IMAGE_NAME}"
+            DISTRO_NV: "${DEBIAN_NAME}"
+            IMAGE_NAME: "${DEBIAN_CACHE_IMAGE_NAME}"
             STORAGE_DRIVER: 'overlay'
             PRIV_NAME: rootless
 
