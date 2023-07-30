@@ -7,14 +7,17 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 
 	istorage "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
+	"github.com/syndtr/gocapability/capability"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
 	buildscheme "github.com/openshift/client-go/build/clientset/versioned/scheme"
@@ -47,6 +50,7 @@ func init() {
 
 type builder interface {
 	Build(dockerClient bld.DockerClient, sock string, buildsClient buildclientv1.BuildInterface, build *buildapiv1.Build, cgLimits *s2iapi.CGroupLimits) error
+	Basename() string
 }
 
 type builderConfig struct {
@@ -355,6 +359,7 @@ type dockerBuilder struct{}
 func (dockerBuilder) Build(dockerClient bld.DockerClient, sock string, buildsClient buildclientv1.BuildInterface, build *buildapiv1.Build, cgLimits *s2iapi.CGroupLimits) error {
 	return bld.NewDockerBuilder(dockerClient, buildsClient, build, cgLimits).Build()
 }
+func (dockerBuilder) Basename() string { return "openshift-docker-builder" }
 
 type s2iBuilder struct{}
 
@@ -363,8 +368,10 @@ func (s2iBuilder) Build(dockerClient bld.DockerClient, sock string, buildsClient
 	return bld.NewS2IBuilder(dockerClient, sock, buildsClient, build, cgLimits).Build()
 }
 
+func (s2iBuilder) Basename() string { return "openshift-sti-builder" }
+
 func runBuild(out io.Writer, builder builder, isolation, ociRuntime, storageDriver, storageOptions string) error {
-	logVersion()
+	logVersion(builder.Basename())
 	cfg, err := newBuilderConfigFromEnvironment(out, true, isolation, ociRuntime, storageDriver, storageOptions)
 	if err != nil {
 		return err
@@ -390,7 +397,7 @@ func RunS2IBuild(out io.Writer, isolation, ociRuntime, storageDriver, storageOpt
 // RunGitClone performs a git clone using the build defined in the environment
 func RunGitClone(out io.Writer) error {
 	serviceability.InitLogrusFromKlog()
-	logVersion()
+	logVersion("")
 	cfg, err := newBuilderConfigFromEnvironment(out, false, "", "", "", "")
 	if err != nil {
 		return err
@@ -410,7 +417,7 @@ func RunGitClone(out io.Writer) error {
 // the build information.
 func RunManageDockerfile(out io.Writer) error {
 	serviceability.InitLogrusFromKlog()
-	logVersion()
+	logVersion("openshift-manage-dockerfile")
 	cfg, err := newBuilderConfigFromEnvironment(out, false, "", "", "", "")
 	if err != nil {
 		return err
@@ -425,7 +432,7 @@ func RunManageDockerfile(out io.Writer) error {
 // into the build working directory.
 func RunExtractImageContent(out io.Writer) error {
 	serviceability.InitLogrusFromKlog()
-	logVersion()
+	logVersion("openshift-extract-image-content")
 	cfg, err := newBuilderConfigFromEnvironment(out, true, "", "", "", "")
 	if err != nil {
 		return err
@@ -437,7 +444,31 @@ func RunExtractImageContent(out io.Writer) error {
 }
 
 // logVersion logs the version of openshift-builder.
-func logVersion() {
+func logVersion(basename string) {
 	log.V(5).Infof("openshift-builder %v", version.Get())
 	log.V(5).Infof("Powered by buildah %s", version.BuildahVersion())
+	logCapabilities(basename)
+}
+
+func logCapabilities(basename string) {
+	pid, err := capability.NewPid2(0)
+	if err != nil {
+		klog.V(2).Infof("error checking our capabilities: %v", err)
+		return
+	}
+	if err := pid.Load(); err != nil {
+		klog.V(2).Infof("error loading our current capabilities: %v", err)
+		return
+	}
+	knownCaps := capability.List()
+	effective := make([]string, 0, len(knownCaps))
+	for i := range knownCaps {
+		have := pid.Get(capability.EFFECTIVE, knownCaps[i])
+		effective = append(effective, fmt.Sprintf("%s=%v", knownCaps[i].String(), have))
+	}
+	sort.Strings(effective)
+	if basename != "" {
+		basename += ": "
+	}
+	klog.V(2).Infof("%seffective capabilities: %v", basename, effective)
 }

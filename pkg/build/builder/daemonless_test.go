@@ -705,7 +705,7 @@ func TestAppendCATrustMount(t *testing.T) {
 			if tc.expectMount && len(mounts) == 0 {
 				t.Fatal("expected mount for /etc/pki/ca-trust")
 			}
-			expectedMount := "/etc/pki/ca-trust:/etc/pki/ca-trust:ro"
+			expectedMount := "/etc/pki/ca-trust:/etc/pki/ca-trust:O,ro"
 			if tc.expectMount && mounts[0] != expectedMount {
 				t.Errorf("expected mount %q, got %q", expectedMount, mounts[0])
 			}

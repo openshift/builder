@@ -375,7 +375,6 @@ func appendBuildVolumeMounts(mountsMap *TransientMounts) error {
 		}
 
 		for _, bvm := range bv.Mounts {
-
 			if err := mountsMap.append(TransientMount{
 				Destination: bvm.DestinationPath,
 				Source:      sourcePath,
@@ -423,9 +422,10 @@ func appendRHRepoMount(pathStart string, mountsMap *TransientMounts) error {
 		Source:      filepath.Join(tmpDir, repoFile),
 		Destination: filepath.Join("/run/secrets", repoFile),
 		Options: TransientMountOptions{
-			NoDev:  true,
-			NoExec: true,
-			NoSuid: true,
+			NoDev:   true,
+			NoExec:  true,
+			NoSuid:  true,
+			Overlay: true,
 		},
 	})
 }
@@ -462,9 +462,10 @@ func coreAppendSecretLinksToDirs(pathStart, pathEnd string, mountsMap *Transient
 		Destination: filepath.Join("/run/secrets", pathEnd),
 		Source:      tmpDir,
 		Options: TransientMountOptions{
-			NoDev:  true,
-			NoExec: true,
-			NoSuid: true,
+			NoDev:   true,
+			NoExec:  true,
+			NoSuid:  true,
+			Overlay: true,
 		},
 	})
 }
@@ -510,6 +511,7 @@ func appendCATrustMount(mountsMap *TransientMounts) error {
 		Source:      "/etc/pki/ca-trust",
 		Options: TransientMountOptions{
 			ReadOnly: &t,
+			Overlay:  true,
 		},
 	})
 }

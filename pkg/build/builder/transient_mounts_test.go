@@ -185,12 +185,13 @@ func TestTransientMount_String(t *testing.T) {
 				Source:      "/volumes/test1",
 				Destination: "/test1",
 				Options: TransientMountOptions{
-					NoDev:  true,
-					NoExec: true,
-					NoSuid: true,
+					NoDev:   true,
+					NoExec:  true,
+					NoSuid:  true,
+					Overlay: true,
 				},
 			},
-			want: "/volumes/test1:/test1:nodev,noexec,nosuid",
+			want: "/volumes/test1:/test1:nodev,noexec,nosuid,O",
 		},
 		{
 			name: "mount with all false",
