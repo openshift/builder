@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -65,15 +66,18 @@ func main() {
 	basename := filepath.Base(os.Args[0])
 	command := CommandFor(basename)
 
-	flags := command.Flags()
-	var logLevel logLevel
+	flags := flag.NewFlagSet(basename, flag.ExitOnError)
+	klog.InitFlags(flags)
+	pflags := command.Flags()
 	var uidmap, gidmap string
 	var useNewuidmap, useNewgidmap bool
 	flags.StringVar(&uidmap, "uidmap", "", "re-exec in a user namespace using the specified UID map")
 	flags.StringVar(&gidmap, "gidmap", "", "re-exec in a user namespace using the specified GID map")
 	flags.BoolVar(&useNewuidmap, "use-newuidmap", os.Geteuid() != 0, "use newuidmap to set up UID mappings")
 	flags.BoolVar(&useNewgidmap, "use-newgidmap", os.Geteuid() != 0, "use newgidmap to set up GID mappings")
-	flags.Var(&logLevel, "loglevel", "logging verbosity")
+	vflag := flags.Lookup("v")
+	flags.Var(vflag.Value, "loglevel", "logging verbosity")
+	pflags.AddGoFlagSet(flags)
 	wrapped := command.Run
 	command.Run = func(c *cobra.Command, args []string) {
 		switch basename {
@@ -115,12 +119,4 @@ func CommandFor(basename string) *cobra.Command {
 	}
 
 	return cmd
-}
-
-type logLevel struct {
-	klog.Level
-}
-
-func (l *logLevel) Type() string {
-	return "klog.Level"
 }
