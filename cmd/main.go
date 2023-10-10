@@ -45,23 +45,31 @@ func main() {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
-	const tlsCertRoot = "/etc/pki/tls/certs"
-	const runtimeCertRoot = "/etc/docker/certs.d"
+	installCAcerts := func() {
+		const tlsCertRoot = "/etc/pki/tls/certs"
+		const runtimeCertRoot = "/etc/docker/certs.d"
 
-	clusterCASrc := fmt.Sprintf("%s/ca.crt", builder.SecretCertsMountPath)
-	clusterCADst := fmt.Sprintf("%s/cluster.crt", tlsCertRoot)
-	fs := s2ifs.NewFileSystem()
-	err := fs.Copy(clusterCASrc, clusterCADst, func(path string) bool { return false })
-	if err != nil {
-		fmt.Printf("Error setting up cluster CA cert: %v\n", err)
-		os.Exit(1)
-	}
+		clusterCASrc := fmt.Sprintf("%s/ca.crt", builder.SecretCertsMountPath)
+		clusterCADst := fmt.Sprintf("%s/cluster.crt", tlsCertRoot)
 
-	runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
-	err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, func(path string) bool { return false })
-	if err != nil {
-		fmt.Printf("Error setting up service CA cert: %v\n", err)
-		os.Exit(1)
+		// copy the cluster CA certificate from where OpenShift provides it for
+		// us to where the standard library and assorted binaries look for CA
+		// certificates
+		fs := s2ifs.NewFileSystem()
+		err := fs.Copy(clusterCASrc, clusterCADst, func(path string) bool { return false })
+		if err != nil {
+			fmt.Printf("Error setting up cluster CA cert: %v\n", err)
+			os.Exit(1)
+		}
+
+		// copy CA certificates from where OpenShift provides them for us to
+		// where docker and docker-like clients look for them
+		runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
+		err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, func(path string) bool { return false })
+		if err != nil {
+			fmt.Printf("Error setting up service CA cert: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	basename := filepath.Base(os.Args[0])
@@ -87,10 +95,12 @@ func main() {
 			kcmdutil.CheckErr(err)
 			os.MkdirAll(storeOptions.GraphRoot, 0775)
 			os.MkdirAll(storeOptions.RunRoot, 0775)
+			installCAcerts()
 			logUserNamespaceIDMappings()
 			maybeReexecUsingUserNamespace(uidmap, useNewuidmap, gidmap, useNewgidmap)
 		default:
 			if !strings.HasSuffix(basename, "-in-a-user-namespace") {
+				installCAcerts()
 				logUserNamespaceIDMappings()
 			}
 		}
