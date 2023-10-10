@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/containers/storage"
@@ -86,11 +87,14 @@ func main() {
 			kcmdutil.CheckErr(err)
 			os.MkdirAll(storeOptions.GraphRoot, 0775)
 			os.MkdirAll(storeOptions.RunRoot, 0775)
+			logUserNamespaceIDMappings()
 			maybeReexecUsingUserNamespace(uidmap, useNewuidmap, gidmap, useNewgidmap)
-			wrapped(c, args)
 		default:
-			wrapped(c, args)
+			if !strings.HasSuffix(basename, "-in-a-user-namespace") {
+				logUserNamespaceIDMappings()
+			}
 		}
+		wrapped(c, args)
 	}
 
 	code := cli.Run(command)

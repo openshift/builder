@@ -397,7 +397,7 @@ func RunS2IBuild(out io.Writer, isolation, ociRuntime, storageDriver, storageOpt
 // RunGitClone performs a git clone using the build defined in the environment
 func RunGitClone(out io.Writer) error {
 	serviceability.InitLogrusFromKlog()
-	logVersion("")
+	logVersion("openshift-git-clone")
 	cfg, err := newBuilderConfigFromEnvironment(out, false, "", "", "", "")
 	if err != nil {
 		return err

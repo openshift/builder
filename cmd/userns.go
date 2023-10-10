@@ -14,7 +14,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const usernsMarkerVariable = "_CONTAINERS_USERNS_CONFIGURED"
+const usernsMarkerVariable = unshare.UsernsEnvName
 
 func parseIDMappings(uidmap, gidmap string) ([]specs.LinuxIDMapping, []specs.LinuxIDMapping) {
 	// helper for parsing a string of the form "container:host:size[,container:host:size...]"
@@ -93,19 +93,10 @@ func isNodeDefaultMapping(m []specs.LinuxIDMapping) bool {
 	return len(m) == 1 && m[0].ContainerID == 0 && m[0].HostID == 0 && m[0].Size == 0xffffffff
 }
 
-func maybeReexecUsingUserNamespace(uidmap string, useNewuidmap bool, gidmap string, useNewgidmap bool) {
+func logUserNamespaceIDMappings() {
 	// If we've already done all of this, there's no need to do it again.
 	if inOurUserNamespace() {
 		return
-	}
-
-	// If there's nothing to do, just return.
-	if uidmap == "" && gidmap == "" && os.Geteuid() == 0 {
-		if caps, err := capability.NewPid2(0); err == nil {
-			if err := caps.Load(); err == nil && caps.Get(capability.EFFECTIVE, capability.CAP_SYS_ADMIN) {
-				return
-			}
-		}
 	}
 
 	// Log the ID maps we were started with.
@@ -129,7 +120,25 @@ func maybeReexecUsingUserNamespace(uidmap string, useNewuidmap bool, gidmap stri
 		}
 		uidMap += "]"
 		gidMap += "]"
-		klog.V(2).Infof("Started in kernel user namespace with UID map %s and GID map %s.", uidMap, gidMap)
+		klog.V(2).Infof("Started in kernel user namespace as %d:%d with UID map %s and GID map %s.", os.Getuid(), os.Getgid(), uidMap, gidMap)
+	} else {
+		klog.V(2).Infof("Started in node (default) kernel user namespace as %d:%d.", os.Getuid(), os.Getgid())
+	}
+}
+
+func maybeReexecUsingUserNamespace(uidmap string, useNewuidmap bool, gidmap string, useNewgidmap bool) {
+	// If we've already done all of this, there's no need to do it again.
+	if inOurUserNamespace() {
+		return
+	}
+
+	// If there's actually nothing to do, just return.
+	if uidmap == "" && gidmap == "" && os.Geteuid() == 0 {
+		if caps, err := capability.NewPid2(0); err == nil {
+			if err := caps.Load(); err == nil && caps.Get(capability.EFFECTIVE, capability.CAP_SYS_ADMIN) {
+				return
+			}
+		}
 	}
 
 	// Parse our --uidmap and --gidmap flags into ID mappings and re-exec ourselves.
