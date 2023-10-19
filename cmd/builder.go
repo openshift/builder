@@ -68,7 +68,7 @@ func NewCmdVersion(fullName string, versionInfo k8sversion.Info, buildahVersion 
 func NewCommandS2IBuilder(name string) *cobra.Command {
 	var isolation, ociRuntime, storageDriver, storageOptions string
 
-	defaultConfig, err := config.DefaultConfig()
+	defaultConfig, err := config.NewConfig("")
 	kcmdutil.CheckErr(err)
 
 	cmd := &cobra.Command{
@@ -104,7 +104,7 @@ func NewCommandS2IBuilder(name string) *cobra.Command {
 func NewCommandDockerBuilder(name string) *cobra.Command {
 	var isolation, ociRuntime, storageDriver, storageOptions string
 
-	defaultConfig, err := config.DefaultConfig()
+	defaultConfig, err := config.NewConfig("")
 	kcmdutil.CheckErr(err)
 
 	cmd := &cobra.Command{
