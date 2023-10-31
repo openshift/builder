@@ -4,10 +4,10 @@ go 1.19
 
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
-	github.com/containers/buildah v1.31.0
-	github.com/containers/common v0.55.1
-	github.com/containers/image/v5 v5.26.1
-	github.com/containers/storage v1.48.0
+	github.com/containers/buildah v1.31.4
+	github.com/containers/common v0.55.4
+	github.com/containers/image/v5 v5.26.2
+	github.com/containers/storage v1.48.1
 	github.com/docker/distribution v2.8.2+incompatible
 	github.com/fsouza/go-dockerclient v1.9.7
 	github.com/go-logr/logr v1.2.4 // indirect
@@ -110,7 +110,7 @@ require (
 	github.com/proglottis/gpgme v0.1.3 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/seccomp/libseccomp-golang v0.10.0 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20201008174630-78d3cae3a980 // indirect
 	github.com/stretchr/testify v1.8.4
 	github.com/sylabs/sif/v2 v2.11.5 // indirect
@@ -196,7 +196,6 @@ require (
 )
 
 replace (
-
 	golang.org/x/net => golang.org/x/net v0.17.0
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for these in its go.mod
 	k8s.io/api => k8s.io/api v0.27.3
