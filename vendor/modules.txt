@@ -901,7 +901,7 @@ go.starlark.net/resolve
 go.starlark.net/starlark
 go.starlark.net/starlarkstruct
 go.starlark.net/syntax
-# golang.org/x/crypto v0.5.0 => golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0
+# golang.org/x/crypto v0.14.0 => golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0
 ## explicit; go 1.17
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/cast5
@@ -926,13 +926,13 @@ golang.org/x/crypto/sha3
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
-# golang.org/x/mod v0.7.0
+# golang.org/x/mod v0.8.0
 ## explicit; go 1.17
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.5.0
+# golang.org/x/net v0.6.0 => golang.org/x/net v0.17.0
 ## explicit; go 1.17
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -952,18 +952,17 @@ golang.org/x/oauth2/internal
 ## explicit
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.4.0
+# golang.org/x/sys v0.13.0
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
-golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/term v0.4.0
+# golang.org/x/term v0.13.0
 ## explicit; go 1.17
 golang.org/x/term
-# golang.org/x/text v0.6.0
+# golang.org/x/text v0.13.0
 ## explicit; go 1.17
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal
@@ -978,7 +977,7 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.2.0
 ## explicit
 golang.org/x/time/rate
-# golang.org/x/tools v0.4.0
+# golang.org/x/tools v0.6.0
 ## explicit; go 1.18
 golang.org/x/tools/cmd/stringer
 golang.org/x/tools/go/gcexportdata
@@ -992,6 +991,7 @@ golang.org/x/tools/internal/gcimporter
 golang.org/x/tools/internal/gocommand
 golang.org/x/tools/internal/packagesinternal
 golang.org/x/tools/internal/pkgbits
+golang.org/x/tools/internal/tokeninternal
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 # google.golang.org/appengine v1.6.7
@@ -1527,6 +1527,7 @@ sigs.k8s.io/yaml
 # github.com/containerd/containerd => github.com/containerd/containerd v1.6.6
 # github.com/docker/docker => github.com/docker/docker v0.0.0-20200911110540-7ca355652fe0
 # golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0
+# golang.org/x/net => golang.org/x/net v0.17.0
 # k8s.io/api => k8s.io/api v0.26.1
 # k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.1
 # k8s.io/apimachinery => k8s.io/apimachinery v0.26.1

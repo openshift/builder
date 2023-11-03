@@ -24,7 +24,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
-	golang.org/x/sys v0.4.0
+	golang.org/x/sys v0.13.0
 	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1
 	k8s.io/client-go v0.26.1
@@ -142,13 +142,13 @@ require (
 	go.mozilla.org/pkcs7 v0.0.0-20210826202110-33d05740a352 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
-	golang.org/x/crypto v0.5.0 // indirect
-	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/crypto v0.14.0 // indirect
+	golang.org/x/mod v0.8.0 // indirect
+	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/oauth2 v0.4.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/term v0.4.0 // indirect
-	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/term v0.13.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/time v0.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20221227171554-f9683d7f8bef // indirect
@@ -205,7 +205,7 @@ require (
 	github.com/theupdateframework/go-tuf v0.5.2-0.20221207161717-9cb61d6e65f5 // indirect
 	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	go.mongodb.org/mongo-driver v1.11.1 // indirect
-	golang.org/x/tools v0.4.0 // indirect
+	golang.org/x/tools v0.6.0 // indirect
 )
 
 replace (
@@ -214,6 +214,8 @@ replace (
 	github.com/docker/docker => github.com/docker/docker v0.0.0-20200911110540-7ca355652fe0
 	// Needed to resolve broken transitive dependencies in buildkit and s2i
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0
+
+	golang.org/x/net => golang.org/x/net v0.17.0
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for these in its go.mod
 	k8s.io/api => k8s.io/api v0.26.1
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.1
