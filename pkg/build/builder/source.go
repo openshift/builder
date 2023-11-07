@@ -365,7 +365,7 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 		}
 	}
 
-	args := []string{"-r"}
+	args := []string{"-r", "-p"}
 	if log.Is(5) {
 		args = append(args, "-v")
 	}
