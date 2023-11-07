@@ -4,9 +4,9 @@ go 1.19
 
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
-	github.com/containers/buildah v1.29.0
+	github.com/containers/buildah v1.29.2
 	github.com/containers/common v0.51.2
-	github.com/containers/image/v5 v5.24.0
+	github.com/containers/image/v5 v5.24.1
 	github.com/containers/storage v1.45.3
 	github.com/docker/distribution v2.8.1+incompatible
 	github.com/fsouza/go-dockerclient v1.9.3
@@ -119,7 +119,7 @@ require (
 	github.com/proglottis/gpgme v0.1.3 // indirect
 	github.com/rivo/uniseg v0.4.3 // indirect
 	github.com/seccomp/libseccomp-golang v0.10.0 // indirect
-	github.com/sirupsen/logrus v1.9.0 // indirect
+	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/afero v1.8.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
