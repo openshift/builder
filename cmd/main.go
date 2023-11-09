@@ -1,11 +1,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/containers/storage"
@@ -43,37 +45,48 @@ func main() {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
-	const tlsCertRoot = "/etc/pki/tls/certs"
-	const runtimeCertRoot = "/etc/docker/certs.d"
+	installCAcerts := func() {
+		const tlsCertRoot = "/etc/pki/tls/certs"
+		const runtimeCertRoot = "/etc/docker/certs.d"
 
-	clusterCASrc := fmt.Sprintf("%s/ca.crt", builder.SecretCertsMountPath)
-	clusterCADst := fmt.Sprintf("%s/cluster.crt", tlsCertRoot)
-	fs := s2ifs.NewFileSystem()
-	err := fs.Copy(clusterCASrc, clusterCADst, func(path string) bool { return false })
-	if err != nil {
-		fmt.Printf("Error setting up cluster CA cert: %v\n", err)
-		os.Exit(1)
-	}
+		clusterCASrc := fmt.Sprintf("%s/ca.crt", builder.SecretCertsMountPath)
+		clusterCADst := fmt.Sprintf("%s/cluster.crt", tlsCertRoot)
 
-	runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
-	err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, func(path string) bool { return false })
-	if err != nil {
-		fmt.Printf("Error setting up service CA cert: %v\n", err)
-		os.Exit(1)
+		// copy the cluster CA certificate from where OpenShift provides it for
+		// us to where the standard library and assorted binaries look for CA
+		// certificates
+		fs := s2ifs.NewFileSystem()
+		err := fs.Copy(clusterCASrc, clusterCADst, func(path string) bool { return false })
+		if err != nil {
+			fmt.Printf("Error setting up cluster CA cert: %v\n", err)
+			os.Exit(1)
+		}
+
+		// copy CA certificates from where OpenShift provides them for us to
+		// where docker and docker-like clients look for them
+		runtimeCASrc := fmt.Sprintf("%s/certs.d", builder.ConfigMapCertsMountPath)
+		err = fs.CopyContents(runtimeCASrc, runtimeCertRoot, func(path string) bool { return false })
+		if err != nil {
+			fmt.Printf("Error setting up service CA cert: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	basename := filepath.Base(os.Args[0])
 	command := CommandFor(basename)
 
-	flags := command.Flags()
-	var logLevel logLevel
+	flags := flag.NewFlagSet(basename, flag.ExitOnError)
+	klog.InitFlags(flags)
+	pflags := command.Flags()
 	var uidmap, gidmap string
 	var useNewuidmap, useNewgidmap bool
 	flags.StringVar(&uidmap, "uidmap", "", "re-exec in a user namespace using the specified UID map")
 	flags.StringVar(&gidmap, "gidmap", "", "re-exec in a user namespace using the specified GID map")
 	flags.BoolVar(&useNewuidmap, "use-newuidmap", os.Geteuid() != 0, "use newuidmap to set up UID mappings")
 	flags.BoolVar(&useNewgidmap, "use-newgidmap", os.Geteuid() != 0, "use newgidmap to set up GID mappings")
-	flags.Var(&logLevel, "loglevel", "logging verbosity")
+	vflag := flags.Lookup("v")
+	flags.Var(vflag.Value, "loglevel", "logging verbosity")
+	pflags.AddGoFlagSet(flags)
 	wrapped := command.Run
 	command.Run = func(c *cobra.Command, args []string) {
 		switch basename {
@@ -82,11 +95,16 @@ func main() {
 			kcmdutil.CheckErr(err)
 			os.MkdirAll(storeOptions.GraphRoot, 0775)
 			os.MkdirAll(storeOptions.RunRoot, 0775)
+			installCAcerts()
+			logUserNamespaceIDMappings()
 			maybeReexecUsingUserNamespace(uidmap, useNewuidmap, gidmap, useNewgidmap)
-			wrapped(c, args)
 		default:
-			wrapped(c, args)
+			if !strings.HasSuffix(basename, "-in-a-user-namespace") {
+				installCAcerts()
+				logUserNamespaceIDMappings()
+			}
 		}
+		wrapped(c, args)
 	}
 
 	code := cli.Run(command)
@@ -115,12 +133,4 @@ func CommandFor(basename string) *cobra.Command {
 	}
 
 	return cmd
-}
-
-type logLevel struct {
-	klog.Level
-}
-
-func (l *logLevel) Type() string {
-	return "klog.Level"
 }
