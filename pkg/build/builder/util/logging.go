@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"net/url"
 	"regexp"
 
@@ -69,6 +70,7 @@ func SafeForLoggingBuildCommonSpec(spec *buildapiv1.CommonSpec) *buildapiv1.Comm
 		newSpec.Strategy.DockerStrategy.Env = SafeForLoggingEnvVar(newSpec.Strategy.DockerStrategy.Env)
 	}
 	if newSpec.Strategy.CustomStrategy != nil {
+		fmt.Println("######## we entered here >> ", newSpec.Strategy.CustomStrategy)
 		newSpec.Strategy.CustomStrategy.Env = SafeForLoggingEnvVar(newSpec.Strategy.CustomStrategy.Env)
 	}
 	if newSpec.Strategy.JenkinsPipelineStrategy != nil {

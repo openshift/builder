@@ -233,6 +233,11 @@ func (d *DockerBuilder) copySecrets(secrets []buildapiv1.SecretBuildSource, targ
 		if err != nil {
 			return err
 		}
+		fmt.Println("########### check: copying secret")
+		err = d.copyLocalObject(secretSource(s), DockerPullSecretMountPath, targetDir)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

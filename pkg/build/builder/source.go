@@ -167,6 +167,7 @@ func ExtractImageContent(ctx context.Context, dockerClient DockerClient, store s
 		forcePull = build.Spec.Strategy.CustomStrategy.ForcePull
 	}
 	// extract source from an Image if specified
+	log.Infof("################## check >> did we enter in extractImageContent?")
 	for i, image := range build.Spec.Source.Images {
 		if len(image.Paths) == 0 {
 			continue
