@@ -2,6 +2,7 @@ reviewers:
   - sayan-biswas
   - divyansh42
 approvers:
+  - adambkaplan
   - bparees
   - sayan-biswas
 component: Build
