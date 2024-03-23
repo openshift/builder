@@ -2,6 +2,7 @@ package dockercfg
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/user"
@@ -91,6 +92,7 @@ func (h *Helper) GetDockerAuth(imageName, authType string) (docker.AuthConfigura
 
 // GetDockercfgFile returns the path to the dockercfg file
 func GetDockercfgFile(path string) string {
+	fmt.Println("####### Do we visit to GetDockercfgFile >> ", DockerConfigJsonKey)
 	var cfgPath string
 	if path != "" {
 		cfgPath = path

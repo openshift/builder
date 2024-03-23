@@ -144,6 +144,7 @@ func parseInt64(s string) (int64, error) {
 // PullSecret is specified.
 func GetDockerAuthConfiguration(path string) (*docker.AuthConfigurations, error) {
 	log.V(2).Infof("Checking for Docker config file for %s in path %s", dockercfg.PullAuthType, path)
+	fmt.Println("####### inside getdockerauthconfiguration!! ", dockercfg.PullAuthType)
 	dockercfgPath := dockercfg.GetDockercfgFile(path)
 	if len(dockercfgPath) == 0 {
 		return nil, fmt.Errorf("no docker config file found in '%s'", os.Getenv(dockercfg.PullAuthType))

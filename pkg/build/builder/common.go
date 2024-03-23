@@ -55,6 +55,8 @@ const (
 	// SecretBuildSourceBaseMountPath is the path that the controller will have
 	// mounted secret input content within the build pod
 	secretBuildSourceBaseMountPath = "/var/run/secrets/openshift.io/build"
+	// DockerPullSecretMountPath is the path that controller will have mounted secret
+	DockerPullSecretMountPath = "/var/run/secrets/openshift.io/pull"
 	// BuildWorkDirMount is the working directory within the build pod, mounted as a volume.
 	buildWorkDirMount = "/tmp/build"
 	// buildVolumeMountPath is where user defined BuildVolumes get mounted

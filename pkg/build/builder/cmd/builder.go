@@ -208,6 +208,7 @@ func (c *builderConfig) setupGitEnvironment() (string, []string, string, error) 
 	if sourceSecret != nil {
 		// TODO: this should be refactored to let each source type manage which secrets
 		// it accepts
+		log.Infof("#################### check: >> we are in sourcesecret check of builder.go")
 		sourceURL, err := s2igit.Parse(gitSource.URI)
 		if err != nil {
 			return "", nil, "", fmt.Errorf("cannot parse build URL: %s", gitSource.URI)
