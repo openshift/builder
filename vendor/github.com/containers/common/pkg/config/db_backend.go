@@ -13,12 +13,6 @@ const (
 	// SQLite backend.
 	DBBackendSQLite
 
-	// DBBackendDefault describes that no explicit backend has been set.
-	// It should default to sqlite unless there is already an existing boltdb,
-	// this allows for backwards compatibility on upgrades. The actual detection
-	// logic must live in podman as we only know there were to look for the file.
-	DBBackendDefault
-
 	stringBoltDB = "boltdb"
 	stringSQLite = "sqlite"
 )
@@ -30,8 +24,6 @@ func (d DBBackend) String() string {
 		return stringBoltDB
 	case DBBackendSQLite:
 		return stringSQLite
-	case DBBackendDefault:
-		return ""
 	default:
 		return fmt.Sprintf("unsupported database backend: %d", d)
 	}
@@ -40,7 +32,7 @@ func (d DBBackend) String() string {
 // Validate returns whether the DBBackend is supported.
 func (d DBBackend) Validate() error {
 	switch d {
-	case DBBackendBoltDB, DBBackendSQLite, DBBackendDefault:
+	case DBBackendBoltDB, DBBackendSQLite:
 		return nil
 	default:
 		return fmt.Errorf("unsupported database backend: %d", d)
@@ -57,9 +49,12 @@ func ParseDBBackend(raw string) (DBBackend, error) {
 		return DBBackendBoltDB, nil
 	case stringSQLite:
 		return DBBackendSQLite, nil
-	case "":
-		return DBBackendDefault, nil
 	default:
 		return DBBackendUnsupported, fmt.Errorf("unsupported database backend: %q", raw)
 	}
+}
+
+// DBBackend returns the configured database backend.
+func (c *Config) DBBackend() (DBBackend, error) {
+	return ParseDBBackend(c.Engine.DBBackend)
 }

@@ -1,7 +1,6 @@
 package storage
 
 import (
-	_ "embed"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	// register all of the built-in drivers
@@ -69,19 +67,6 @@ type rwMetadataStore interface {
 type metadataStore interface {
 	roMetadataStore
 	rwMetadataStore
-}
-
-// ApplyStagedLayerOptions contains options to pass to ApplyStagedLayer
-type ApplyStagedLayerOptions struct {
-	ID           string        // Mandatory
-	ParentLayer  string        // Optional
-	Names        []string      // Optional
-	MountLabel   string        // Optional
-	Writeable    bool          // Optional
-	LayerOptions *LayerOptions // Optional
-
-	DiffOutput  *drivers.DriverWithDifferOutput  // Mandatory
-	DiffOptions *drivers.ApplyDiffWithDifferOpts // Mandatory
 }
 
 // An roBigDataStore wraps up the read-only big-data related methods of the
@@ -328,23 +313,13 @@ type Store interface {
 	// ApplyDiffer applies a diff to a layer.
 	// It is the caller responsibility to clean the staging directory if it is not
 	// successfully applied with ApplyDiffFromStagingDirectory.
-	ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffWithDifferOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error)
+	ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error)
 
 	// ApplyDiffFromStagingDirectory uses stagingDirectory to create the diff.
-	// Deprecated: it will be removed soon.  Use ApplyStagedLayer instead.
-	ApplyDiffFromStagingDirectory(to, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffWithDifferOpts) error
+	ApplyDiffFromStagingDirectory(to, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffOpts) error
 
 	// CleanupStagingDirectory cleanups the staging directory.  It can be used to cleanup the staging directory on errors
-	// Deprecated: it will be removed soon.  Use CleanupStagedLayer instead.
 	CleanupStagingDirectory(stagingDirectory string) error
-
-	// ApplyStagedLayer combines the functions of CreateLayer and ApplyDiffFromStagingDirectory,
-	// marking the layer for automatic removal if applying the diff fails
-	// for any reason.
-	ApplyStagedLayer(args ApplyStagedLayerOptions) (*Layer, error)
-
-	// CleanupStagedLayer cleanups the staging directory.  It can be used to cleanup the staging directory on errors
-	CleanupStagedLayer(diffOutput *drivers.DriverWithDifferOutput) error
 
 	// DifferTarget gets the path to the differ target.
 	DifferTarget(id string) (string, error)
@@ -356,10 +331,6 @@ type Store interface {
 	// LayersByUncompressedDigest returns a slice of the layers with the
 	// specified uncompressed digest value recorded for them.
 	LayersByUncompressedDigest(d digest.Digest) ([]Layer, error)
-
-	// LayersByTOCDigest returns a slice of the layers with the
-	// specified TOC digest value recorded for them.
-	LayersByTOCDigest(d digest.Digest) ([]Layer, error)
 
 	// LayerSize returns a cached approximation of the layer's size, or -1
 	// if we don't have a value on hand.
@@ -419,18 +390,6 @@ type Store interface {
 	// github.com/containers/image/manifest.Digest as digestManifest to
 	// allow ImagesByDigest to find images by their correct digests.
 	SetImageBigData(id, key string, data []byte, digestManifest func([]byte) (digest.Digest, error)) error
-
-	// ImageDirectory returns a path of a directory which the caller can
-	// use to store data, specific to the image, which the library does not
-	// directly manage.  The directory will be deleted when the image is
-	// deleted.
-	ImageDirectory(id string) (string, error)
-
-	// ImageRunDirectory returns a path of a directory which the caller can
-	// use to store data, specific to the image, which the library does not
-	// directly manage.  The directory will be deleted when the host system
-	// is restarted.
-	ImageRunDirectory(id string) (string, error)
 
 	// ListLayerBigData retrieves a list of the (possibly large) chunks of
 	// named data associated with a layer.
@@ -603,19 +562,10 @@ type LayerOptions struct {
 	// initialize this layer.  If set, it should be a child of the layer
 	// which we want to use as the parent of the new layer.
 	TemplateLayer string
-	// OriginalDigest specifies a digest of the (possibly-compressed) tarstream (diff), if one is
+	// OriginalDigest specifies a digest of the tarstream (diff), if one is
 	// provided along with these LayerOptions, and reliably known by the caller.
-	// The digest might not be exactly the digest of the provided tarstream
-	// (e.g. the digest might be of a compressed representation, while providing
-	// an uncompressed one); in that case the caller is responsible for the two matching.
 	// Use the default "" if this fields is not applicable or the value is not known.
 	OriginalDigest digest.Digest
-	// OriginalSize specifies a size of the (possibly-compressed) tarstream corresponding
-	// to OriginalDigest.
-	// If the digest does not match the provided tarstream, OriginalSize must match OriginalDigest,
-	// not the tarstream.
-	// Use nil if not applicable or not known.
-	OriginalSize *int64
 	// UncompressedDigest specifies a digest of the uncompressed version (“DiffID”)
 	// of the tarstream (diff), if one is provided along with these LayerOptions,
 	// and reliably known by the caller.
@@ -972,13 +922,11 @@ func (s *store) load() error {
 	if err := os.MkdirAll(gipath, 0o700); err != nil {
 		return err
 	}
-	imageStore, err := newImageStore(gipath)
+	ris, err := newImageStore(gipath)
 	if err != nil {
 		return err
 	}
-	s.imageStore = imageStore
-
-	s.rwImageStores = []rwImageStore{imageStore}
+	s.imageStore = ris
 
 	gcpath := filepath.Join(s.graphRoot, driverPrefix+"containers")
 	if err := os.MkdirAll(gcpath, 0o700); err != nil {
@@ -996,16 +944,13 @@ func (s *store) load() error {
 
 	s.containerStore = rcs
 
-	additionalImageStores := s.graphDriver.AdditionalImageStores()
-	if s.imageStoreDir != "" {
-		additionalImageStores = append([]string{s.graphRoot}, additionalImageStores...)
-	}
-
-	for _, store := range additionalImageStores {
+	for _, store := range driver.AdditionalImageStores() {
 		gipath := filepath.Join(store, driverPrefix+"images")
 		var ris roImageStore
-		// both the graphdriver and the imagestore must be used read-write.
-		if store == s.imageStoreDir || store == s.graphRoot {
+		if s.imageStoreDir != "" && store == s.graphRoot {
+			// If --imagestore was set and current store
+			// is `graphRoot` then mount it as a `rw` additional
+			// store instead of `readonly` additional store.
 			imageStore, err := newImageStore(gipath)
 			if err != nil {
 				return err
@@ -1015,10 +960,6 @@ func (s *store) load() error {
 		} else {
 			ris, err = newROImageStore(gipath)
 			if err != nil {
-				if errors.Is(err, syscall.EROFS) {
-					logrus.Debugf("Ignoring creation of lockfiles on read-only file systems %q, %v", gipath, err)
-					continue
-				}
 				return err
 			}
 		}
@@ -1090,9 +1031,15 @@ func (s *store) stopUsingGraphDriver() {
 // Almost all users should use startUsingGraphDriver instead.
 // The caller must hold s.graphLock.
 func (s *store) createGraphDriverLocked() (drivers.Driver, error) {
+	driverRoot := s.imageStoreDir
+	imageStoreBase := s.graphRoot
+	if driverRoot == "" {
+		driverRoot = s.graphRoot
+		imageStoreBase = ""
+	}
 	config := drivers.Options{
-		Root:           s.graphRoot,
-		ImageStore:     s.imageStoreDir,
+		Root:           driverRoot,
+		ImageStore:     imageStoreBase,
 		RunRoot:        s.runRoot,
 		DriverPriority: s.graphDriverPriority,
 		DriverOptions:  s.graphOptions,
@@ -1122,15 +1069,15 @@ func (s *store) getLayerStoreLocked() (rwLayerStore, error) {
 	if err := os.MkdirAll(rlpath, 0o700); err != nil {
 		return nil, err
 	}
-	glpath := filepath.Join(s.graphRoot, driverPrefix+"layers")
+	imgStoreRoot := s.imageStoreDir
+	if imgStoreRoot == "" {
+		imgStoreRoot = s.graphRoot
+	}
+	glpath := filepath.Join(imgStoreRoot, driverPrefix+"layers")
 	if err := os.MkdirAll(glpath, 0o700); err != nil {
 		return nil, err
 	}
-	ilpath := ""
-	if s.imageStoreDir != "" {
-		ilpath = filepath.Join(s.imageStoreDir, driverPrefix+"layers")
-	}
-	rls, err := s.newLayerStore(rlpath, glpath, ilpath, s.graphDriver, s.transientStore)
+	rls, err := s.newLayerStore(rlpath, glpath, s.graphDriver, s.transientStore)
 	if err != nil {
 		return nil, err
 	}
@@ -1161,10 +1108,8 @@ func (s *store) getROLayerStoresLocked() ([]roLayerStore, error) {
 	if err := os.MkdirAll(rlpath, 0o700); err != nil {
 		return nil, err
 	}
-
 	for _, store := range s.graphDriver.AdditionalImageStores() {
 		glpath := filepath.Join(store, driverPrefix+"layers")
-
 		rls, err := newROLayerStore(rlpath, glpath, s.graphDriver)
 		if err != nil {
 			return nil, err
@@ -1445,7 +1390,8 @@ func (s *store) canUseShifting(uidmap, gidmap []idtools.IDMap) bool {
 	return true
 }
 
-func (s *store) putLayer(id, parent string, names []string, mountLabel string, writeable bool, lOptions *LayerOptions, diff io.Reader, slo *stagedLayerOptions) (*Layer, int64, error) {
+func (s *store) PutLayer(id, parent string, names []string, mountLabel string, writeable bool, lOptions *LayerOptions, diff io.Reader) (*Layer, int64, error) {
+	var parentLayer *Layer
 	rlstore, rlstores, err := s.bothLayerStoreKinds()
 	if err != nil {
 		return nil, -1, err
@@ -1458,8 +1404,6 @@ func (s *store) putLayer(id, parent string, names []string, mountLabel string, w
 		return nil, -1, err
 	}
 	defer s.containerStore.stopWriting()
-
-	var parentLayer *Layer
 	var options LayerOptions
 	if lOptions != nil {
 		options = *lOptions
@@ -1519,7 +1463,6 @@ func (s *store) putLayer(id, parent string, names []string, mountLabel string, w
 	}
 	layerOptions := LayerOptions{
 		OriginalDigest:     options.OriginalDigest,
-		OriginalSize:       options.OriginalSize,
 		UncompressedDigest: options.UncompressedDigest,
 		Flags:              options.Flags,
 	}
@@ -1533,11 +1476,7 @@ func (s *store) putLayer(id, parent string, names []string, mountLabel string, w
 			GIDMap:         copyIDMap(gidMap),
 		}
 	}
-	return rlstore.create(id, parentLayer, names, mountLabel, nil, &layerOptions, writeable, diff, slo)
-}
-
-func (s *store) PutLayer(id, parent string, names []string, mountLabel string, writeable bool, lOptions *LayerOptions, diff io.Reader) (*Layer, int64, error) {
-	return s.putLayer(id, parent, names, mountLabel, writeable, lOptions, diff, nil)
+	return rlstore.create(id, parentLayer, names, mountLabel, nil, &layerOptions, writeable, diff)
 }
 
 func (s *store) CreateLayer(id, parent string, names []string, mountLabel string, writeable bool, options *LayerOptions) (*Layer, error) {
@@ -1747,7 +1686,7 @@ func (s *store) imageTopLayerForMapping(image *Image, ristore roImageStore, rlst
 		}
 	}
 	layerOptions.TemplateLayer = layer.ID
-	mappedLayer, _, err := rlstore.create("", parentLayer, nil, layer.MountLabel, nil, &layerOptions, false, nil, nil)
+	mappedLayer, _, err := rlstore.create("", parentLayer, nil, layer.MountLabel, nil, &layerOptions, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating an ID-mapped copy of layer %q: %w", layer.ID, err)
 	}
@@ -1918,7 +1857,7 @@ func (s *store) CreateContainer(id string, names []string, image, layer, metadat
 		options.Flags[mountLabelFlag] = mountLabel
 	}
 
-	clayer, _, err := rlstore.create(layer, imageTopLayer, nil, mlabel, options.StorageOpt, layerOptions, true, nil, nil)
+	clayer, _, err := rlstore.create(layer, imageTopLayer, nil, mlabel, options.StorageOpt, layerOptions, true, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2591,7 +2530,7 @@ func (s *store) DeleteImage(id string, commit bool) (layers []string, err error)
 	if err := s.writeToAllStores(func(rlstore rwLayerStore) error {
 		// Delete image from all available imagestores configured to be used.
 		imageFound := false
-		for _, is := range s.rwImageStores {
+		for _, is := range append([]rwImageStore{s.imageStore}, s.rwImageStores...) {
 			if is != s.imageStore {
 				// This is an additional writeable image store
 				// so we must perform lock
@@ -2802,13 +2741,7 @@ func (s *store) Status() ([][2]string, error) {
 	return rlstore.Status()
 }
 
-//go:embed VERSION
-var storageVersion string
-
 func (s *store) Version() ([][2]string, error) {
-	if trimmedVersion := strings.TrimSpace(storageVersion); trimmedVersion != "" {
-		return [][2]string{{"Version", trimmedVersion}}, nil
-	}
 	return [][2]string{}, nil
 }
 
@@ -2982,27 +2915,14 @@ func (s *store) Diff(from, to string, options *DiffOptions) (io.ReadCloser, erro
 	return nil, ErrLayerUnknown
 }
 
-func (s *store) ApplyDiffFromStagingDirectory(to, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffWithDifferOpts) error {
-	if stagingDirectory != diffOutput.Target {
-		return fmt.Errorf("invalid value for staging directory, it must be the same as the differ target directory")
-	}
+func (s *store) ApplyDiffFromStagingDirectory(to, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffOpts) error {
 	_, err := writeToLayerStore(s, func(rlstore rwLayerStore) (struct{}, error) {
 		if !rlstore.Exists(to) {
 			return struct{}{}, ErrLayerUnknown
 		}
-		return struct{}{}, rlstore.applyDiffFromStagingDirectory(to, diffOutput, options)
+		return struct{}{}, rlstore.ApplyDiffFromStagingDirectory(to, stagingDirectory, diffOutput, options)
 	})
 	return err
-}
-
-func (s *store) ApplyStagedLayer(args ApplyStagedLayerOptions) (*Layer, error) {
-	slo := stagedLayerOptions{
-		DiffOutput:  args.DiffOutput,
-		DiffOptions: args.DiffOptions,
-	}
-
-	layer, _, err := s.putLayer(args.ID, args.ParentLayer, args.Names, args.MountLabel, args.Writeable, args.LayerOptions, nil, &slo)
-	return layer, err
 }
 
 func (s *store) CleanupStagingDirectory(stagingDirectory string) error {
@@ -3012,14 +2932,7 @@ func (s *store) CleanupStagingDirectory(stagingDirectory string) error {
 	return err
 }
 
-func (s *store) CleanupStagedLayer(diffOutput *drivers.DriverWithDifferOutput) error {
-	_, err := writeToLayerStore(s, func(rlstore rwLayerStore) (struct{}, error) {
-		return struct{}{}, rlstore.CleanupStagingDirectory(diffOutput.Target)
-	})
-	return err
-}
-
-func (s *store) ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffWithDifferOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error) {
+func (s *store) ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error) {
 	return writeToLayerStore(s, func(rlstore rwLayerStore) (*drivers.DriverWithDifferOutput, error) {
 		if to != "" && !rlstore.Exists(to) {
 			return nil, ErrLayerUnknown
@@ -3079,13 +2992,6 @@ func (s *store) LayersByUncompressedDigest(d digest.Digest) ([]Layer, error) {
 		return nil, fmt.Errorf("looking for layers matching digest %q: %w", d, err)
 	}
 	return s.layersByMappedDigest(func(r roLayerStore, d digest.Digest) ([]Layer, error) { return r.LayersByUncompressedDigest(d) }, d)
-}
-
-func (s *store) LayersByTOCDigest(d digest.Digest) ([]Layer, error) {
-	if err := d.Validate(); err != nil {
-		return nil, fmt.Errorf("looking for TOC matching digest %q: %w", d, err)
-	}
-	return s.layersByMappedDigest(func(r roLayerStore, d digest.Digest) ([]Layer, error) { return r.LayersByTOCDigest(d) }, d)
 }
 
 func (s *store) LayerSize(id string) (int64, error) {
@@ -3382,27 +3288,6 @@ func (s *store) ContainerByLayer(id string) (*Container, error) {
 	return nil, ErrContainerUnknown
 }
 
-func (s *store) ImageDirectory(id string) (string, error) {
-	foundImage := false
-	if res, done, err := readAllImageStores(s, func(store roImageStore) (string, bool, error) {
-		if store.Exists(id) {
-			foundImage = true
-		}
-		middleDir := s.graphDriverName + "-images"
-		gipath := filepath.Join(s.GraphRoot(), middleDir, id, "userdata")
-		if err := os.MkdirAll(gipath, 0o700); err != nil {
-			return "", true, err
-		}
-		return gipath, true, nil
-	}); done {
-		return res, err
-	}
-	if foundImage {
-		return "", fmt.Errorf("locating image with ID %q (consider removing the image to resolve the issue): %w", id, os.ErrNotExist)
-	}
-	return "", fmt.Errorf("locating image with ID %q: %w", id, ErrImageUnknown)
-}
-
 func (s *store) ContainerDirectory(id string) (string, error) {
 	res, _, err := readContainerStore(s, func() (string, bool, error) {
 		id, err := s.containerStore.Lookup(id)
@@ -3418,28 +3303,6 @@ func (s *store) ContainerDirectory(id string) (string, error) {
 		return gcpath, true, nil
 	})
 	return res, err
-}
-
-func (s *store) ImageRunDirectory(id string) (string, error) {
-	foundImage := false
-	if res, done, err := readAllImageStores(s, func(store roImageStore) (string, bool, error) {
-		if store.Exists(id) {
-			foundImage = true
-		}
-
-		middleDir := s.graphDriverName + "-images"
-		rcpath := filepath.Join(s.RunRoot(), middleDir, id, "userdata")
-		if err := os.MkdirAll(rcpath, 0o700); err != nil {
-			return "", true, err
-		}
-		return rcpath, true, nil
-	}); done {
-		return res, err
-	}
-	if foundImage {
-		return "", fmt.Errorf("locating image with ID %q (consider removing the image to resolve the issue): %w", id, os.ErrNotExist)
-	}
-	return "", fmt.Errorf("locating image with ID %q: %w", id, ErrImageUnknown)
 }
 
 func (s *store) ContainerRunDirectory(id string) (string, error) {
@@ -3682,8 +3545,8 @@ func SetDefaultConfigFilePath(path string) {
 }
 
 // DefaultConfigFile returns the path to the storage config file used
-func DefaultConfigFile() (string, error) {
-	return types.DefaultConfigFile()
+func DefaultConfigFile(rootless bool) (string, error) {
+	return types.DefaultConfigFile(rootless)
 }
 
 // ReloadConfigurationFile parses the specified configuration file and overrides

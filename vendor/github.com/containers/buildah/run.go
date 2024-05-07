@@ -3,12 +3,10 @@ package buildah
 import (
 	"fmt"
 	"io"
-	"net"
 
 	"github.com/containers/buildah/define"
 	"github.com/containers/buildah/internal"
 	"github.com/containers/buildah/pkg/sshagent"
-	"github.com/containers/common/libnetwork/etchosts"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage/pkg/lockfile"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -88,9 +86,7 @@ type RunOptions struct {
 	Runtime string
 	// Args adds global arguments for the runtime.
 	Args []string
-	// NoHostname won't create new /etc/hostname file
-	NoHostname bool
-	// NoHosts won't create new /etc/hosts file
+	// NoHosts use the images /etc/hosts file
 	NoHosts bool
 	// NoPivot adds the --no-pivot runtime flag.
 	NoPivot bool
@@ -208,13 +204,4 @@ type IDMaps struct {
 	rootGID    int
 	processUID int
 	processGID int
-}
-
-// netResult type to hold network info for hosts/resolv.conf
-type netResult struct {
-	entries           etchosts.HostEntries
-	dnsServers        []string
-	excludeIPs        []net.IP
-	ipv6              bool
-	keepHostResolvers bool
 }

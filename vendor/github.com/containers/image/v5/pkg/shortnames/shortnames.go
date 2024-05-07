@@ -11,7 +11,6 @@ import (
 	"github.com/containers/image/v5/types"
 	"github.com/manifoldco/promptui"
 	"github.com/opencontainers/go-digest"
-	"golang.org/x/exp/slices"
 	"golang.org/x/term"
 )
 
@@ -170,7 +169,7 @@ func (r *Resolved) Description() string {
 // pull errors must equal the amount of pull candidates.
 func (r *Resolved) FormatPullErrors(pullErrors []error) error {
 	if len(pullErrors) > 0 && len(pullErrors) != len(r.PullCandidates) {
-		pullErrors = append(slices.Clone(pullErrors),
+		pullErrors = append(pullErrors,
 			fmt.Errorf("internal error: expected %d instead of %d errors for %d pull candidates",
 				len(r.PullCandidates), len(pullErrors), len(r.PullCandidates)))
 	}

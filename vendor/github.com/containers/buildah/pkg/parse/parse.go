@@ -18,7 +18,6 @@ import (
 	"github.com/containers/buildah/define"
 	mkcwtypes "github.com/containers/buildah/internal/mkcw/types"
 	internalParse "github.com/containers/buildah/internal/parse"
-	"github.com/containers/buildah/internal/sbom"
 	"github.com/containers/buildah/internal/tmpdir"
 	"github.com/containers/buildah/pkg/sshagent"
 	"github.com/containers/common/pkg/auth"
@@ -105,7 +104,6 @@ func CommonBuildOptionsFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name 
 		}
 	}
 
-	noHostname, _ := flags.GetBool("no-hostname")
 	noHosts, _ := flags.GetBool("no-hosts")
 
 	addHost, _ := flags.GetStringSlice("add-host")
@@ -185,7 +183,6 @@ func CommonBuildOptionsFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name 
 		IdentityLabel: types.NewOptionalBool(identityLabel),
 		Memory:        memoryLimit,
 		MemorySwap:    memorySwap,
-		NoHostname:    noHostname,
 		NoHosts:       noHosts,
 		OmitHistory:   omitHistory,
 		ShmSize:       findFlagFunc("shm-size").Value.String(),
@@ -447,60 +444,6 @@ func SystemContextFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name strin
 	return ctx, nil
 }
 
-// PullPolicyFromOptions returns a PullPolicy that reflects the combination of
-// the specified "pull" and undocumented "pull-always" and "pull-never" flags.
-func PullPolicyFromOptions(c *cobra.Command) (define.PullPolicy, error) {
-	return PullPolicyFromFlagSet(c.Flags(), c.Flag)
-}
-
-// PullPolicyFromFlagSet returns a PullPolicy that reflects the combination of
-// the specified "pull" and undocumented "pull-always" and "pull-never" flags.
-func PullPolicyFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name string) *pflag.Flag) (define.PullPolicy, error) {
-	pullFlagsCount := 0
-
-	if findFlagFunc("pull").Changed {
-		pullFlagsCount++
-	}
-	if findFlagFunc("pull-always").Changed {
-		pullFlagsCount++
-	}
-	if findFlagFunc("pull-never").Changed {
-		pullFlagsCount++
-	}
-
-	if pullFlagsCount > 1 {
-		return 0, errors.New("can only set one of 'pull' or 'pull-always' or 'pull-never'")
-	}
-
-	// Allow for --pull, --pull=true, --pull=false, --pull=never, --pull=always
-	// --pull-always and --pull-never.  The --pull-never and --pull-always options
-	// will not be documented.
-	pullPolicy := define.PullIfMissing
-	pullFlagValue := findFlagFunc("pull").Value.String()
-	if strings.EqualFold(pullFlagValue, "true") || strings.EqualFold(pullFlagValue, "ifnewer") {
-		pullPolicy = define.PullIfNewer
-	}
-	pullAlwaysFlagValue, err := flags.GetBool("pull-always")
-	if err != nil {
-		return 0, err
-	}
-	if pullAlwaysFlagValue || strings.EqualFold(pullFlagValue, "always") {
-		pullPolicy = define.PullAlways
-	}
-	pullNeverFlagValue, err := flags.GetBool("pull-never")
-	if err != nil {
-		return 0, err
-	}
-	if pullNeverFlagValue ||
-		strings.EqualFold(pullFlagValue, "never") ||
-		strings.EqualFold(pullFlagValue, "false") {
-		pullPolicy = define.PullNever
-	}
-	logrus.Debugf("Pull Policy for pull [%v]", pullPolicy)
-
-	return pullPolicy, nil
-}
-
 func getAuthFile(authfile string) string {
 	if authfile != "" {
 		absAuthfile, err := filepath.Abs(authfile)
@@ -574,9 +517,13 @@ func DefaultPlatform() string {
 // Platform separates the platform string into os, arch and variant,
 // accepting any of $arch, $os/$arch, or $os/$arch/$variant.
 func Platform(platform string) (os, arch, variant string, err error) {
-	platform = strings.Trim(platform, "/")
-	if platform == "local" || platform == "" {
+	if platform == "local" || platform == "" || platform == "/" {
 		return Platform(DefaultPlatform())
+	}
+	if platform[len(platform)-1] == '/' || platform[0] == '/' {
+		// If --platform string has format as `some/plat/string/`
+		// or `/some/plat/string` make it `some/plat/string`
+		platform = strings.Trim(platform, "/")
 	}
 	platformSpec, err := platforms.Parse(platform)
 	if err != nil {
@@ -689,11 +636,6 @@ func GetBuildOutput(buildOutput string) (define.BuildOutputOption, error) {
 	return define.BuildOutputOption{Path: path, IsDir: isDir, IsStdout: isStdout}, nil
 }
 
-// TeeType parses a string value and returns a TeeType
-func TeeType(teeType string) define.TeeType {
-	return define.TeeType(strings.ToLower(teeType))
-}
-
 // GetConfidentialWorkloadOptions parses a confidential workload settings
 // argument, which controls both whether or not we produce an image that
 // expects to be run using krun, and how we handle things like encrypting
@@ -707,7 +649,7 @@ func GetConfidentialWorkloadOptions(arg string) (define.ConfidentialWorkloadOpti
 		var err error
 		switch {
 		case strings.HasPrefix(option, "type="):
-			options.TeeType = TeeType(strings.TrimPrefix(option, "type="))
+			options.TeeType = define.TeeType(strings.ToLower(strings.TrimPrefix(option, "type=")))
 			switch options.TeeType {
 			case define.SEV, define.SNP, mkcwtypes.SEV_NO_ES:
 			default:
@@ -760,76 +702,6 @@ func GetConfidentialWorkloadOptions(arg string) (define.ConfidentialWorkloadOpti
 	}
 	if options != defaults && !options.Convert {
 		return options, fmt.Errorf("--cw arguments missing one or more of (%q, %q)", "passphrase", "attestation_url")
-	}
-	return options, nil
-}
-
-// SBOMScanOptions parses the build options from the cli
-func SBOMScanOptions(c *cobra.Command) (*define.SBOMScanOptions, error) {
-	return SBOMScanOptionsFromFlagSet(c.Flags(), c.Flag)
-}
-
-// SBOMScanOptionsFromFlagSet parses scan settings from the cli
-func SBOMScanOptionsFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name string) *pflag.Flag) (*define.SBOMScanOptions, error) {
-	preset, err := flags.GetString("sbom")
-	if err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom: %w", err)
-	}
-
-	options, err := sbom.Preset(preset)
-	if err != nil {
-		return nil, err
-	}
-	if options == nil {
-		return nil, fmt.Errorf("parsing --sbom flag: unrecognized preset name %q", preset)
-	}
-	image, err := flags.GetString("sbom-scanner-image")
-	if err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom-scanner-image: %w", err)
-	}
-	commands, err := flags.GetStringArray("sbom-scanner-command")
-	if err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom-scanner-command: %w", err)
-	}
-	mergeStrategy, err := flags.GetString("sbom-merge-strategy")
-	if err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom-merge-strategy: %w", err)
-	}
-
-	if image != "" || len(commands) > 0 || mergeStrategy != "" {
-		options = &define.SBOMScanOptions{
-			Image:         image,
-			Commands:      append([]string{}, commands...),
-			MergeStrategy: define.SBOMMergeStrategy(mergeStrategy),
-		}
-	}
-	if options.ImageSBOMOutput, err = flags.GetString("sbom-image-output"); err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom-image-output: %w", err)
-	}
-	if options.SBOMOutput, err = flags.GetString("sbom-output"); err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom-output: %w", err)
-	}
-	if options.ImagePURLOutput, err = flags.GetString("sbom-image-purl-output"); err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom-image-purl-output: %w", err)
-	}
-	if options.PURLOutput, err = flags.GetString("sbom-purl-output"); err != nil {
-		return nil, fmt.Errorf("invalid value for --sbom-purl-output: %w", err)
-	}
-
-	if options.Image == "" || len(options.Commands) == 0 {
-		return options, fmt.Errorf("sbom configuration missing one or more of (%q or %q)", "--sbom-scanner-image", "--sbom-scanner-command")
-	}
-	if options.SBOMOutput == "" && options.ImageSBOMOutput == "" && options.PURLOutput == "" && options.ImagePURLOutput == "" {
-		return options, fmt.Errorf("sbom configuration missing one or more of (%q, %q, %q or %q)", "--sbom-output", "--sbom-image-output", "--sbom-purl-output", "--sbom-image-purl-output")
-	}
-	if len(options.Commands) > 1 && options.MergeStrategy == "" {
-		return options, fmt.Errorf("sbom configuration included multiple %q values but no %q value", "--sbom-scanner-command", "--sbom-merge-strategy")
-	}
-	switch options.MergeStrategy {
-	default:
-		return options, fmt.Errorf("sbom arguments included unrecognized merge strategy %q", string(options.MergeStrategy))
-	case define.SBOMMergeStrategyCat, define.SBOMMergeStrategyCycloneDXByComponentNameAndVersion, define.SBOMMergeStrategySPDXByPackageNameAndVersionInfo:
-		// all good here
 	}
 	return options, nil
 }
@@ -1178,24 +1050,23 @@ func Device(device string) (string, string, string, error) {
 // isValidDeviceMode checks if the mode for device is valid or not.
 // isValid mode is a composition of r (read), w (write), and m (mknod).
 func isValidDeviceMode(mode string) bool {
-	var legalDeviceMode = map[rune]struct{}{
-		'r': {},
-		'w': {},
-		'm': {},
+	var legalDeviceMode = map[rune]bool{
+		'r': true,
+		'w': true,
+		'm': true,
 	}
 	if mode == "" {
 		return false
 	}
 	for _, c := range mode {
-		if _, has := legalDeviceMode[c]; !has {
+		if !legalDeviceMode[c] {
 			return false
 		}
-		delete(legalDeviceMode, c)
+		legalDeviceMode[c] = false
 	}
 	return true
 }
 
-// GetTempDir returns the path of the preferred temporary directory on the host.
 func GetTempDir() string {
 	return tmpdir.GetTempDir()
 }

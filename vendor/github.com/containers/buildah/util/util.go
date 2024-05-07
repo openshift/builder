@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/containers/buildah/define"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
+	"github.com/containers/common/pkg/util"
 	"github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/pkg/shortnames"
 	"github.com/containers/image/v5/signature"
@@ -24,7 +26,6 @@ import (
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -44,9 +45,9 @@ var (
 	}
 )
 
-// StringInSlice is deprecated, use golang.org/x/exp/slices.Contains
+// StringInSlice is deprecated, use github.com/containers/common/pkg/util.StringInSlice
 func StringInSlice(s string, slice []string) bool {
-	return slices.Contains(slice, s)
+	return util.StringInSlice(s, slice)
 }
 
 // resolveName checks if name is a valid image name, and if that name doesn't
@@ -243,7 +244,7 @@ func Runtime() string {
 
 	conf, err := config.Default()
 	if err != nil {
-		logrus.Warnf("Error loading default container config when searching for local runtime: %v", err)
+		logrus.Warnf("Error loading container config when searching for local runtime: %v", err)
 		return define.DefaultRuntime
 	}
 	return conf.Engine.OCIRuntime
@@ -374,6 +375,12 @@ func TruncateString(str string, to int) string {
 	}
 	return newStr
 }
+
+var (
+	isUnifiedOnce sync.Once
+	isUnified     bool
+	isUnifiedErr  error
+)
 
 // fileExistsAndNotADir - Check to see if a file exists
 // and that it is not a directory.

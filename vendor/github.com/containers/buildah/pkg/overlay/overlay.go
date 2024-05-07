@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"errors"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // Options type holds various configuration options for overlay
@@ -113,10 +113,10 @@ func MountReadOnly(contentDir, source, dest string, rootUID, rootGID int, graphO
 
 // findMountProgram finds if any mount program is specified in the graph options.
 func findMountProgram(graphOptions []string) string {
-	mountMap := map[string]struct{}{
-		".mount_program":         {},
-		"overlay.mount_program":  {},
-		"overlay2.mount_program": {},
+	mountMap := map[string]bool{
+		".mount_program":         true,
+		"overlay.mount_program":  true,
+		"overlay2.mount_program": true,
 	}
 
 	for _, i := range graphOptions {
@@ -126,7 +126,7 @@ func findMountProgram(graphOptions []string) string {
 		}
 		key := s[0]
 		val := s[1]
-		if _, has := mountMap[key]; has {
+		if mountMap[key] {
 			return val
 		}
 	}
@@ -180,7 +180,7 @@ func Unmount(contentDir string) error {
 	}
 
 	// Ignore EINVAL as the specified merge dir is not a mount point
-	if err := system.Unmount(mergeDir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EINVAL) {
+	if err := unix.Unmount(mergeDir, 0); err != nil && !errors.Is(err, os.ErrNotExist) && err != unix.EINVAL {
 		return fmt.Errorf("unmount overlay %s: %w", mergeDir, err)
 	}
 	return nil

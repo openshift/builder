@@ -63,7 +63,7 @@ func (process *Process) SystemID() string {
 }
 
 func (process *Process) processSignalResult(ctx context.Context, err error) (bool, error) {
-	switch err { //nolint:errorlint
+	switch err {
 	case nil:
 		return true, nil
 	case ErrVmcomputeOperationInvalidState, ErrComputeSystemDoesNotExist, ErrElementNotFound:

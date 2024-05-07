@@ -31,9 +31,8 @@ func init() {
 func Init(home string, options graphdriver.Options) (graphdriver.Driver, error) {
 	d := &Driver{
 		name:       "vfs",
-		home:       home,
+		homes:      []string{home},
 		idMappings: idtools.NewIDMappingsFromMaps(options.UIDMaps, options.GIDMaps),
-		imageStore: options.ImageStore,
 	}
 
 	rootIDs := d.idMappings.RootPair()
@@ -48,7 +47,7 @@ func Init(home string, options graphdriver.Options) (graphdriver.Driver, error) 
 		key = strings.ToLower(key)
 		switch key {
 		case "vfs.imagestore", ".imagestore":
-			d.additionalHomes = append(d.additionalHomes, strings.Split(val, ",")...)
+			d.homes = append(d.homes, strings.Split(val, ",")...)
 			continue
 		case "vfs.mountopt":
 			return nil, fmt.Errorf("vfs driver does not support mount options")
@@ -63,7 +62,12 @@ func Init(home string, options graphdriver.Options) (graphdriver.Driver, error) 
 			return nil, fmt.Errorf("vfs driver does not support %s options", key)
 		}
 	}
-
+	// If --imagestore is provided, lets add writable graphRoot
+	// to vfs's additional image store, as it is done for
+	// `overlay` driver.
+	if options.ImageStore != "" {
+		d.homes = append(d.homes, options.ImageStore)
+	}
 	d.updater = graphdriver.NewNaiveLayerIDMapUpdater(d)
 	d.naiveDiff = graphdriver.NewNaiveDiffDriver(d, d.updater)
 
@@ -76,13 +80,11 @@ func Init(home string, options graphdriver.Options) (graphdriver.Driver, error) 
 // Driver must be wrapped in NaiveDiffDriver to be used as a graphdriver.Driver
 type Driver struct {
 	name              string
-	home              string
-	additionalHomes   []string
+	homes             []string
 	idMappings        *idtools.IDMappings
 	ignoreChownErrors bool
 	naiveDiff         graphdriver.DiffDriver
 	updater           graphdriver.LayerIDMapUpdater
-	imageStore        string
 }
 
 func (d *Driver) String() string {
@@ -156,7 +158,7 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts, ro bool
 		idMappings = opts.IDMappings
 	}
 
-	dir := d.dir2(id, ro)
+	dir := d.dir(id)
 	rootIDs := idMappings.RootPair()
 	if err := idtools.MkdirAllAndChown(filepath.Dir(dir), 0o700, rootIDs); err != nil {
 		return err
@@ -202,32 +204,18 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts, ro bool
 	return nil
 }
 
-func (d *Driver) dir2(id string, useImageStore bool) string {
-	var homedir string
-
-	if useImageStore && d.imageStore != "" {
-		homedir = filepath.Join(d.imageStore, d.String(), "dir", filepath.Base(id))
-	} else {
-		homedir = filepath.Join(d.home, "dir", filepath.Base(id))
-	}
-	if _, err := os.Stat(homedir); err != nil {
-		additionalHomes := d.additionalHomes[:]
-		if d.imageStore != "" {
-			additionalHomes = append(additionalHomes, d.imageStore)
-		}
-		for _, home := range additionalHomes {
-			candidate := filepath.Join(home, d.String(), "dir", filepath.Base(id))
-			fi, err := os.Stat(candidate)
-			if err == nil && fi.IsDir() {
-				return candidate
-			}
-		}
-	}
-	return homedir
-}
-
 func (d *Driver) dir(id string) string {
-	return d.dir2(id, false)
+	for i, home := range d.homes {
+		if i > 0 {
+			home = filepath.Join(home, d.String())
+		}
+		candidate := filepath.Join(home, "dir", filepath.Base(id))
+		fi, err := os.Stat(candidate)
+		if err == nil && fi.IsDir() {
+			return candidate
+		}
+	}
+	return filepath.Join(d.homes[0], "dir", filepath.Base(id))
 }
 
 // Remove deletes the content from the directory for a given id.
@@ -275,7 +263,7 @@ func (d *Driver) Exists(id string) bool {
 
 // List layers (not including additional image stores)
 func (d *Driver) ListLayers() ([]string, error) {
-	entries, err := os.ReadDir(filepath.Join(d.home, "dir"))
+	entries, err := os.ReadDir(filepath.Join(d.homes[0], "dir"))
 	if err != nil {
 		return nil, err
 	}
@@ -297,8 +285,8 @@ func (d *Driver) ListLayers() ([]string, error) {
 
 // AdditionalImageStores returns additional image stores supported by the driver
 func (d *Driver) AdditionalImageStores() []string {
-	if len(d.additionalHomes) > 0 {
-		return d.additionalHomes
+	if len(d.homes) > 1 {
+		return d.homes[1:]
 	}
 	return nil
 }

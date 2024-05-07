@@ -38,7 +38,6 @@ type instanceCopy struct {
 
 	// Fields which can be used by callers when operation
 	// is `instanceCopyClone`
-	cloneArtifactType       string
 	cloneCompressionVariant OptionCompressionVariant
 	clonePlatform           *imgspecv1.Platform
 	cloneAnnotations        map[string]string
@@ -143,7 +142,6 @@ func prepareInstanceCopies(list internalManifest.List, instanceDigests []digest.
 				res = append(res, instanceCopy{
 					op:                      instanceCopyClone,
 					sourceDigest:            instanceDigest,
-					cloneArtifactType:       instanceDetails.ReadOnly.ArtifactType,
 					cloneCompressionVariant: compressionVariant,
 					clonePlatform:           instanceDetails.ReadOnly.Platform,
 					cloneAnnotations:        maps.Clone(instanceDetails.ReadOnly.Annotations),
@@ -270,7 +268,6 @@ func (c *copier) copyMultipleImages(ctx context.Context) (copiedManifest []byte,
 				AddDigest:                updated.manifestDigest,
 				AddSize:                  int64(len(updated.manifest)),
 				AddMediaType:             updated.manifestMIMEType,
-				AddArtifactType:          instance.cloneArtifactType,
 				AddPlatform:              instance.clonePlatform,
 				AddAnnotations:           instance.cloneAnnotations,
 				AddCompressionAlgorithms: updated.compressionAlgorithms,
@@ -343,7 +340,7 @@ func (c *copier) copyMultipleImages(ctx context.Context) (copiedManifest []byte,
 	if err != nil {
 		return nil, err
 	}
-	sigs = append(slices.Clone(sigs), newSigs...)
+	sigs = append(sigs, newSigs...)
 
 	c.Printf("Storing list signatures\n")
 	if err := c.dest.PutSignaturesWithFormat(ctx, sigs, nil); err != nil {

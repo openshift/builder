@@ -1,5 +1,3 @@
-//go:build !remote
-
 package libimage
 
 import (

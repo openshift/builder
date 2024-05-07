@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// GetTempDir returns the path of the preferred temporary directory on the host.
+// GetTempDir returns base for a temporary directory on host.
 func GetTempDir() string {
 	if tmpdir, ok := os.LookupEnv("TMPDIR"); ok {
 		abs, err := filepath.Abs(tmpdir)

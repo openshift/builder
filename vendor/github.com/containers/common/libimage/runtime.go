@@ -1,5 +1,3 @@
-//go:build !remote
-
 package libimage
 
 import (
@@ -9,8 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/common/libimage/define"
-	"github.com/containers/common/libimage/platform"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/pkg/shortnames"
@@ -161,7 +157,7 @@ func (r *Runtime) storageToImage(storageImage *storage.Image, ref types.ImageRef
 	}
 }
 
-// Exists returns true if the specified image exists in the local containers
+// Exists returns true if the specicifed image exists in the local containers
 // storage.  Note that it may return false if an image corrupted.
 func (r *Runtime) Exists(name string) (bool, error) {
 	image, _, err := r.LookupImage(name, nil)
@@ -171,7 +167,7 @@ func (r *Runtime) Exists(name string) (bool, error) {
 	if image == nil {
 		return false, nil
 	}
-	if err := image.isCorrupted(context.Background(), name); err != nil {
+	if err := image.isCorrupted(name); err != nil {
 		logrus.Error(err)
 		return false, nil
 	}
@@ -188,7 +184,7 @@ type LookupImageOptions struct {
 	Variant string
 
 	// Controls the behavior when checking the platform of an image.
-	PlatformPolicy define.PlatformPolicy
+	PlatformPolicy PlatformPolicy
 
 	// If set, do not look for items/instances in the manifest list that
 	// match the current platform but return the manifest list as is.
@@ -234,12 +230,8 @@ func (r *Runtime) LookupImage(name string, options *LookupImageOptions) (*Image,
 		if storageRef.Transport().Name() != storageTransport.Transport.Name() {
 			return nil, "", fmt.Errorf("unsupported transport %q for looking up local images", storageRef.Transport().Name())
 		}
-		_, img, err := storageTransport.ResolveReference(storageRef)
+		img, err := storageTransport.Transport.GetStoreImage(r.store, storageRef)
 		if err != nil {
-			if errors.Is(err, storageTransport.ErrNoSuchImage) {
-				// backward compatibility
-				return nil, "", storage.ErrImageUnknown
-			}
 			return nil, "", err
 		}
 		logrus.Debugf("Found image %q in local containers storage (%s)", name, storageRef.StringWithinTransport())
@@ -291,7 +283,7 @@ func (r *Runtime) LookupImage(name string, options *LookupImageOptions) (*Image,
 		options.Variant = r.systemContext.VariantChoice
 	}
 	// Normalize platform to be OCI compatible (e.g., "aarch64" -> "arm64").
-	options.OS, options.Architecture, options.Variant = platform.Normalize(options.OS, options.Architecture, options.Variant)
+	options.OS, options.Architecture, options.Variant = NormalizePlatform(options.OS, options.Architecture, options.Variant)
 
 	// Second, try out the candidates as resolved by shortnames. This takes
 	// "localhost/" prefixed images into account as well.
@@ -350,9 +342,9 @@ func (r *Runtime) lookupImageInLocalStorage(name, candidate string, namedCandida
 		if err != nil {
 			return nil, err
 		}
-		_, img, err = storageTransport.ResolveReference(ref)
+		img, err = storageTransport.Transport.GetStoreImage(r.store, ref)
 		if err != nil {
-			if errors.Is(err, storageTransport.ErrNoSuchImage) {
+			if errors.Is(err, storage.ErrImageUnknown) {
 				return nil, nil
 			}
 			return nil, err
@@ -443,9 +435,9 @@ func (r *Runtime) lookupImageInLocalStorage(name, candidate string, namedCandida
 			return nil, nil
 		}
 		switch options.PlatformPolicy {
-		case define.PlatformPolicyDefault:
+		case PlatformPolicyDefault:
 			logrus.Debugf("%v", matchError)
-		case define.PlatformPolicyWarn:
+		case PlatformPolicyWarn:
 			logrus.Warnf("%v", matchError)
 		}
 	}
@@ -608,7 +600,7 @@ func (r *Runtime) ListImages(ctx context.Context, names []string, options *ListI
 	// as the layer tree will computed once for all instead of once for
 	// each individual image (see containers/podman/issues/17828).
 
-	tree, err := r.layerTree(ctx, images)
+	tree, err := r.layerTree(images)
 	if err != nil {
 		return nil, err
 	}
@@ -690,7 +682,7 @@ func (r *Runtime) RemoveImages(ctx context.Context, names []string, options *Rem
 	}
 
 	if options.ExternalContainers && options.IsExternalContainerFunc == nil {
-		return nil, []error{errors.New("libimage error: cannot remove external containers without callback")}
+		return nil, []error{fmt.Errorf("libimage error: cannot remove external containers without callback")}
 	}
 
 	// The logic here may require some explanation.  Image removal is

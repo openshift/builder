@@ -1,5 +1,3 @@
-//go:build windows
-
 package wclayer
 
 import (
@@ -66,7 +64,7 @@ func (r *baseLayerReader) walkUntilCancelled() error {
 		return nil
 	})
 
-	if err == errorIterationCanceled { //nolint:errorlint // explicitly returned
+	if err == errorIterationCanceled {
 		return nil
 	}
 
@@ -105,7 +103,7 @@ func (r *baseLayerReader) walkUntilCancelled() error {
 		return nil
 	})
 
-	if err == errorIterationCanceled { //nolint:errorlint // explicitly returned
+	if err == errorIterationCanceled {
 		return nil
 	}
 

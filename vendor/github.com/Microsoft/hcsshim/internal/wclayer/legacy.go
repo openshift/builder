@@ -154,7 +154,7 @@ func (r *legacyLayerReader) walkUntilCancelled() error {
 		}
 		return nil
 	})
-	if err == errorIterationCanceled { //nolint:errorlint // explicitly returned
+	if err == errorIterationCanceled {
 		return nil
 	}
 	if err == nil {
@@ -196,7 +196,7 @@ func findBackupStreamSize(r io.Reader) (int64, error) {
 	for {
 		hdr, err := br.Next()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if err == io.EOF {
 				err = nil
 			}
 			return 0, err
@@ -428,7 +428,7 @@ func (w *legacyLayerWriter) initUtilityVM() error {
 		// immutable.
 		err = cloneTree(w.parentRoots[0], w.destRoot, UtilityVMFilesPath, mutatedUtilityVMFiles)
 		if err != nil {
-			return fmt.Errorf("cloning the parent utility VM image failed: %w", err)
+			return fmt.Errorf("cloning the parent utility VM image failed: %s", err)
 		}
 		w.HasUtilityVM = true
 	}
@@ -451,7 +451,7 @@ func (w *legacyLayerWriter) reset() error {
 
 		for {
 			bhdr, err := br.Next()
-			if errors.Is(err, io.EOF) {
+			if err == io.EOF {
 				// end of backupstream data
 				break
 			}

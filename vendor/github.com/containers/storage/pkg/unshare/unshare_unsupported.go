@@ -17,7 +17,7 @@ const (
 
 // IsRootless tells us if we are running in rootless mode
 func IsRootless() bool {
-	return os.Getuid() != 0
+	return false
 }
 
 // GetRootlessUID returns the UID of the user in the parent userNS

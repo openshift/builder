@@ -126,13 +126,6 @@ type Layer struct {
 	// as a DiffID.
 	UncompressedDigest digest.Digest `json:"diff-digest,omitempty"`
 
-	// TOCDigest represents the digest of the Table of Contents (TOC) of the blob.
-	// This digest is utilized when the UncompressedDigest is not
-	// validated during the partial image pull process, but the
-	// TOC itself is validated.
-	// It serves as an alternative reference under these specific conditions.
-	TOCDigest digest.Digest `json:"toc-digest,omitempty"`
-
 	// UncompressedSize is the length of the blob that was last passed to
 	// ApplyDiff() or create(), after we decompressed it.  If
 	// UncompressedDigest is not set, this should be treated as if it were
@@ -179,13 +172,6 @@ type layerMountPoint struct {
 type DiffOptions struct {
 	// Compression, if set overrides the default compressor when generating a diff.
 	Compression *archive.Compression
-}
-
-// stagedLayerOptions are the options passed to .create to populate a staged
-// layer
-type stagedLayerOptions struct {
-	DiffOutput  *drivers.DriverWithDifferOutput
-	DiffOptions *drivers.ApplyDiffWithDifferOpts
 }
 
 // roLayerStore wraps a graph driver, adding the ability to refer to layers by
@@ -242,10 +228,6 @@ type roLayerStore interface {
 	// specified uncompressed digest value recorded for them.
 	LayersByUncompressedDigest(d digest.Digest) ([]Layer, error)
 
-	// LayersByTOCDigest returns a slice of the layers with the
-	// specified uncompressed digest value recorded for them.
-	LayersByTOCDigest(d digest.Digest) ([]Layer, error)
-
 	// Layers returns a slice of the known layers.
 	Layers() ([]Layer, error)
 }
@@ -274,7 +256,7 @@ type rwLayerStore interface {
 	// underlying drivers do not themselves distinguish between writeable
 	// and read-only layers.  Returns the new layer structure and the size of the
 	// diff which was applied to its parent to initialize its contents.
-	create(id string, parent *Layer, names []string, mountLabel string, options map[string]string, moreOptions *LayerOptions, writeable bool, diff io.Reader, slo *stagedLayerOptions) (*Layer, int64, error)
+	create(id string, parent *Layer, names []string, mountLabel string, options map[string]string, moreOptions *LayerOptions, writeable bool, diff io.Reader) (*Layer, int64, error)
 
 	// updateNames modifies names associated with a layer based on (op, names).
 	updateNames(id string, names []string, op updateNameOperation) error
@@ -314,13 +296,13 @@ type rwLayerStore interface {
 
 	// ApplyDiffWithDiffer applies the changes through the differ callback function.
 	// If to is the empty string, then a staging directory is created by the driver.
-	ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffWithDifferOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error)
+	ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error)
 
 	// CleanupStagingDirectory cleanups the staging directory.  It can be used to cleanup the staging directory on errors
 	CleanupStagingDirectory(stagingDirectory string) error
 
-	// applyDiffFromStagingDirectory uses diffOutput.Target to create the diff.
-	applyDiffFromStagingDirectory(id string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffWithDifferOpts) error
+	// ApplyDiffFromStagingDirectory uses stagingDirectory to create the diff.
+	ApplyDiffFromStagingDirectory(id, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffOpts) error
 
 	// DifferTarget gets the location where files are stored for the layer.
 	DifferTarget(id string) (string, error)
@@ -334,71 +316,10 @@ type rwLayerStore interface {
 	GarbageCollect() error
 }
 
-type multipleLockFile struct {
-	lockfiles []*lockfile.LockFile
-}
-
-func (l multipleLockFile) Lock() {
-	for _, lock := range l.lockfiles {
-		lock.Lock()
-	}
-}
-
-func (l multipleLockFile) RLock() {
-	for _, lock := range l.lockfiles {
-		lock.RLock()
-	}
-}
-
-func (l multipleLockFile) Unlock() {
-	for _, lock := range l.lockfiles {
-		lock.Unlock()
-	}
-}
-
-func (l multipleLockFile) ModifiedSince(lastWrite lockfile.LastWrite) (lockfile.LastWrite, bool, error) {
-	// Look up only the first lockfile, since this is the value returned by RecordWrite().
-	return l.lockfiles[0].ModifiedSince(lastWrite)
-}
-
-func (l multipleLockFile) AssertLockedForWriting() {
-	for _, lock := range l.lockfiles {
-		lock.AssertLockedForWriting()
-	}
-}
-
-func (l multipleLockFile) GetLastWrite() (lockfile.LastWrite, error) {
-	return l.lockfiles[0].GetLastWrite()
-}
-
-func (l multipleLockFile) RecordWrite() (lockfile.LastWrite, error) {
-	var lastWrite *lockfile.LastWrite
-	for _, lock := range l.lockfiles {
-		lw, err := lock.RecordWrite()
-		if err != nil {
-			return lw, err
-		}
-		// Return the first value we get so we know that
-		// all the locks have a write time >= to this one.
-		if lastWrite == nil {
-			lastWrite = &lw
-		}
-	}
-	return *lastWrite, nil
-}
-
-func (l multipleLockFile) IsReadWrite() bool {
-	return l.lockfiles[0].IsReadWrite()
-}
-
-func newMultipleLockFile(l ...*lockfile.LockFile) *multipleLockFile {
-	return &multipleLockFile{lockfiles: l}
-}
-
 type layerStore struct {
 	// The following fields are only set when constructing layerStore, and must never be modified afterwards.
 	// They are safe to access without any other locking.
-	lockfile       *multipleLockFile  // lockfile.IsReadWrite can be used to distinguish between read-write and read-only layer stores.
+	lockfile       *lockfile.LockFile // lockfile.IsReadWrite can be used to distinguish between read-write and read-only layer stores.
 	mountsLockfile *lockfile.LockFile // Can _only_ be obtained with inProcessLock held.
 	rundir         string
 	jsonPath       [numLayerLocationIndex]string
@@ -416,7 +337,6 @@ type layerStore struct {
 	bymount             map[string]*Layer
 	bycompressedsum     map[digest.Digest][]string
 	byuncompressedsum   map[digest.Digest][]string
-	bytocsum            map[digest.Digest][]string
 	layerspathsModified [numLayerLocationIndex]time.Time
 
 	// FIXME: This field is only set when constructing layerStore, but locking rules of the driver
@@ -446,7 +366,6 @@ func copyLayer(l *Layer) *Layer {
 		CompressedSize:     l.CompressedSize,
 		UncompressedDigest: l.UncompressedDigest,
 		UncompressedSize:   l.UncompressedSize,
-		TOCDigest:          l.TOCDigest,
 		CompressionType:    l.CompressionType,
 		ReadOnly:           l.ReadOnly,
 		volatileStore:      l.volatileStore,
@@ -826,7 +745,6 @@ func (r *layerStore) load(lockedForWriting bool) (bool, error) {
 	names := make(map[string]*Layer)
 	compressedsums := make(map[digest.Digest][]string)
 	uncompressedsums := make(map[digest.Digest][]string)
-	tocsums := make(map[digest.Digest][]string)
 	var errorToResolveBySaving error // == nil; if there are multiple errors, this is one of them.
 	if r.lockfile.IsReadWrite() {
 		selinux.ClearLabels()
@@ -846,9 +764,6 @@ func (r *layerStore) load(lockedForWriting bool) (bool, error) {
 		}
 		if layer.UncompressedDigest != "" {
 			uncompressedsums[layer.UncompressedDigest] = append(uncompressedsums[layer.UncompressedDigest], layer.ID)
-		}
-		if layer.TOCDigest != "" {
-			tocsums[layer.TOCDigest] = append(tocsums[layer.TOCDigest], layer.ID)
 		}
 		if layer.MountLabel != "" {
 			selinux.ReserveLabel(layer.MountLabel)
@@ -877,7 +792,6 @@ func (r *layerStore) load(lockedForWriting bool) (bool, error) {
 	r.byname = names
 	r.bycompressedsum = compressedsums
 	r.byuncompressedsum = uncompressedsums
-	r.bytocsum = tocsums
 
 	// Load and merge information about which layers are mounted, and where.
 	if r.lockfile.IsReadWrite() {
@@ -1084,37 +998,22 @@ func (r *layerStore) saveMounts() error {
 	return r.loadMounts()
 }
 
-func (s *store) newLayerStore(rundir, layerdir, imagedir string, driver drivers.Driver, transient bool) (rwLayerStore, error) {
+func (s *store) newLayerStore(rundir string, layerdir string, driver drivers.Driver, transient bool) (rwLayerStore, error) {
 	if err := os.MkdirAll(rundir, 0o700); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(layerdir, 0o700); err != nil {
 		return nil, err
 	}
-	if imagedir != "" {
-		if err := os.MkdirAll(imagedir, 0o700); err != nil {
-			return nil, err
-		}
-	}
 	// Note: While the containers.lock file is in rundir for transient stores
 	// we don't want to do this here, because the non-transient layers in
 	// layers.json might be used externally as a read-only layer (using e.g.
 	// additionalimagestores), and that would look for the lockfile in the
 	// same directory
-	var lockFiles []*lockfile.LockFile
 	lockFile, err := lockfile.GetLockFile(filepath.Join(layerdir, "layers.lock"))
 	if err != nil {
 		return nil, err
 	}
-	lockFiles = append(lockFiles, lockFile)
-	if imagedir != "" {
-		lockFile, err := lockfile.GetLockFile(filepath.Join(imagedir, "layers.lock"))
-		if err != nil {
-			return nil, err
-		}
-		lockFiles = append(lockFiles, lockFile)
-	}
-
 	mountsLockfile, err := lockfile.GetLockFile(filepath.Join(rundir, "mountpoints.lock"))
 	if err != nil {
 		return nil, err
@@ -1124,7 +1023,7 @@ func (s *store) newLayerStore(rundir, layerdir, imagedir string, driver drivers.
 		volatileDir = rundir
 	}
 	rlstore := layerStore{
-		lockfile:       newMultipleLockFile(lockFiles...),
+		lockfile:       lockFile,
 		mountsLockfile: mountsLockfile,
 		rundir:         rundir,
 		jsonPath: [numLayerLocationIndex]string{
@@ -1161,7 +1060,7 @@ func newROLayerStore(rundir string, layerdir string, driver drivers.Driver) (roL
 		return nil, err
 	}
 	rlstore := layerStore{
-		lockfile:       newMultipleLockFile(lockfile),
+		lockfile:       lockfile,
 		mountsLockfile: nil,
 		rundir:         rundir,
 		jsonPath: [numLayerLocationIndex]string{
@@ -1213,7 +1112,7 @@ func (r *layerStore) Size(name string) (int64, error) {
 	// We use the presence of a non-empty digest as an indicator that the size value was intentionally set, and that
 	// a zero value is not just present because it was never set to anything else (which can happen if the layer was
 	// created by a version of this library that didn't keep track of digest and size information).
-	if layer.TOCDigest != "" || layer.UncompressedDigest != "" {
+	if layer.UncompressedDigest != "" {
 		return layer.UncompressedSize, nil
 	}
 	return -1, nil
@@ -1302,9 +1201,6 @@ func (r *layerStore) PutAdditionalLayer(id string, parentLayer *Layer, names []s
 	if layer.UncompressedDigest != "" {
 		r.byuncompressedsum[layer.UncompressedDigest] = append(r.byuncompressedsum[layer.UncompressedDigest], layer.ID)
 	}
-	if layer.TOCDigest != "" {
-		r.bytocsum[layer.TOCDigest] = append(r.bytocsum[layer.TOCDigest], layer.ID)
-	}
 	if err := r.saveFor(layer); err != nil {
 		if e := r.Delete(layer.ID); e != nil {
 			logrus.Errorf("While recovering from a failure to save layers, error deleting layer %#v: %v", id, e)
@@ -1315,7 +1211,7 @@ func (r *layerStore) PutAdditionalLayer(id string, parentLayer *Layer, names []s
 }
 
 // Requires startWriting.
-func (r *layerStore) create(id string, parentLayer *Layer, names []string, mountLabel string, options map[string]string, moreOptions *LayerOptions, writeable bool, diff io.Reader, slo *stagedLayerOptions) (layer *Layer, size int64, err error) {
+func (r *layerStore) create(id string, parentLayer *Layer, names []string, mountLabel string, options map[string]string, moreOptions *LayerOptions, writeable bool, diff io.Reader) (layer *Layer, size int64, err error) {
 	if moreOptions == nil {
 		moreOptions = &LayerOptions{}
 	}
@@ -1355,7 +1251,6 @@ func (r *layerStore) create(id string, parentLayer *Layer, names []string, mount
 		templateCompressedDigest   digest.Digest
 		templateCompressedSize     int64
 		templateUncompressedDigest digest.Digest
-		templateTOCDigest          digest.Digest
 		templateUncompressedSize   int64
 		templateCompressionType    archive.Compression
 		templateUIDs, templateGIDs []uint32
@@ -1368,7 +1263,6 @@ func (r *layerStore) create(id string, parentLayer *Layer, names []string, mount
 		}
 		templateMetadata = templateLayer.Metadata
 		templateIDMappings = idtools.NewIDMappingsFromMaps(templateLayer.UIDMap, templateLayer.GIDMap)
-		templateTOCDigest = templateLayer.TOCDigest
 		templateCompressedDigest, templateCompressedSize = templateLayer.CompressedDigest, templateLayer.CompressedSize
 		templateUncompressedDigest, templateUncompressedSize = templateLayer.UncompressedDigest, templateLayer.UncompressedSize
 		templateCompressionType = templateLayer.CompressionType
@@ -1397,7 +1291,6 @@ func (r *layerStore) create(id string, parentLayer *Layer, names []string, mount
 		CompressedDigest:   templateCompressedDigest,
 		CompressedSize:     templateCompressedSize,
 		UncompressedDigest: templateUncompressedDigest,
-		TOCDigest:          templateTOCDigest,
 		UncompressedSize:   templateUncompressedSize,
 		CompressionType:    templateCompressionType,
 		UIDs:               templateUIDs,
@@ -1509,11 +1402,6 @@ func (r *layerStore) create(id string, parentLayer *Layer, names []string, mount
 			cleanupFailureContext = "applying layer diff"
 			return nil, -1, err
 		}
-	} else if slo != nil {
-		if err := r.applyDiffFromStagingDirectory(layer.ID, slo.DiffOutput, slo.DiffOptions); err != nil {
-			cleanupFailureContext = "applying staged directory diff"
-			return nil, -1, err
-		}
 	} else {
 		// applyDiffWithOptions() would have updated r.bycompressedsum
 		// and r.byuncompressedsum for us, but if we used a template
@@ -1524,9 +1412,6 @@ func (r *layerStore) create(id string, parentLayer *Layer, names []string, mount
 		}
 		if layer.UncompressedDigest != "" {
 			r.byuncompressedsum[layer.UncompressedDigest] = append(r.byuncompressedsum[layer.UncompressedDigest], layer.ID)
-		}
-		if layer.TOCDigest != "" {
-			r.bytocsum[layer.TOCDigest] = append(r.bytocsum[layer.TOCDigest], layer.ID)
 		}
 	}
 
@@ -2122,16 +2007,9 @@ func (s *simpleGetCloser) Close() error {
 // LOCKING BUG: See the comments in layerStore.Diff
 func (r *layerStore) newFileGetter(id string) (drivers.FileGetCloser, error) {
 	if getter, ok := r.driver.(drivers.DiffGetterDriver); ok {
-		fgc, err := getter.DiffGetter(id)
-		if err != nil {
-			return nil, err
-		}
-		if fgc != nil {
-			return fgc, nil
-		}
+		return getter.DiffGetter(id)
 	}
-
-	path, err := r.Mount(id, drivers.MountOpts{Options: []string{"ro"}})
+	path, err := r.Mount(id, drivers.MountOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -2319,25 +2197,6 @@ func (r *layerStore) DiffSize(from, to string) (size int64, err error) {
 	return r.driver.DiffSize(to, r.layerMappings(toLayer), from, r.layerMappings(fromLayer), toLayer.MountLabel)
 }
 
-func updateDigestMap(m *map[digest.Digest][]string, oldvalue, newvalue digest.Digest, id string) {
-	var newList []string
-	if oldvalue != "" {
-		for _, value := range (*m)[oldvalue] {
-			if value != id {
-				newList = append(newList, value)
-			}
-		}
-		if len(newList) > 0 {
-			(*m)[oldvalue] = newList
-		} else {
-			delete(*m, oldvalue)
-		}
-	}
-	if newvalue != "" {
-		(*m)[newvalue] = append((*m)[newvalue], id)
-	}
-}
-
 // Requires startWriting.
 func (r *layerStore) ApplyDiff(to string, diff io.Reader) (size int64, err error) {
 	return r.applyDiffWithOptions(to, nil, diff)
@@ -2374,7 +2233,7 @@ func (r *layerStore) applyDiffWithOptions(to string, layerOptions *LayerOptions,
 	if layerOptions != nil && layerOptions.UncompressedDigest != "" &&
 		layerOptions.UncompressedDigest.Algorithm() == digest.Canonical {
 		uncompressedDigest = layerOptions.UncompressedDigest
-	} else if compression != archive.Uncompressed {
+	} else {
 		uncompressedDigester = digest.Canonical.Digester()
 	}
 
@@ -2453,17 +2312,28 @@ func (r *layerStore) applyDiffWithOptions(to string, layerOptions *LayerOptions,
 	if uncompressedDigester != nil {
 		uncompressedDigest = uncompressedDigester.Digest()
 	}
-	if uncompressedDigest == "" && compression == archive.Uncompressed {
-		uncompressedDigest = compressedDigest
-	}
 
+	updateDigestMap := func(m *map[digest.Digest][]string, oldvalue, newvalue digest.Digest, id string) {
+		var newList []string
+		if oldvalue != "" {
+			for _, value := range (*m)[oldvalue] {
+				if value != id {
+					newList = append(newList, value)
+				}
+			}
+			if len(newList) > 0 {
+				(*m)[oldvalue] = newList
+			} else {
+				delete(*m, oldvalue)
+			}
+		}
+		if newvalue != "" {
+			(*m)[newvalue] = append((*m)[newvalue], id)
+		}
+	}
 	updateDigestMap(&r.bycompressedsum, layer.CompressedDigest, compressedDigest, layer.ID)
 	layer.CompressedDigest = compressedDigest
-	if layerOptions != nil && layerOptions.OriginalDigest != "" && layerOptions.OriginalSize != nil {
-		layer.CompressedSize = *layerOptions.OriginalSize
-	} else {
-		layer.CompressedSize = compressedCounter.Count
-	}
+	layer.CompressedSize = compressedCounter.Count
 	updateDigestMap(&r.byuncompressedsum, layer.UncompressedDigest, uncompressedDigest, layer.ID)
 	layer.UncompressedDigest = uncompressedDigest
 	layer.UncompressedSize = uncompressedCounter.Count
@@ -2502,7 +2372,7 @@ func (r *layerStore) DifferTarget(id string) (string, error) {
 }
 
 // Requires startWriting.
-func (r *layerStore) applyDiffFromStagingDirectory(id string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffWithDifferOpts) error {
+func (r *layerStore) ApplyDiffFromStagingDirectory(id, stagingDirectory string, diffOutput *drivers.DriverWithDifferOutput, options *drivers.ApplyDiffOpts) error {
 	ddriver, ok := r.driver.(drivers.DriverWithDiffer)
 	if !ok {
 		return ErrNotSupported
@@ -2512,39 +2382,20 @@ func (r *layerStore) applyDiffFromStagingDirectory(id string, diffOutput *driver
 		return ErrLayerUnknown
 	}
 	if options == nil {
-		options = &drivers.ApplyDiffWithDifferOpts{
-			ApplyDiffOpts: drivers.ApplyDiffOpts{
-				Mappings:   r.layerMappings(layer),
-				MountLabel: layer.MountLabel,
-			},
-			Flags: nil,
+		options = &drivers.ApplyDiffOpts{
+			Mappings:   r.layerMappings(layer),
+			MountLabel: layer.MountLabel,
 		}
 	}
-
-	err := ddriver.ApplyDiffFromStagingDirectory(layer.ID, layer.Parent, diffOutput, options)
+	err := ddriver.ApplyDiffFromStagingDirectory(layer.ID, layer.Parent, stagingDirectory, diffOutput, options)
 	if err != nil {
 		return err
 	}
 	layer.UIDs = diffOutput.UIDs
 	layer.GIDs = diffOutput.GIDs
-	updateDigestMap(&r.byuncompressedsum, layer.UncompressedDigest, diffOutput.UncompressedDigest, layer.ID)
 	layer.UncompressedDigest = diffOutput.UncompressedDigest
-	updateDigestMap(&r.bytocsum, diffOutput.TOCDigest, diffOutput.TOCDigest, layer.ID)
-	layer.TOCDigest = diffOutput.TOCDigest
 	layer.UncompressedSize = diffOutput.Size
 	layer.Metadata = diffOutput.Metadata
-	if options != nil && options.Flags != nil {
-		if layer.Flags == nil {
-			layer.Flags = make(map[string]interface{})
-		}
-		for k, v := range options.Flags {
-			layer.Flags[k] = v
-		}
-	}
-	if err = r.saveFor(layer); err != nil {
-		return err
-	}
-
 	if len(diffOutput.TarSplit) != 0 {
 		tsdata := bytes.Buffer{}
 		compressor, err := pgzip.NewWriterLevel(&tsdata, pgzip.BestSpeed)
@@ -2574,11 +2425,14 @@ func (r *layerStore) applyDiffFromStagingDirectory(id string, diffOutput *driver
 			return err
 		}
 	}
+	if err = r.saveFor(layer); err != nil {
+		return err
+	}
 	return err
 }
 
 // Requires startWriting.
-func (r *layerStore) ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffWithDifferOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error) {
+func (r *layerStore) ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffOpts, differ drivers.Differ) (*drivers.DriverWithDifferOutput, error) {
 	ddriver, ok := r.driver.(drivers.DriverWithDiffer)
 	if !ok {
 		return nil, ErrNotSupported
@@ -2594,11 +2448,9 @@ func (r *layerStore) ApplyDiffWithDiffer(to string, options *drivers.ApplyDiffWi
 		return nil, ErrLayerUnknown
 	}
 	if options == nil {
-		options = &drivers.ApplyDiffWithDifferOpts{
-			ApplyDiffOpts: drivers.ApplyDiffOpts{
-				Mappings:   r.layerMappings(layer),
-				MountLabel: layer.MountLabel,
-			},
+		options = &drivers.ApplyDiffOpts{
+			Mappings:   r.layerMappings(layer),
+			MountLabel: layer.MountLabel,
 		}
 	}
 	output, err := ddriver.ApplyDiffWithDiffer(layer.ID, layer.Parent, options, differ)
@@ -2640,11 +2492,6 @@ func (r *layerStore) LayersByCompressedDigest(d digest.Digest) ([]Layer, error) 
 // Requires startReading or startWriting.
 func (r *layerStore) LayersByUncompressedDigest(d digest.Digest) ([]Layer, error) {
 	return r.layersByDigestMap(r.byuncompressedsum, d)
-}
-
-// Requires startReading or startWriting.
-func (r *layerStore) LayersByTOCDigest(d digest.Digest) ([]Layer, error) {
-	return r.layersByDigestMap(r.bytocsum, d)
 }
 
 func closeAll(closes ...func() error) (rErr error) {

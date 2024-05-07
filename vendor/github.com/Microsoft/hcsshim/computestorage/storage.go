@@ -19,17 +19,14 @@ import (
 //sys hcsFormatWritableLayerVhd(handle windows.Handle) (hr error) = computestorage.HcsFormatWritableLayerVhd?
 //sys hcsGetLayerVhdMountPath(vhdHandle windows.Handle, mountPath **uint16) (hr error) = computestorage.HcsGetLayerVhdMountPath?
 //sys hcsSetupBaseOSVolume(layerPath string, volumePath string, options string) (hr error) = computestorage.HcsSetupBaseOSVolume?
-//sys hcsAttachOverlayFilter(volumePath string, layerData string) (hr error) = computestorage.HcsAttachOverlayFilter?
-//sys hcsDetachOverlayFilter(volumePath string, layerData string) (hr error) = computestorage.HcsDetachOverlayFilter?
 
 type Version = hcsschema.Version
 type Layer = hcsschema.Layer
 
 // LayerData is the data used to describe parent layer information.
 type LayerData struct {
-	SchemaVersion Version                        `json:"SchemaVersion,omitempty"`
-	Layers        []Layer                        `json:"Layers,omitempty"`
-	FilterType    hcsschema.FileSystemFilterType `json:"FilterType,omitempty"`
+	SchemaVersion Version `json:"SchemaVersion,omitempty"`
+	Layers        []Layer `json:"Layers,omitempty"`
 }
 
 // ExportLayerOptions are the set of options that are used with the `computestorage.HcsExportLayer` syscall.

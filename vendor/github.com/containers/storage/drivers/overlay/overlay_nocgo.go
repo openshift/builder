@@ -4,7 +4,6 @@
 package overlay
 
 import (
-	"fmt"
 	"path"
 
 	"github.com/containers/storage/pkg/directory"
@@ -15,16 +14,4 @@ import (
 // finding the size of the "diff" directory.
 func (d *Driver) ReadWriteDiskUsage(id string) (*directory.DiskUsage, error) {
 	return directory.Usage(path.Join(d.dir(id), "diff"))
-}
-
-func getComposeFsHelper() (string, error) {
-	return "", fmt.Errorf("composefs not supported on this build")
-}
-
-func mountComposefsBlob(dataDir, mountPoint string) error {
-	return fmt.Errorf("composefs not supported on this build")
-}
-
-func generateComposeFsBlob(verityDigests map[string]string, toc interface{}, composefsDir string) error {
-	return fmt.Errorf("composefs not supported on this build")
 }

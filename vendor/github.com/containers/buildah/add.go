@@ -22,7 +22,7 @@ import (
 	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/hashicorp/go-multierror"
-	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/runc/libcontainer/userns"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -35,9 +35,6 @@ type AddAndCopyOptions struct {
 	// newly-added content, potentially overriding permissions which would
 	// otherwise be set to 0:0.
 	Chown string
-	// Checksum is a standard container digest string (e.g. <algorithm>:<digest>)
-	// and is the expected hash of the content being copied.
-	Checksum string
 	// PreserveOwnership, if Chown is not set, tells us to avoid setting
 	// ownership of copied items to 0:0, instead using whatever ownership
 	// information is already set.  Not meaningful for remote sources or
@@ -80,7 +77,7 @@ func sourceIsRemote(source string) bool {
 }
 
 // getURL writes a tar archive containing the named content
-func getURL(src string, chown *idtools.IDPair, mountpoint, renameTarget string, writer io.Writer, chmod *os.FileMode, srcDigest digest.Digest) error {
+func getURL(src string, chown *idtools.IDPair, mountpoint, renameTarget string, writer io.Writer, chmod *os.FileMode) error {
 	url, err := url.Parse(src)
 	if err != nil {
 		return err
@@ -113,7 +110,7 @@ func getURL(src string, chown *idtools.IDPair, mountpoint, renameTarget string, 
 	}
 	// Figure out the size of the content.
 	size := response.ContentLength
-	var responseBody io.Reader = response.Body
+	responseBody := response.Body
 	if size < 0 {
 		// Create a temporary file and copy the content to it, so that
 		// we can figure out how much content there is.
@@ -132,11 +129,6 @@ func getURL(src string, chown *idtools.IDPair, mountpoint, renameTarget string, 
 			return fmt.Errorf("setting up to read %q from temporary file %q: %w", src, f.Name(), err)
 		}
 		responseBody = f
-	}
-	var digester digest.Digester
-	if srcDigest != "" {
-		digester = srcDigest.Algorithm().Digester()
-		responseBody = io.TeeReader(responseBody, digester.Hash())
 	}
 	// Write the output archive.  Set permissions for compatibility.
 	tw := tar.NewWriter(writer)
@@ -167,12 +159,6 @@ func getURL(src string, chown *idtools.IDPair, mountpoint, renameTarget string, 
 
 	if _, err := io.Copy(tw, responseBody); err != nil {
 		return fmt.Errorf("writing content from %q to tar stream: %w", src, err)
-	}
-
-	if digester != nil {
-		if responseDigest := digester.Digest(); responseDigest != srcDigest {
-			return fmt.Errorf("unexpected response digest for %q: %s, want %s", src, responseDigest, srcDigest)
-		}
 	}
 
 	return nil
@@ -406,16 +392,9 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 		var wg sync.WaitGroup
 		if sourceIsRemote(src) {
 			pipeReader, pipeWriter := io.Pipe()
-			var srcDigest digest.Digest
-			if options.Checksum != "" {
-				srcDigest, err = digest.Parse(options.Checksum)
-				if err != nil {
-					return fmt.Errorf("invalid checksum flag: %w", err)
-				}
-			}
 			wg.Add(1)
 			go func() {
-				getErr = getURL(src, chownFiles, mountPoint, renameTarget, pipeWriter, chmodDirsFiles, srcDigest)
+				getErr = getURL(src, chownFiles, mountPoint, renameTarget, pipeWriter, chmodDirsFiles)
 				pipeWriter.Close()
 				wg.Done()
 			}()
@@ -437,7 +416,7 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 						ChmodDirs:     nil,
 						ChownFiles:    nil,
 						ChmodFiles:    nil,
-						IgnoreDevices: runningInUserNS(),
+						IgnoreDevices: userns.RunningInUserNS(),
 					}
 					putErr = copier.Put(extractDirectory, extractDirectory, putOptions, io.TeeReader(pipeReader, hasher))
 				}
@@ -462,10 +441,6 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 			continue
 		}
 
-		if options.Checksum != "" {
-			return fmt.Errorf("checksum flag is not supported for local sources")
-		}
-
 		// Dig out the result of running glob+stat on this source spec.
 		var localSourceStat *copier.StatsForGlob
 		for _, st := range localSourceStats {
@@ -481,11 +456,9 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 		// Iterate through every item that matched the glob.
 		itemsCopied := 0
 		for _, glob := range localSourceStat.Globbed {
-			rel := glob
-			if filepath.IsAbs(glob) {
-				if rel, err = filepath.Rel(contextDir, glob); err != nil {
-					return fmt.Errorf("computing path of %q relative to %q: %w", glob, contextDir, err)
-				}
+			rel, err := filepath.Rel(contextDir, glob)
+			if err != nil {
+				return fmt.Errorf("computing path of %q relative to %q: %w", glob, contextDir, err)
 			}
 			if strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 				return fmt.Errorf("possible escaping context directory error: %q is outside of %q", glob, contextDir)
@@ -578,7 +551,7 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 						ChmodDirs:       nil,
 						ChownFiles:      nil,
 						ChmodFiles:      nil,
-						IgnoreDevices:   runningInUserNS(),
+						IgnoreDevices:   userns.RunningInUserNS(),
 					}
 					putErr = copier.Put(extractDirectory, extractDirectory, putOptions, io.TeeReader(pipeReader, hasher))
 				}

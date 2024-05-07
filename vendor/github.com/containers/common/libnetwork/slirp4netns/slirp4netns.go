@@ -1,4 +1,5 @@
 //go:build linux
+// +build linux
 
 package slirp4netns
 
@@ -86,6 +87,16 @@ type SetupOptions struct {
 	Pdeathsig syscall.Signal
 }
 
+// SetupResult return type from Setup()
+type SetupResult struct {
+	// Pid of the created slirp4netns process
+	Pid int
+	// Subnet which is used by slirp4netns
+	Subnet *net.IPNet
+	// IPv6 whenever Ipv6 is enabled in slirp4netns
+	IPv6 bool
+}
+
 type logrusDebugWriter struct {
 	prefix string
 }
@@ -113,8 +124,8 @@ func checkSlirpFlags(path string) (*slirpFeatures, error) {
 }
 
 func parseNetworkOptions(config *config.Config, extraOptions []string) (*networkOptions, error) {
-	options := make([]string, 0, len(config.Engine.NetworkCmdOptions.Get())+len(extraOptions))
-	options = append(options, config.Engine.NetworkCmdOptions.Get()...)
+	options := make([]string, 0, len(config.Engine.NetworkCmdOptions)+len(extraOptions))
+	options = append(options, config.Engine.NetworkCmdOptions...)
 	options = append(options, extraOptions...)
 	opts := &networkOptions{
 		// overwrite defaults
@@ -200,7 +211,7 @@ func createBasicSlirpCmdArgs(options *networkOptions, features *slirpFeatures) (
 		cmdArgs = append(cmdArgs, "--disable-host-loopback")
 	}
 	if options.mtu > -1 && features.HasMTU {
-		cmdArgs = append(cmdArgs, "--mtu="+strconv.Itoa(options.mtu))
+		cmdArgs = append(cmdArgs, fmt.Sprintf("--mtu=%d", options.mtu))
 	}
 	if !options.noPivotRoot && features.HasEnableSandbox {
 		cmdArgs = append(cmdArgs, "--enable-sandbox")
@@ -211,33 +222,33 @@ func createBasicSlirpCmdArgs(options *networkOptions, features *slirpFeatures) (
 
 	if options.cidr != "" {
 		if !features.HasCIDR {
-			return nil, errors.New("cidr not supported")
+			return nil, fmt.Errorf("cidr not supported")
 		}
-		cmdArgs = append(cmdArgs, "--cidr="+options.cidr)
+		cmdArgs = append(cmdArgs, fmt.Sprintf("--cidr=%s", options.cidr))
 	}
 
 	if options.enableIPv6 {
 		if !features.HasIPv6 {
-			return nil, errors.New("enable_ipv6 not supported")
+			return nil, fmt.Errorf("enable_ipv6 not supported")
 		}
 		cmdArgs = append(cmdArgs, "--enable-ipv6")
 	}
 
 	if options.outboundAddr != "" {
 		if !features.HasOutboundAddr {
-			return nil, errors.New("outbound_addr not supported")
+			return nil, fmt.Errorf("outbound_addr not supported")
 		}
-		cmdArgs = append(cmdArgs, "--outbound-addr="+options.outboundAddr)
+		cmdArgs = append(cmdArgs, fmt.Sprintf("--outbound-addr=%s", options.outboundAddr))
 	}
 
 	if options.outboundAddr6 != "" {
 		if !features.HasOutboundAddr || !features.HasIPv6 {
-			return nil, errors.New("outbound_addr6 not supported")
+			return nil, fmt.Errorf("outbound_addr6 not supported")
 		}
 		if !options.enableIPv6 {
-			return nil, errors.New("enable_ipv6=true is required for outbound_addr6")
+			return nil, fmt.Errorf("enable_ipv6=true is required for outbound_addr6")
 		}
-		cmdArgs = append(cmdArgs, "--outbound-addr6="+options.outboundAddr6)
+		cmdArgs = append(cmdArgs, fmt.Sprintf("--outbound-addr6=%s", options.outboundAddr6))
 	}
 
 	return cmdArgs, nil
@@ -290,7 +301,7 @@ func Setup(opts *SetupOptions) (*SetupResult, error) {
 
 	var apiSocket string
 	if havePortMapping && netOptions.isSlirpHostForward {
-		apiSocket = filepath.Join(opts.Config.Engine.TmpDir, opts.ContainerID+".net")
+		apiSocket = filepath.Join(opts.Config.Engine.TmpDir, fmt.Sprintf("%s.net", opts.ContainerID))
 		cmdArgs = append(cmdArgs, "--api-socket", apiSocket)
 	}
 
@@ -600,7 +611,7 @@ func SetupRootlessPortMappingViaRLK(opts *SetupOptions, slirpSubnet *net.IPNet, 
 		if stdoutStr != "" {
 			// err contains full debug log and too verbose, so return stdoutStr
 			logrus.Debug(err)
-			return errors.New("rootlessport " + strings.TrimSuffix(stdoutStr, "\n"))
+			return fmt.Errorf("rootlessport " + strings.TrimSuffix(stdoutStr, "\n"))
 		}
 		return err
 	}
@@ -695,7 +706,7 @@ func openSlirp4netnsPort(apiSocket, proto, hostip string, hostport, guestport ui
 	}
 	// if there is no 'error' key in the received JSON data, then the operation was
 	// successful.
-	var y map[string]any
+	var y map[string]interface{}
 	if err := json.Unmarshal(buf[0:readLength], &y); err != nil {
 		return fmt.Errorf("parsing error status from slirp4netns: %w", err)
 	}

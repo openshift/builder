@@ -22,9 +22,6 @@ import (
 	"github.com/containers/storage/pkg/regexp"
 	"github.com/openshift/imagebuilder/signal"
 	"github.com/openshift/imagebuilder/strslice"
-
-	buildkitparser "github.com/moby/buildkit/frontend/dockerfile/parser"
-	buildkitshell "github.com/moby/buildkit/frontend/dockerfile/shell"
 )
 
 var (
@@ -56,7 +53,7 @@ func init() {
 //
 // Sets the environment variable foo to bar, also makes interpolation
 // in the dockerfile available from the next statement on via ${foo}.
-func env(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func env(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) == 0 {
 		return errAtLeastOneArgument("ENV")
 	}
@@ -97,7 +94,7 @@ func env(b *Builder, args []string, attributes map[string]bool, flagArgs []strin
 // MAINTAINER some text <maybe@an.email.address>
 //
 // Sets the maintainer metadata.
-func maintainer(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func maintainer(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) != 1 {
 		return errExactlyOneArgument("MAINTAINER")
 	}
@@ -108,7 +105,7 @@ func maintainer(b *Builder, args []string, attributes map[string]bool, flagArgs 
 // LABEL some json data describing the image
 //
 // Sets the Label variable foo to bar,
-func label(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func label(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) == 0 {
 		return errAtLeastOneArgument("LABEL")
 	}
@@ -130,43 +127,16 @@ func label(b *Builder, args []string, attributes map[string]bool, flagArgs []str
 	return nil
 }
 
-func processHereDocs(originalInstruction string, heredocs []buildkitparser.Heredoc, args []string) ([]File, error) {
-	var files []File
-	for _, heredoc := range heredocs {
-		var err error
-		content := heredoc.Content
-		if heredoc.Chomp {
-			content = buildkitparser.ChompHeredocContent(content)
-		}
-		if heredoc.Expand {
-			shlex := buildkitshell.NewLex('\\')
-			shlex.RawQuotes = true
-			shlex.RawEscapes = true
-			content, err = shlex.ProcessWord(content, args)
-			if err != nil {
-				return nil, err
-			}
-		}
-		file := File{
-			Data: content,
-			Name: heredoc.Name,
-		}
-		files = append(files, file)
-	}
-	return files, nil
-}
-
 // ADD foo /path
 //
 // Add the file 'foo' to '/path'. Tarball and Remote URL (git, http) handling
 // exist here. If you do not wish to have this automatic handling, use COPY.
-func add(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func add(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) < 2 {
 		return errAtLeastTwoArgument("ADD")
 	}
 	var chown string
 	var chmod string
-	var checksum string
 	last := len(args) - 1
 	dest := makeAbsolute(args[last], b.RunConfig.WorkingDir)
 	filteredUserArgs := make(map[string]string)
@@ -184,43 +154,24 @@ func add(b *Builder, args []string, attributes map[string]bool, flagArgs []strin
 		switch {
 		case strings.HasPrefix(arg, "--chown="):
 			chown = strings.TrimPrefix(arg, "--chown=")
-			if chown == "" {
-				return fmt.Errorf("no value specified for --chown=")
-			}
 		case strings.HasPrefix(arg, "--chmod="):
 			chmod = strings.TrimPrefix(arg, "--chmod=")
 			err = checkChmodConversion(chmod)
 			if err != nil {
 				return err
 			}
-		case strings.HasPrefix(arg, "--checksum="):
-			checksum = strings.TrimPrefix(arg, "--checksum=")
-			if checksum == "" {
-				return fmt.Errorf("no value specified for --checksum=")
-			}
 		default:
-			return fmt.Errorf("ADD only supports the --chmod=<permissions>, --chown=<uid:gid>, and --checksum=<checksum> flags")
+			return fmt.Errorf("ADD only supports the --chmod=<permissions> and the --chown=<uid:gid> flag")
 		}
 	}
-	files, err := processHereDocs(original, heredocs, userArgs)
-	if err != nil {
-		return err
-	}
-	b.PendingCopies = append(b.PendingCopies, Copy{
-		Src:      args[0:last],
-		Dest:     dest,
-		Download: true,
-		Chown:    chown,
-		Chmod:    chmod,
-		Checksum: checksum,
-		Files:    files})
+	b.PendingCopies = append(b.PendingCopies, Copy{Src: args[0:last], Dest: dest, Download: true, Chown: chown, Chmod: chmod})
 	return nil
 }
 
 // COPY foo /path
 //
 // Same as 'ADD' but without the tar and remote url handling.
-func dispatchCopy(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func dispatchCopy(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) < 2 {
 		return errAtLeastTwoArgument("COPY")
 	}
@@ -238,9 +189,6 @@ func dispatchCopy(b *Builder, args []string, attributes map[string]bool, flagArg
 		switch {
 		case strings.HasPrefix(arg, "--chown="):
 			chown = strings.TrimPrefix(arg, "--chown=")
-			if chown == "" {
-				return fmt.Errorf("no value specified for --chown=")
-			}
 		case strings.HasPrefix(arg, "--chmod="):
 			chmod = strings.TrimPrefix(arg, "--chmod=")
 			err = checkChmodConversion(chmod)
@@ -249,25 +197,18 @@ func dispatchCopy(b *Builder, args []string, attributes map[string]bool, flagArg
 			}
 		case strings.HasPrefix(arg, "--from="):
 			from = strings.TrimPrefix(arg, "--from=")
-			if from == "" {
-				return fmt.Errorf("no value specified for --from=")
-			}
 		default:
 			return fmt.Errorf("COPY only supports the --chmod=<permissions> --chown=<uid:gid> and the --from=<image|stage> flags")
 		}
 	}
-	files, err := processHereDocs(original, heredocs, userArgs)
-	if err != nil {
-		return err
-	}
-	b.PendingCopies = append(b.PendingCopies, Copy{From: from, Src: args[0:last], Dest: dest, Download: false, Chown: chown, Chmod: chmod, Files: files})
+	b.PendingCopies = append(b.PendingCopies, Copy{From: from, Src: args[0:last], Dest: dest, Download: false, Chown: chown, Chmod: chmod})
 	return nil
 }
 
 // FROM imagename
 //
 // This sets the image the dockerfile will build on top of.
-func from(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func from(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	switch {
 	case len(args) == 1:
 	case len(args) == 3 && len(args[0]) > 0 && strings.EqualFold(args[1], "as") && len(args[2]) > 0:
@@ -314,9 +255,6 @@ func from(b *Builder, args []string, attributes map[string]bool, flagArgs []stri
 		switch {
 		case strings.HasPrefix(arg, "--platform="):
 			platformString := strings.TrimPrefix(arg, "--platform=")
-			if platformString == "" {
-				return fmt.Errorf("no value specified for --platform=")
-			}
 			b.Platform = platformString
 		default:
 			return fmt.Errorf("FROM only supports the --platform flag")
@@ -335,7 +273,7 @@ func from(b *Builder, args []string, attributes map[string]bool, flagArgs []stri
 // evaluator.go and comments around dispatch() in the same file explain the
 // special cases. search for 'OnBuild' in internals.go for additional special
 // cases.
-func onbuild(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func onbuild(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) == 0 {
 		return errAtLeastOneArgument("ONBUILD")
 	}
@@ -357,7 +295,7 @@ func onbuild(b *Builder, args []string, attributes map[string]bool, flagArgs []s
 // WORKDIR /tmp
 //
 // Set the working directory for future RUN/CMD/etc statements.
-func workdir(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func workdir(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) != 1 {
 		return errExactlyOneArgument("WORKDIR")
 	}
@@ -384,7 +322,7 @@ func workdir(b *Builder, args []string, attributes map[string]bool, flagArgs []s
 // RUN echo hi          # sh -c echo hi       (Linux)
 // RUN echo hi          # cmd /S /C echo hi   (Windows)
 // RUN [ "echo", "hi" ] # echo hi
-func run(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func run(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if b.RunConfig.Image == "" {
 		return fmt.Errorf("Please provide a source image with `from` prior to run")
 	}
@@ -408,30 +346,18 @@ func run(b *Builder, args []string, attributes map[string]bool, flagArgs []strin
 		switch {
 		case strings.HasPrefix(arg, "--mount="):
 			mount := strings.TrimPrefix(arg, "--mount=")
-			if mount == "" {
-				return fmt.Errorf("no value specified for --mount=")
-			}
 			mounts = append(mounts, mount)
 		case strings.HasPrefix(arg, "--network="):
 			network = strings.TrimPrefix(arg, "--network=")
-			if network == "" {
-				return fmt.Errorf("no value specified for --network=")
-			}
 		default:
 			return fmt.Errorf("RUN only supports the --mount and --network flag")
 		}
-	}
-
-	files, err := processHereDocs(original, heredocs, userArgs)
-	if err != nil {
-		return err
 	}
 
 	run := Run{
 		Args:    args,
 		Mounts:  mounts,
 		Network: network,
-		Files:   files,
 	}
 
 	if !attributes["json"] {
@@ -445,7 +371,7 @@ func run(b *Builder, args []string, attributes map[string]bool, flagArgs []strin
 //
 // Set the default command to run in the container (which may be empty).
 // Argument handling is the same as RUN.
-func cmd(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func cmd(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	cmdSlice := handleJSONArgs(args, attributes)
 
 	if !attributes["json"] {
@@ -470,7 +396,7 @@ func cmd(b *Builder, args []string, attributes map[string]bool, flagArgs []strin
 //
 // Handles command processing similar to CMD and RUN, only b.RunConfig.Entrypoint
 // is initialized at NewBuilder time instead of through argument parsing.
-func entrypoint(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func entrypoint(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	parsed := handleJSONArgs(args, attributes)
 
 	switch {
@@ -501,7 +427,7 @@ func entrypoint(b *Builder, args []string, attributes map[string]bool, flagArgs 
 //
 // Expose ports for links and port mappings. This all ends up in
 // b.RunConfig.ExposedPorts for runconfig.
-func expose(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func expose(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) == 0 {
 		return errAtLeastOneArgument("EXPOSE")
 	}
@@ -528,7 +454,7 @@ func expose(b *Builder, args []string, attributes map[string]bool, flagArgs []st
 //
 // Set the user to 'foo' for future commands and when running the
 // ENTRYPOINT/CMD at container run time.
-func user(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func user(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) != 1 {
 		return errExactlyOneArgument("USER")
 	}
@@ -540,7 +466,7 @@ func user(b *Builder, args []string, attributes map[string]bool, flagArgs []stri
 // VOLUME /foo
 //
 // Expose the volume /foo for use. Will also accept the JSON array form.
-func volume(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func volume(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) == 0 {
 		return errAtLeastOneArgument("VOLUME")
 	}
@@ -562,7 +488,7 @@ func volume(b *Builder, args []string, attributes map[string]bool, flagArgs []st
 // STOPSIGNAL signal
 //
 // Set the signal that will be used to kill the container.
-func stopSignal(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func stopSignal(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) != 1 {
 		return errExactlyOneArgument("STOPSIGNAL")
 	}
@@ -580,7 +506,7 @@ func stopSignal(b *Builder, args []string, attributes map[string]bool, flagArgs 
 //
 // Set the default healthcheck command to run in the container (which may be empty).
 // Argument handling is the same as RUN.
-func healthcheck(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func healthcheck(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	if len(args) == 0 {
 		return errAtLeastOneArgument("HEALTHCHECK")
 	}
@@ -673,7 +599,7 @@ var targetArgs = []string{"TARGETOS", "TARGETARCH", "TARGETVARIANT"}
 // Adds the variable foo to the trusted list of variables that can be passed
 // to builder using the --build-arg flag for expansion/subsitution or passing to 'run'.
 // Dockerfile author may optionally set a default value of this variable.
-func arg(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func arg(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	var (
 		name       string
 		value      string
@@ -739,7 +665,7 @@ func arg(b *Builder, args []string, attributes map[string]bool, flagArgs []strin
 // SHELL powershell -command
 //
 // Set the non-default shell to use.
-func shell(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string, heredocs []buildkitparser.Heredoc) error {
+func shell(b *Builder, args []string, attributes map[string]bool, flagArgs []string, original string) error {
 	shellSlice := handleJSONArgs(args, attributes)
 	switch {
 	case len(shellSlice) == 0:

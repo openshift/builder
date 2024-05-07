@@ -1,5 +1,3 @@
-//go:build !remote
-
 package libimage
 
 import (
@@ -30,7 +28,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// PullOptions allows for customizing image pulls.
+// PullOptions allows for custommizing image pulls.
 type PullOptions struct {
 	CopyOptions
 
@@ -53,35 +51,11 @@ type PullOptions struct {
 // The error is storage.ErrImageUnknown iff the pull policy is set to "never"
 // and no local image has been found.  This allows for an easier integration
 // into some users of this package (e.g., Buildah).
-func (r *Runtime) Pull(ctx context.Context, name string, pullPolicy config.PullPolicy, options *PullOptions) (_ []*Image, pullError error) {
+func (r *Runtime) Pull(ctx context.Context, name string, pullPolicy config.PullPolicy, options *PullOptions) ([]*Image, error) {
 	logrus.Debugf("Pulling image %s (policy: %s)", name, pullPolicy)
-	if r.eventChannel != nil {
-		defer func() {
-			if pullError != nil {
-				// Note that we use the input name here to preserve the transport data.
-				r.writeEvent(&Event{Name: name, Time: time.Now(), Type: EventTypeImagePullError, Error: pullError})
-			}
-		}()
-	}
+
 	if options == nil {
 		options = &PullOptions{}
-	}
-
-	defaultConfig, err := config.Default()
-	if err != nil {
-		return nil, err
-	}
-	if options.MaxRetries == nil {
-		options.MaxRetries = &defaultConfig.Engine.Retry
-	}
-	if options.RetryDelay == nil {
-		if defaultConfig.Engine.RetryDelay != "" {
-			duration, err := time.ParseDuration(defaultConfig.Engine.RetryDelay)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse containers.conf retry_delay: %w", err)
-			}
-			options.RetryDelay = &duration
-		}
 	}
 
 	var possiblyUnqualifiedName string // used for short-name resolution
@@ -157,25 +131,28 @@ func (r *Runtime) Pull(ctx context.Context, name string, pullPolicy config.PullP
 		options.Variant = r.systemContext.VariantChoice
 	}
 
-	var pulledImages []string
+	var (
+		pulledImages []string
+		pullError    error
+	)
 
 	// Dispatch the copy operation.
 	switch ref.Transport().Name() {
 	// DOCKER REGISTRY
 	case registryTransport.Transport.Name():
-		pulledImages, err = r.copyFromRegistry(ctx, ref, possiblyUnqualifiedName, pullPolicy, options)
+		pulledImages, pullError = r.copyFromRegistry(ctx, ref, possiblyUnqualifiedName, pullPolicy, options)
 
 	// DOCKER ARCHIVE
 	case dockerArchiveTransport.Transport.Name():
-		pulledImages, err = r.copyFromDockerArchive(ctx, ref, &options.CopyOptions)
+		pulledImages, pullError = r.copyFromDockerArchive(ctx, ref, &options.CopyOptions)
 
 	// ALL OTHER TRANSPORTS
 	default:
-		pulledImages, err = r.copyFromDefault(ctx, ref, &options.CopyOptions)
+		pulledImages, pullError = r.copyFromDefault(ctx, ref, &options.CopyOptions)
 	}
 
-	if err != nil {
-		return nil, err
+	if pullError != nil {
+		return nil, pullError
 	}
 
 	localImages := []*Image{}
@@ -426,7 +403,7 @@ func (r *Runtime) copyFromRegistry(ctx context.Context, ref types.ImageReference
 	for _, tag := range tags {
 		select { // Let's be gentle with Podman remote.
 		case <-ctx.Done():
-			return nil, errors.New("pulling cancelled")
+			return nil, fmt.Errorf("pulling cancelled")
 		default:
 			// We can continue.
 		}
@@ -466,7 +443,7 @@ func (r *Runtime) imagesIDsForManifest(manifestBytes []byte, sys *types.SystemCo
 	} else {
 		d, err := manifest.Digest(manifestBytes)
 		if err != nil {
-			return nil, errors.New("digesting manifest")
+			return nil, fmt.Errorf("digesting manifest")
 		}
 		imageDigest = d
 	}
@@ -531,7 +508,7 @@ func (r *Runtime) copySingleImageFromRegistry(ctx context.Context, imageName str
 
 	// If the local image is corrupted, we need to repull it.
 	if localImage != nil {
-		if err := localImage.isCorrupted(ctx, imageName); err != nil {
+		if err := localImage.isCorrupted(imageName); err != nil {
 			logrus.Error(err)
 			localImage = nil
 		}

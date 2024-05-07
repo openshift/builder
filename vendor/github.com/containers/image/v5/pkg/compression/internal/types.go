@@ -12,28 +12,23 @@ type DecompressorFunc func(io.Reader) (io.ReadCloser, error)
 
 // Algorithm is a compression algorithm that can be used for CompressStream.
 type Algorithm struct {
-	name            string
-	baseVariantName string
-	prefix          []byte // Initial bytes of a stream compressed using this algorithm, or empty to disable detection.
-	decompressor    DecompressorFunc
-	compressor      CompressorFunc
+	name         string
+	mime         string
+	prefix       []byte // Initial bytes of a stream compressed using this algorithm, or empty to disable detection.
+	decompressor DecompressorFunc
+	compressor   CompressorFunc
 }
 
 // NewAlgorithm creates an Algorithm instance.
-// nontrivialBaseVariantName is typically "".
 // This function exists so that Algorithm instances can only be created by code that
 // is allowed to import this internal subpackage.
-func NewAlgorithm(name, nontrivialBaseVariantName string, prefix []byte, decompressor DecompressorFunc, compressor CompressorFunc) Algorithm {
-	baseVariantName := name
-	if nontrivialBaseVariantName != "" {
-		baseVariantName = nontrivialBaseVariantName
-	}
+func NewAlgorithm(name, mime string, prefix []byte, decompressor DecompressorFunc, compressor CompressorFunc) Algorithm {
 	return Algorithm{
-		name:            name,
-		baseVariantName: baseVariantName,
-		prefix:          prefix,
-		decompressor:    decompressor,
-		compressor:      compressor,
+		name:         name,
+		mime:         mime,
+		prefix:       prefix,
+		decompressor: decompressor,
+		compressor:   compressor,
 	}
 }
 
@@ -42,11 +37,10 @@ func (c Algorithm) Name() string {
 	return c.name
 }
 
-// BaseVariantName returns the name of the “base variant” of the compression algorithm.
-// It is either equal to Name() of the same algorithm, or equal to Name() of some other Algorithm (the “base variant”).
-// This supports a single level of “is-a” relationship between compression algorithms, e.g. where "zstd:chunked" data is valid "zstd" data.
-func (c Algorithm) BaseVariantName() string {
-	return c.baseVariantName
+// InternalUnstableUndocumentedMIMEQuestionMark ???
+// DO NOT USE THIS anywhere outside of c/image until it is properly documented.
+func (c Algorithm) InternalUnstableUndocumentedMIMEQuestionMark() string {
+	return c.mime
 }
 
 // AlgorithmCompressor returns the compressor field of algo.

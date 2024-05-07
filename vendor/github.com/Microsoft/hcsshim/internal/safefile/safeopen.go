@@ -243,7 +243,7 @@ func RemoveRelative(path string, root *os.File) error {
 	if err == nil {
 		defer f.Close()
 		err = deleteOnClose(f)
-		if err == syscall.ERROR_ACCESS_DENIED { //nolint:errorlint
+		if err == syscall.ERROR_ACCESS_DENIED {
 			// Maybe the file is marked readonly. Clear the bit and retry.
 			_ = clearReadOnly(f)
 			err = deleteOnClose(f)
