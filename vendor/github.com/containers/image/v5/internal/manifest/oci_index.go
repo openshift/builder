@@ -61,6 +61,7 @@ func (index *OCI1IndexPublic) Instance(instanceDigest digest.Digest) (ListUpdate
 			ret.ReadOnly.Platform = manifest.Platform
 			ret.ReadOnly.Annotations = manifest.Annotations
 			ret.ReadOnly.CompressionAlgorithmNames = annotationsToCompressionAlgorithmNames(manifest.Annotations)
+			ret.ReadOnly.ArtifactType = manifest.ArtifactType
 			return ret, nil
 		}
 	}
@@ -102,7 +103,7 @@ func addCompressionAnnotations(compressionAlgorithms []compression.Algorithm, an
 		*annotationsMap = map[string]string{}
 	}
 	for _, algo := range compressionAlgorithms {
-		switch algo.Name() {
+		switch algo.BaseVariantName() {
 		case compression.ZstdAlgorithmName:
 			(*annotationsMap)[OCI1InstanceAnnotationCompressionZSTD] = OCI1InstanceAnnotationCompressionZSTDValue
 		default:
@@ -157,17 +158,21 @@ func (index *OCI1IndexPublic) editInstances(editInstances []ListEdit) error {
 			}
 			addCompressionAnnotations(editInstance.AddCompressionAlgorithms, &annotations)
 			addedEntries = append(addedEntries, imgspecv1.Descriptor{
-				MediaType:   editInstance.AddMediaType,
-				Size:        editInstance.AddSize,
-				Digest:      editInstance.AddDigest,
-				Platform:    editInstance.AddPlatform,
-				Annotations: annotations})
+				MediaType:    editInstance.AddMediaType,
+				ArtifactType: editInstance.AddArtifactType,
+				Size:         editInstance.AddSize,
+				Digest:       editInstance.AddDigest,
+				Platform:     editInstance.AddPlatform,
+				Annotations:  annotations,
+			})
 		default:
 			return fmt.Errorf("internal error: invalid operation: %d", editInstance.ListOperation)
 		}
 	}
 	if len(addedEntries) != 0 {
-		index.Manifests = append(index.Manifests, addedEntries...)
+		// slices.Clone() here to ensure the slice uses a private backing array;
+		// an external caller could have manually created OCI1IndexPublic with a slice with extra capacity.
+		index.Manifests = append(slices.Clone(index.Manifests), addedEntries...)
 	}
 	if len(addedEntries) != 0 || updatedAnnotations {
 		slices.SortStableFunc(index.Manifests, func(a, b imgspecv1.Descriptor) int {
@@ -220,7 +225,7 @@ func (ic instanceCandidate) isPreferredOver(other *instanceCandidate, preferGzip
 	case ic.manifestPosition != other.manifestPosition:
 		return ic.manifestPosition < other.manifestPosition
 	}
-	panic("internal error: invalid comparision between two candidates") // This should not be reachable because in all calls we make, the two candidates differ at least in manifestPosition.
+	panic("internal error: invalid comparison between two candidates") // This should not be reachable because in all calls we make, the two candidates differ at least in manifestPosition.
 }
 
 // chooseInstance is a private equivalent to ChooseInstanceByCompression,
@@ -297,12 +302,13 @@ func OCI1IndexPublicFromComponents(components []imgspecv1.Descriptor, annotation
 			platform = &platformCopy
 		}
 		m := imgspecv1.Descriptor{
-			MediaType:   component.MediaType,
-			Size:        component.Size,
-			Digest:      component.Digest,
-			URLs:        slices.Clone(component.URLs),
-			Annotations: maps.Clone(component.Annotations),
-			Platform:    platform,
+			MediaType:    component.MediaType,
+			ArtifactType: component.ArtifactType,
+			Size:         component.Size,
+			Digest:       component.Digest,
+			URLs:         slices.Clone(component.URLs),
+			Annotations:  maps.Clone(component.Annotations),
+			Platform:     platform,
 		}
 		index.Manifests[i] = m
 	}

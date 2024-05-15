@@ -32,11 +32,11 @@ type BlobInfoCache2 interface {
 	// otherwise the cache could be poisoned and cause us to make incorrect edits to type
 	// information in a manifest.
 	RecordDigestCompressorName(anyDigest digest.Digest, compressorName string)
-	// CandidateLocations2 returns a prioritized, limited, number of blobs and their locations
+	// CandidateLocations2 returns a prioritized, limited, number of blobs and their locations (if known)
 	// that could possibly be reused within the specified (transport scope) (if they still
 	// exist, which is not guaranteed).
 	//
-	// If !canSubstitute, the returned cadidates will match the submitted digest exactly; if
+	// If !canSubstitute, the returned candidates will match the submitted digest exactly; if
 	// canSubstitute, data from previous RecordDigestUncompressedPair calls is used to also look
 	// up variants of the blob which have the same uncompressed digest.
 	//
@@ -46,7 +46,8 @@ type BlobInfoCache2 interface {
 
 // BICReplacementCandidate2 is an item returned by BlobInfoCache2.CandidateLocations2.
 type BICReplacementCandidate2 struct {
-	Digest         digest.Digest
-	CompressorName string // either the Name() of a known pkg/compression.Algorithm, or Uncompressed or UnknownCompression
-	Location       types.BICLocationReference
+	Digest          digest.Digest
+	CompressorName  string                     // either the Name() of a known pkg/compression.Algorithm, or Uncompressed or UnknownCompression
+	UnknownLocation bool                       // is true when `Location` for this blob is not set
+	Location        types.BICLocationReference // not set if UnknownLocation is set to `true`
 }
