@@ -91,7 +91,7 @@ func main() {
 	command.Run = func(c *cobra.Command, args []string) {
 		switch basename {
 		case "openshift-sti-build", "openshift-docker-build", "openshift-extract-image-content":
-			storeOptions, err := storage.DefaultStoreOptions(false, 0)
+			storeOptions, err := storage.DefaultStoreOptions()
 			kcmdutil.CheckErr(err)
 			os.MkdirAll(storeOptions.GraphRoot, 0775)
 			os.MkdirAll(storeOptions.RunRoot, 0775)
