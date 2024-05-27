@@ -3,7 +3,6 @@ package buildah
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,7 +21,6 @@ import (
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/types"
 	encconfig "github.com/containers/ocicrypt/config"
-	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/stringid"
 	digest "github.com/opencontainers/go-digest"
@@ -112,6 +110,23 @@ type CommitOptions struct {
 	// UnsetEnvs is a list of environments to not add to final image.
 	// Deprecated: use UnsetEnv() before committing instead.
 	UnsetEnvs []string
+	// OverrideConfig is an optional Schema2Config which can override parts
+	// of the working container's configuration for the image that is being
+	// committed.
+	OverrideConfig *manifest.Schema2Config
+	// OverrideChanges is a slice of Dockerfile-style instructions to make
+	// to the configuration of the image that is being committed, after
+	// OverrideConfig is applied.
+	OverrideChanges []string
+	// ExtraImageContent is a map which describes additional content to add
+	// to the committed image.  The map's keys are filesystem paths in the
+	// image and the corresponding values are the paths of files whose
+	// contents will be used in their place.  The contents will be owned by
+	// 0:0 and have mode 0644.  Currently only accepts regular files.
+	ExtraImageContent map[string]string
+	// SBOMScanOptions encapsulates options which control whether or not we
+	// run scanners on the rootfs that we're about to commit, and how.
+	SBOMScanOptions []SBOMScanOptions
 }
 
 var (
@@ -309,6 +324,28 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 	}
 	logrus.Debugf("committing image with reference %q is allowed by policy", transports.ImageName(dest))
 
+	// If we need to scan the rootfs, do it now.
+	options.ExtraImageContent = copyStringStringMap(options.ExtraImageContent)
+	var extraImageContent, extraLocalContent map[string]string
+	if len(options.SBOMScanOptions) != 0 {
+		var scansDirectory string
+		if extraImageContent, extraLocalContent, scansDirectory, err = b.sbomScan(ctx, options); err != nil {
+			return imgID, nil, "", fmt.Errorf("scanning rootfs to generate SBOM for container %q: %w", b.ContainerID, err)
+		}
+		if scansDirectory != "" {
+			defer func() {
+				if err := os.RemoveAll(scansDirectory); err != nil {
+					logrus.Warnf("removing temporary directory %q: %v", scansDirectory, err)
+				}
+			}()
+		}
+		for k, v := range extraImageContent {
+			if _, set := options.ExtraImageContent[k]; !set {
+				options.ExtraImageContent[k] = v
+			}
+		}
+	}
+
 	// Build an image reference from which we can copy the finished image.
 	src, err = b.makeContainerImageRef(options)
 	if err != nil {
@@ -358,7 +395,7 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 	if len(options.AdditionalTags) > 0 {
 		switch dest.Transport().Name() {
 		case is.Transport.Name():
-			img, err := is.Transport.GetStoreImage(b.store, dest)
+			_, img, err := is.ResolveReference(dest)
 			if err != nil {
 				return imgID, nil, "", fmt.Errorf("locating just-written image %q: %w", transports.ImageName(dest), err)
 			}
@@ -371,11 +408,12 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 		}
 	}
 
-	img, err := is.Transport.GetStoreImage(b.store, dest)
-	if err != nil && !errors.Is(err, storage.ErrImageUnknown) {
-		return imgID, nil, "", fmt.Errorf("locating image %q in local storage: %w", transports.ImageName(dest), err)
-	}
-	if err == nil {
+	if dest.Transport().Name() == is.Transport.Name() {
+		dest2, img, err := is.ResolveReference(dest)
+		if err != nil {
+			return imgID, nil, "", fmt.Errorf("locating image %q in local storage: %w", transports.ImageName(dest), err)
+		}
+		dest = dest2
 		imgID = img.ID
 		toPruneNames := make([]string, 0, len(img.Names))
 		for _, name := range img.Names {
@@ -388,11 +426,6 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 				return imgID, nil, "", fmt.Errorf("failed to remove temporary name from image %q: %w", imgID, err)
 			}
 			logrus.Debugf("removing %v from assigned names to image %q", nameToRemove, img.ID)
-			dest2, err := is.Transport.ParseStoreReference(b.store, "@"+imgID)
-			if err != nil {
-				return imgID, nil, "", fmt.Errorf("creating unnamed destination reference for image: %w", err)
-			}
-			dest = dest2
 		}
 		if options.IIDFile != "" {
 			if err = os.WriteFile(options.IIDFile, []byte("sha256:"+img.ID), 0644); err != nil {
@@ -400,7 +433,31 @@ func (b *Builder) Commit(ctx context.Context, dest types.ImageReference, options
 			}
 		}
 	}
+	// If we're supposed to store SBOM or PURL information in local files, write them now.
+	for filename, content := range extraLocalContent {
+		err := func() error {
+			output, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+			if err != nil {
+				return err
+			}
+			defer output.Close()
+			input, err := os.Open(content)
+			if err != nil {
+				return err
+			}
+			defer input.Close()
+			if _, err := io.Copy(output, input); err != nil {
+				return fmt.Errorf("copying from %q to %q: %w", content, filename, err)
+			}
+			return nil
+		}()
+		if err != nil {
+			return imgID, nil, "", err
+		}
+	}
 
+	// Calculate the as-written digest of the image's manifest and build the digested
+	// reference for the image.
 	manifestDigest, err := manifest.Digest(manifestBytes)
 	if err != nil {
 		return imgID, nil, "", fmt.Errorf("computing digest of manifest of new image %q: %w", transports.ImageName(dest), err)

@@ -55,50 +55,13 @@ import (
 	"golang.org/x/term"
 )
 
-// addResolvConf copies files from host and sets them up to bind mount into container
-func (b *Builder) addResolvConf(rdir string, chownOpts *idtools.IDPair, dnsServers, dnsSearch, dnsOptions []string, namespaces []specs.LinuxNamespace) (string, error) {
-	defaultConfig, err := config.Default()
-	if err != nil {
-		return "", fmt.Errorf("failed to get config: %w", err)
-	}
-
-	nameservers := make([]string, 0, len(defaultConfig.Containers.DNSServers)+len(dnsServers))
-	nameservers = append(nameservers, defaultConfig.Containers.DNSServers...)
-	nameservers = append(nameservers, dnsServers...)
-
-	keepHostServers := false
-	// special check for slirp ip
-	if len(nameservers) == 0 && b.Isolation == IsolationOCIRootless {
-		for _, ns := range namespaces {
-			if ns.Type == specs.NetworkNamespace && ns.Path == "" {
-				keepHostServers = true
-				// if we are using slirp4netns, also add the built-in DNS server.
-				logrus.Debugf("adding slirp4netns 10.0.2.3 built-in DNS server")
-				nameservers = append([]string{"10.0.2.3"}, nameservers...)
-			}
-		}
-	}
-
-	searches := make([]string, 0, len(defaultConfig.Containers.DNSSearches)+len(dnsSearch))
-	searches = append(searches, defaultConfig.Containers.DNSSearches...)
-	searches = append(searches, dnsSearch...)
-
-	options := make([]string, 0, len(defaultConfig.Containers.DNSOptions)+len(dnsOptions))
-	options = append(options, defaultConfig.Containers.DNSOptions...)
-	options = append(options, dnsOptions...)
-
+func (b *Builder) createResolvConf(rdir string, chownOpts *idtools.IDPair) (string, error) {
 	cfile := filepath.Join(rdir, "resolv.conf")
-	if err := resolvconf.New(&resolvconf.Params{
-		Path:            cfile,
-		Namespaces:      namespaces,
-		IPv6Enabled:     true, // TODO we should check if we have ipv6
-		KeepHostServers: keepHostServers,
-		Nameservers:     nameservers,
-		Searches:        searches,
-		Options:         options,
-	}); err != nil {
-		return "", fmt.Errorf("building resolv.conf for container %s: %w", b.ContainerID, err)
+	f, err := os.Create(cfile)
+	if err != nil {
+		return "", err
 	}
+	defer f.Close()
 
 	uid := 0
 	gid := 0
@@ -106,74 +69,97 @@ func (b *Builder) addResolvConf(rdir string, chownOpts *idtools.IDPair, dnsServe
 		uid = chownOpts.UID
 		gid = chownOpts.GID
 	}
-	if err = os.Chown(cfile, uid, gid); err != nil {
+	if err = f.Chown(uid, gid); err != nil {
 		return "", err
 	}
 
-	if err := label.Relabel(cfile, b.MountLabel, false); err != nil {
+	if err := relabel(cfile, b.MountLabel, false); err != nil {
 		return "", err
 	}
 	return cfile, nil
 }
 
-// generateHosts creates a containers hosts file
-func (b *Builder) generateHosts(rdir string, chownOpts *idtools.IDPair, imageRoot string, spec *specs.Spec) (string, error) {
-	conf, err := config.Default()
+// addResolvConf copies files from host and sets them up to bind mount into container
+func (b *Builder) addResolvConfEntries(file string, networkNameServer []string,
+	namespaces []specs.LinuxNamespace, keepHostServers, ipv6 bool) error {
+	defaultConfig, err := config.Default()
 	if err != nil {
-		return "", err
+		return fmt.Errorf("failed to get config: %w", err)
 	}
 
-	path, err := etchosts.GetBaseHostFile(conf.Containers.BaseHostsFile, imageRoot)
-	if err != nil {
-		return "", err
+	dnsServers, dnsSearch, dnsOptions := b.CommonBuildOpts.DNSServers, b.CommonBuildOpts.DNSSearch, b.CommonBuildOpts.DNSOptions
+	nameservers := make([]string, 0, len(defaultConfig.Containers.DNSServers.Get())+len(dnsServers))
+	nameservers = append(nameservers, defaultConfig.Containers.DNSServers.Get()...)
+	nameservers = append(nameservers, dnsServers...)
+
+	searches := make([]string, 0, len(defaultConfig.Containers.DNSSearches.Get())+len(dnsSearch))
+	searches = append(searches, defaultConfig.Containers.DNSSearches.Get()...)
+	searches = append(searches, dnsSearch...)
+
+	options := make([]string, 0, len(defaultConfig.Containers.DNSOptions.Get())+len(dnsOptions))
+	options = append(options, defaultConfig.Containers.DNSOptions.Get()...)
+	options = append(options, dnsOptions...)
+
+	if len(nameservers) == 0 {
+		nameservers = networkNameServer
 	}
 
-	var entries etchosts.HostEntries
-	isHost := true
-	if spec.Linux != nil {
-		for _, ns := range spec.Linux.Namespaces {
-			if ns.Type == specs.NetworkNamespace {
-				isHost = false
-				break
-			}
-		}
-	}
-	// add host entry for local ip when running in host network
-	if spec.Hostname != "" && isHost {
-		ip := netUtil.GetLocalIP()
-		if ip != "" {
-			entries = append(entries, etchosts.HostEntry{
-				Names: []string{spec.Hostname},
-				IP:    ip,
-			})
-		}
-	}
-
-	targetfile := filepath.Join(rdir, "hosts")
-	if err := etchosts.New(&etchosts.Params{
-		BaseFile:                 path,
-		ExtraHosts:               b.CommonBuildOpts.AddHost,
-		HostContainersInternalIP: etchosts.GetHostContainersInternalIP(conf, nil, nil),
-		TargetFile:               targetfile,
-		ContainerIPs:             entries,
+	if err := resolvconf.New(&resolvconf.Params{
+		Path:            file,
+		Namespaces:      namespaces,
+		IPv6Enabled:     ipv6,
+		KeepHostServers: keepHostServers,
+		Nameservers:     nameservers,
+		Searches:        searches,
+		Options:         options,
 	}); err != nil {
-		return "", err
+		return fmt.Errorf("building resolv.conf for container %s: %w", b.ContainerID, err)
 	}
 
+	return nil
+}
+
+// createHostsFile creates a containers hosts file
+func (b *Builder) createHostsFile(rdir string, chownOpts *idtools.IDPair) (string, error) {
+	targetfile := filepath.Join(rdir, "hosts")
+	f, err := os.Create(targetfile)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
 	uid := 0
 	gid := 0
 	if chownOpts != nil {
 		uid = chownOpts.UID
 		gid = chownOpts.GID
 	}
-	if err = os.Chown(targetfile, uid, gid); err != nil {
+	if err := f.Chown(uid, gid); err != nil {
 		return "", err
 	}
-	if err := label.Relabel(targetfile, b.MountLabel, false); err != nil {
+	if err := relabel(targetfile, b.MountLabel, false); err != nil {
 		return "", err
 	}
 
 	return targetfile, nil
+}
+
+func (b *Builder) addHostsEntries(file, imageRoot string, entries etchosts.HostEntries, exculde []net.IP) error {
+	conf, err := config.Default()
+	if err != nil {
+		return err
+	}
+
+	base, err := etchosts.GetBaseHostFile(conf.Containers.BaseHostsFile, imageRoot)
+	if err != nil {
+		return err
+	}
+	return etchosts.New(&etchosts.Params{
+		BaseFile:                 base,
+		ExtraHosts:               b.CommonBuildOpts.AddHost,
+		HostContainersInternalIP: etchosts.GetHostContainersInternalIPExcluding(conf, nil, nil, exculde),
+		TargetFile:               file,
+		ContainerIPs:             entries,
+	})
 }
 
 // generateHostname creates a containers /etc/hostname file
@@ -198,7 +184,7 @@ func (b *Builder) generateHostname(rdir, hostname string, chownOpts *idtools.IDP
 	if err = os.Chown(cfile, uid, gid); err != nil {
 		return "", err
 	}
-	if err := label.Relabel(cfile, b.MountLabel, false); err != nil {
+	if err := relabel(cfile, b.MountLabel, false); err != nil {
 		return "", err
 	}
 
@@ -344,7 +330,7 @@ func getNetworkInterface(store storage.Store, cniConfDir, cniPluginPath string) 
 	}
 	if len(cniPluginPath) > 0 {
 		plugins := strings.Split(cniPluginPath, string(os.PathListSeparator))
-		newconf.Network.CNIPluginDirs = plugins
+		newconf.Network.CNIPluginDirs.Set(plugins)
 	}
 
 	_, netInt, err := network.NetworkBackend(store, &newconf, false)
@@ -352,6 +338,27 @@ func getNetworkInterface(store storage.Store, cniConfDir, cniPluginPath string) 
 		return nil, err
 	}
 	return netInt, nil
+}
+
+func netStatusToNetResult(netStatus map[string]netTypes.StatusBlock, hostnames []string) *netResult {
+	result := &netResult{
+		keepHostResolvers: false,
+	}
+	for _, status := range netStatus {
+		for _, dns := range status.DNSServerIPs {
+			result.dnsServers = append(result.dnsServers, dns.String())
+		}
+		for _, netInt := range status.Interfaces {
+			for _, netAddress := range netInt.Subnets {
+				e := etchosts.HostEntry{IP: netAddress.IPNet.IP.String(), Names: hostnames}
+				result.entries = append(result.entries, e)
+				if !result.ipv6 && netUtil.IsIPv6(netAddress.IPNet.IP) {
+					result.ipv6 = true
+				}
+			}
+		}
+	}
+	return result
 }
 
 // DefaultNamespaceOptions returns the default namespace settings from the
@@ -421,15 +428,6 @@ func waitForSync(pipeR *os.File) error {
 	b := make([]byte, 16)
 	_, err := pipeR.Read(b)
 	return err
-}
-
-func contains(volumes []string, v string) bool {
-	for _, i := range volumes {
-		if i == v {
-			return true
-		}
-	}
-	return false
 }
 
 func runUsingRuntime(options RunOptions, configureNetwork bool, moreCreateArgs []string, spec *specs.Spec, bundlePath, containerName string,
@@ -1131,7 +1129,7 @@ func runUsingRuntimeMain() {
 }
 
 func (b *Builder) runUsingRuntimeSubproc(isolation define.Isolation, options RunOptions, configureNetwork bool, networkString string,
-	moreCreateArgs []string, spec *specs.Spec, rootPath, bundlePath, containerName, buildContainerName, hostsFile string) (err error) {
+	moreCreateArgs []string, spec *specs.Spec, rootPath, bundlePath, containerName, buildContainerName, hostsFile, resolvFile string) (err error) {
 	// Lock the caller to a single OS-level thread.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -1236,7 +1234,7 @@ func (b *Builder) runUsingRuntimeSubproc(isolation define.Isolation, options Run
 				return fmt.Errorf("parsing pid %s as a number: %w", string(pidValue), err)
 			}
 
-			teardown, netstatus, err := b.runConfigureNetwork(pid, isolation, options, networkString, containerName)
+			teardown, netResult, err := b.runConfigureNetwork(pid, isolation, options, networkString, containerName, []string{spec.Hostname, buildContainerName})
 			if teardown != nil {
 				defer teardown()
 			}
@@ -1246,9 +1244,14 @@ func (b *Builder) runUsingRuntimeSubproc(isolation define.Isolation, options Run
 
 			// only add hosts if we manage the hosts file
 			if hostsFile != "" {
-				entries := etchosts.GetNetworkHostEntries(netstatus, spec.Hostname, buildContainerName)
-				// make sure to sync this with (b *Builder) generateHosts()
-				err = etchosts.Add(hostsFile, entries)
+				err = b.addHostsEntries(hostsFile, rootPath, netResult.entries, netResult.excludeIPs)
+				if err != nil {
+					return err
+				}
+			}
+
+			if resolvFile != "" {
+				err = b.addResolvConfEntries(resolvFile, netResult.dnsServers, spec.Linux.Namespaces, netResult.keepHostResolvers, netResult.ipv6)
 				if err != nil {
 					return err
 				}
@@ -1419,7 +1422,7 @@ func runSetupBuiltinVolumes(mountLabel, mountPoint, containerDir string, builtin
 			if err = os.MkdirAll(volumePath, 0755); err != nil {
 				return nil, err
 			}
-			if err = label.Relabel(volumePath, mountLabel, false); err != nil {
+			if err = relabel(volumePath, mountLabel, false); err != nil {
 				return nil, err
 			}
 			initializeVolume = true
@@ -1509,8 +1512,6 @@ func checkIfMountDestinationPreExists(root string, dest string) (bool, error) {
 //
 // If this function succeeds, the caller must unlock runMountArtifacts.TargetLocks (when??)
 func (b *Builder) runSetupRunMounts(mountPoint string, mounts []string, sources runMountInfo, idMaps IDMaps) ([]specs.Mount, *runMountArtifacts, error) {
-	// If `type` is not set default to TypeBind
-	mountType := define.TypeBind
 	mountTargets := make([]string, 0, 10)
 	tmpFiles := make([]string, 0, len(mounts))
 	mountImages := make([]string, 0, 10)
@@ -1532,6 +1533,10 @@ func (b *Builder) runSetupRunMounts(mountPoint string, mounts []string, sources 
 		var agent *sshagent.AgentServer
 		var tl *lockfile.LockFile
 		tokens := strings.Split(mount, ",")
+
+		// If `type` is not set default to TypeBind
+		mountType := define.TypeBind
+
 		for _, field := range tokens {
 			if strings.HasPrefix(field, "type=") {
 				kv := strings.Split(field, "=")
@@ -1757,7 +1762,7 @@ func (b *Builder) getSecretMount(tokens []string, secrets map[string]define.Secr
 		return nil, "", err
 	}
 
-	if err := label.Relabel(ctrFileOnHost, b.MountLabel, false); err != nil {
+	if err := relabel(ctrFileOnHost, b.MountLabel, false); err != nil {
 		return nil, "", err
 	}
 	hostUID, hostGID, err := util.GetHostIDs(idMaps.uidmap, idMaps.gidmap, uid, gid)
@@ -1855,13 +1860,13 @@ func (b *Builder) getSSHMount(tokens []string, count int, sshsources map[string]
 		return nil, nil, err
 	}
 
-	if err := label.Relabel(filepath.Dir(hostSock), b.MountLabel, false); err != nil {
+	if err := relabel(filepath.Dir(hostSock), b.MountLabel, false); err != nil {
 		if shutdownErr := fwdAgent.Shutdown(); shutdownErr != nil {
 			b.Logger.Errorf("error shutting down agent: %v", shutdownErr)
 		}
 		return nil, nil, err
 	}
-	if err := label.Relabel(hostSock, b.MountLabel, false); err != nil {
+	if err := relabel(hostSock, b.MountLabel, false); err != nil {
 		if shutdownErr := fwdAgent.Shutdown(); shutdownErr != nil {
 			b.Logger.Errorf("error shutting down agent: %v", shutdownErr)
 		}
@@ -1965,4 +1970,14 @@ func setPdeathsig(cmd *exec.Cmd) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.Pdeathsig = syscall.SIGKILL
+}
+
+func relabel(path, mountLabel string, recurse bool) error {
+	if err := label.Relabel(path, mountLabel, recurse); err != nil {
+		if !errors.Is(err, syscall.ENOTSUP) {
+			return err
+		}
+		logrus.Debugf("Labeling not supported on %q", path)
+	}
+	return nil
 }
