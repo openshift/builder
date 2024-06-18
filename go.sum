@@ -398,8 +398,8 @@ github.com/opencontainers/runtime-tools v0.9.1-0.20230317050512-e931285f4b69 h1:
 github.com/opencontainers/runtime-tools v0.9.1-0.20230317050512-e931285f4b69/go.mod h1:bNpfuSHA3DZRtD0TPWO8LzgtLpFPTVA/3jDkzD/OPyk=
 github.com/opencontainers/selinux v1.11.0 h1:+5Zbo97w3Lbmb3PeqQtpmTkMwsW5nRI3YaLpt7tQ7oU=
 github.com/opencontainers/selinux v1.11.0/go.mod h1:E5dMC3VPuVvVHDYmi78qvhJp8+M586T4DlDRYpFkyec=
-github.com/openshift/api v0.0.0-20231018090736-41ecc021ff27 h1:F+OfUDnk9/F5PL5cgDTzm3D+S/n9oPbzEm9dNpwel0w=
-github.com/openshift/api v0.0.0-20231018090736-41ecc021ff27/go.mod h1:qNtV0315F+f8ld52TLtPvrfivZpdimOzTi3kn9IVbtU=
+github.com/openshift/api v0.0.0-20240522145529-93d6bda14341 h1:JQpzgk+p24rkgNbNsrNR0yLm63WTKapuT60INU5BqT8=
+github.com/openshift/api v0.0.0-20240522145529-93d6bda14341/go.mod h1:qNtV0315F+f8ld52TLtPvrfivZpdimOzTi3kn9IVbtU=
 github.com/openshift/client-go v0.0.0-20231018150822-6e226e2825a6 h1:3wgEtuYbZ76oOXjhSJ2p1m0lftgghK0XlR9guG2aKhA=
 github.com/openshift/client-go v0.0.0-20231018150822-6e226e2825a6/go.mod h1:Fkn7VRruQ4KwNGeaUmi9QgqLk/d7U6cj+UiP8b+0hiQ=
 github.com/openshift/imagebuilder v1.2.5 h1:dby0N3FTouXSBgWNf+gfTkj36fAb8g4iL/SRw1eNAoo=

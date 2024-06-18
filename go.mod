@@ -14,7 +14,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/opencontainers/runc v1.1.9
 	github.com/opencontainers/runtime-spec v1.1.0
-	github.com/openshift/api v0.0.0-20231018090736-41ecc021ff27
+	github.com/openshift/api v0.0.0-20240522145529-93d6bda14341
 	github.com/openshift/client-go v0.0.0-20231018150822-6e226e2825a6
 	github.com/openshift/imagebuilder v1.2.5
 	github.com/openshift/library-go v0.0.0-20231017173800-126f85ed0cc7
