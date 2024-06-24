@@ -22,7 +22,6 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/manifest"
-	is "github.com/containers/image/v5/storage"
 	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/transports/alltransports"
@@ -43,14 +42,18 @@ import (
 // instruction in the Dockerfile, since that's usually an indication of a user
 // error, but for these values we make exceptions and ignore them.
 var builtinAllowedBuildArgs = map[string]bool{
-	"HTTP_PROXY":  true,
-	"http_proxy":  true,
-	"HTTPS_PROXY": true,
-	"https_proxy": true,
-	"FTP_PROXY":   true,
-	"ftp_proxy":   true,
-	"NO_PROXY":    true,
-	"no_proxy":    true,
+	"HTTP_PROXY":     true,
+	"http_proxy":     true,
+	"HTTPS_PROXY":    true,
+	"https_proxy":    true,
+	"FTP_PROXY":      true,
+	"ftp_proxy":      true,
+	"NO_PROXY":       true,
+	"no_proxy":       true,
+	"TARGETARCH":     true,
+	"TARGETOS":       true,
+	"TARGETPLATFORM": true,
+	"TARGETVARIANT":  true,
 }
 
 // Executor is a buildah-based implementation of the imagebuilder.Executor
@@ -97,8 +100,10 @@ type Executor struct {
 	iidfile                 string
 	squash                  bool
 	labels                  []string
+	layerLabels             []string
 	annotations             []string
 	layers                  bool
+	noHostname              bool
 	noHosts                 bool
 	useCache                bool
 	removeIntermediateCtrs  bool
@@ -112,6 +117,7 @@ type Executor struct {
 	groupAdd                []string
 	ignoreFile              string
 	args                    map[string]string
+	globalArgs              map[string]string
 	unusedArgs              map[string]struct{}
 	capabilities            []string
 	devices                 define.ContainerDevices
@@ -137,12 +143,14 @@ type Executor struct {
 	sshsources              map[string]*sshagent.Source
 	logPrefix               string
 	unsetEnvs               []string
+	unsetLabels             []string
 	processLabel            string // Shares processLabel of first stage container with containers of other stages in same build
 	mountLabel              string // Shares mountLabel of first stage container with containers of other stages in same build
 	buildOutput             string // Specifies instructions for any custom build output
 	osVersion               string
 	osFeatures              []string
 	envs                    []string
+	confidentialWorkload    define.ConfidentialWorkloadOptions
 }
 
 type imageTypeAndHistoryAndDiffIDs struct {
@@ -172,7 +180,7 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 	}
 
 	devices := define.ContainerDevices{}
-	for _, device := range append(defaultContainerConfig.Containers.Devices, options.Devices...) {
+	for _, device := range append(defaultContainerConfig.Containers.Devices.Get(), options.Devices...) {
 		dev, err := parse.DeviceFromPath(device)
 		if err != nil {
 			return nil, err
@@ -181,7 +189,7 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 	}
 
 	transientMounts := []Mount{}
-	for _, volume := range append(defaultContainerConfig.Containers.Volumes, options.TransientMounts...) {
+	for _, volume := range append(defaultContainerConfig.Volumes(), options.TransientMounts...) {
 		mount, err := parse.Volume(volume)
 		if err != nil {
 			return nil, err
@@ -260,8 +268,10 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 		iidfile:                        options.IIDFile,
 		squash:                         options.Squash,
 		labels:                         append([]string{}, options.Labels...),
+		layerLabels:                    append([]string{}, options.LayerLabels...),
 		annotations:                    append([]string{}, options.Annotations...),
 		layers:                         options.Layers,
+		noHostname:                     options.CommonBuildOpts.NoHostname,
 		noHosts:                        options.CommonBuildOpts.NoHosts,
 		useCache:                       !options.NoCache,
 		removeIntermediateCtrs:         options.RemoveIntermediateCtrs,
@@ -293,10 +303,12 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 		sshsources:                     sshsources,
 		logPrefix:                      logPrefix,
 		unsetEnvs:                      append([]string{}, options.UnsetEnvs...),
+		unsetLabels:                    append([]string{}, options.UnsetLabels...),
 		buildOutput:                    options.BuildOutput,
 		osVersion:                      options.OSVersion,
 		osFeatures:                     append([]string{}, options.OSFeatures...),
 		envs:                           append([]string{}, options.Envs...),
+		confidentialWorkload:           options.ConfidentialWorkload,
 	}
 	if exec.err == nil {
 		exec.err = os.Stderr
@@ -310,6 +322,11 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 			exec.unusedArgs[arg] = struct{}{}
 		}
 	}
+	// Use this flag to collect all args declared before
+	// first stage and treat them as global args which is
+	// accessible to all stages.
+	foundFirstStage := false
+	globalArgs := make(map[string]string)
 	for _, line := range mainNode.Children {
 		node := line
 		for node != nil { // tokens on this line, though we only care about the first
@@ -321,12 +338,20 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 					// and value, or just an argument, since they can be
 					// separated by either "=" or whitespace.
 					list := strings.SplitN(arg.Value, "=", 2)
+					if !foundFirstStage {
+						if len(list) > 1 {
+							globalArgs[list[0]] = list[1]
+						}
+					}
 					delete(exec.unusedArgs, list[0])
 				}
+			case "FROM":
+				foundFirstStage = true
 			}
 			break
 		}
 	}
+	exec.globalArgs = globalArgs
 	return &exec, nil
 }
 
@@ -357,15 +382,11 @@ func (b *Executor) resolveNameToImageRef(output string) (types.ImageReference, e
 	if imageRef, err := alltransports.ParseImageName(output); err == nil {
 		return imageRef, nil
 	}
-	runtime, err := libimage.RuntimeFromStore(b.store, &libimage.RuntimeOptions{SystemContext: b.systemContext})
+	resolved, err := libimage.NormalizeName(output)
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := runtime.ResolveName(output)
-	if err != nil {
-		return nil, err
-	}
-	imageRef, err := storageTransport.Transport.ParseStoreReference(b.store, resolved)
+	imageRef, err := storageTransport.Transport.ParseStoreReference(b.store, resolved.String())
 	if err == nil {
 		return imageRef, nil
 	}
@@ -420,7 +441,7 @@ func (b *Executor) getImageTypeAndHistoryAndDiffIDs(ctx context.Context, imageID
 	if ok {
 		return imageInfo.manifestType, imageInfo.history, imageInfo.diffIDs, imageInfo.err
 	}
-	imageRef, err := is.Transport.ParseStoreReference(b.store, "@"+imageID)
+	imageRef, err := storageTransport.Transport.ParseStoreReference(b.store, "@"+imageID)
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("getting image reference %q: %w", imageID, err)
 	}
@@ -451,14 +472,14 @@ func (b *Executor) getImageTypeAndHistoryAndDiffIDs(ctx context.Context, imageID
 	return manifestFormat, oci.History, oci.RootFS.DiffIDs, nil
 }
 
-func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageExecutor, stages imagebuilder.Stages, stageIndex int) (imageID string, ref reference.Canonical, err error) {
+func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageExecutor, stages imagebuilder.Stages, stageIndex int) (imageID string, ref reference.Canonical, onlyBaseImage bool, err error) {
 	stage := stages[stageIndex]
 	ib := stage.Builder
 	node := stage.Node
 	base, err := ib.From(node)
 	if err != nil {
 		logrus.Debugf("buildStage(node.Children=%#v)", node.Children)
-		return "", nil, err
+		return "", nil, false, err
 	}
 
 	// If this is the last stage, then the image that we produce at
@@ -466,6 +487,34 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 	output := ""
 	if stageIndex == len(stages)-1 {
 		output = b.output
+		// Check if any labels were passed in via the API, and add a final line
+		// to the Dockerfile that would provide the same result.
+		// Reason: Docker adds label modification as a last step which can be
+		// processed like regular steps, and if no modification is done to
+		// layers, its easier to re-use cached layers.
+		if len(b.labels) > 0 {
+			var labelLine string
+			labels := append([]string{}, b.labels...)
+			for _, labelSpec := range labels {
+				label := strings.SplitN(labelSpec, "=", 2)
+				key := label[0]
+				value := ""
+				if len(label) > 1 {
+					value = label[1]
+				}
+				// check only for an empty key since docker allows empty values
+				if key != "" {
+					labelLine += fmt.Sprintf(" %q=%q", key, value)
+				}
+			}
+			if len(labelLine) > 0 {
+				additionalNode, err := imagebuilder.ParseDockerfile(strings.NewReader("LABEL" + labelLine + "\n"))
+				if err != nil {
+					return "", nil, false, fmt.Errorf("while adding additional LABEL step: %w", err)
+				}
+				stage.Node.Children = append(stage.Node.Children, additionalNode.Children...)
+			}
+		}
 	}
 
 	// If this stage is starting out with environment variables that were
@@ -480,14 +529,13 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 				value := env[1]
 				envLine += fmt.Sprintf(" %q=%q", key, value)
 			} else {
-				value := os.Getenv(key)
-				envLine += fmt.Sprintf(" %q=%q", key, value)
+				return "", nil, false, fmt.Errorf("BUG: unresolved environment variable: %q", key)
 			}
 		}
 		if len(envLine) > 0 {
 			additionalNode, err := imagebuilder.ParseDockerfile(strings.NewReader("ENV" + envLine + "\n"))
 			if err != nil {
-				return "", nil, fmt.Errorf("while adding additional ENV step: %w", err)
+				return "", nil, false, fmt.Errorf("while adding additional ENV step: %w", err)
 			}
 			// make this the first instruction in the stage after its FROM instruction
 			stage.Node.Children = append(additionalNode.Children, stage.Node.Children...)
@@ -521,16 +569,15 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 	// build and b.forceRmIntermediateCtrs is set, make sure we
 	// remove the intermediate/build containers, regardless of
 	// whether or not the stage's build fails.
-	// Skip cleanup if the stage has no instructions.
-	if b.forceRmIntermediateCtrs || !b.layers && len(stage.Node.Children) > 0 {
+	if b.forceRmIntermediateCtrs || !b.layers {
 		b.stagesLock.Lock()
 		cleanupStages[stage.Position] = stageExecutor
 		b.stagesLock.Unlock()
 	}
 
 	// Build this stage.
-	if imageID, ref, err = stageExecutor.Execute(ctx, base); err != nil {
-		return "", nil, err
+	if imageID, ref, onlyBaseImage, err = stageExecutor.Execute(ctx, base); err != nil {
+		return "", nil, onlyBaseImage, err
 	}
 
 	// The stage succeeded, so remove its build container if we're
@@ -543,7 +590,7 @@ func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageE
 		b.stagesLock.Unlock()
 	}
 
-	return imageID, ref, nil
+	return imageID, ref, onlyBaseImage, nil
 }
 
 type stageDependencyInfo struct {
@@ -590,6 +637,12 @@ func (b *Executor) warnOnUnsetBuildArgs(stages imagebuilder.Stages, dependencyMa
 							if !stageDependencyInfo.NeededByTarget && b.skipUnusedStages != types.OptionalBoolFalse {
 								shouldWarn = false
 							}
+						}
+						if _, isBuiltIn := builtinAllowedBuildArgs[argName]; isBuiltIn {
+							shouldWarn = false
+						}
+						if _, isGlobalArg := b.globalArgs[argName]; isGlobalArg {
+							shouldWarn = false
 						}
 						if shouldWarn {
 							b.logger.Warnf("missing %q build argument. Try adding %q to the command line", argName, fmt.Sprintf("--build-arg %s=<VALUE>", argName))
@@ -709,7 +762,7 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 							b.fromOverride = ""
 						}
 						base := child.Next.Value
-						if base != "scratch" {
+						if base != "" && base != buildah.BaseImageFakeName {
 							if replaceBuildContext, ok := b.additionalBuildContexts[child.Next.Value]; ok {
 								if replaceBuildContext.IsImage {
 									child.Next.Value = replaceBuildContext.Value
@@ -754,6 +807,17 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 							// if following ADD or COPY needs any other
 							// stage.
 							stageName := rootfs
+							headingArgs := argsMapToSlice(stage.Builder.HeadingArgs)
+							userArgs := argsMapToSlice(stage.Builder.Args)
+							// append heading args so if --build-arg key=value is not
+							// specified but default value is set in Containerfile
+							// via `ARG key=value` so default value can be used.
+							userArgs = append(headingArgs, userArgs...)
+							baseWithArg, err := imagebuilder.ProcessWord(stageName, userArgs)
+							if err != nil {
+								return "", nil, fmt.Errorf("while replacing arg variables with values for format %q: %w", stageName, err)
+							}
+							stageName = baseWithArg
 							// If --from=<index> convert index to name
 							if index, err := strconv.Atoi(stageName); err == nil {
 								stageName = stages[index].Name
@@ -818,10 +882,11 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 	b.warnOnUnsetBuildArgs(stages, dependencyMap, b.args)
 
 	type Result struct {
-		Index   int
-		ImageID string
-		Ref     reference.Canonical
-		Error   error
+		Index         int
+		ImageID       string
+		OnlyBaseImage bool
+		Ref           reference.Canonical
+		Error         error
 	}
 
 	ch := make(chan Result, len(stages))
@@ -881,21 +946,23 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 						return
 					}
 				}
-				stageID, stageRef, stageErr := b.buildStage(ctx, cleanupStages, stages, index)
+				stageID, stageRef, stageOnlyBaseImage, stageErr := b.buildStage(ctx, cleanupStages, stages, index)
 				if stageErr != nil {
 					cancel = true
 					ch <- Result{
-						Index: index,
-						Error: stageErr,
+						Index:         index,
+						Error:         stageErr,
+						OnlyBaseImage: stageOnlyBaseImage,
 					}
 					return
 				}
 
 				ch <- Result{
-					Index:   index,
-					ImageID: stageID,
-					Ref:     stageRef,
-					Error:   nil,
+					Index:         index,
+					ImageID:       stageID,
+					Ref:           stageRef,
+					OnlyBaseImage: stageOnlyBaseImage,
+					Error:         nil,
 				}
 			}()
 		}
@@ -925,7 +992,9 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 			// We're not populating the cache with intermediate
 			// images, so add this one to the list of images that
 			// we'll remove later.
-			if !b.layers {
+			// Only remove intermediate image is `--layers` is not provided
+			// or following stage was not only a base image ( i.e a different image ).
+			if !b.layers && !r.OnlyBaseImage {
 				cleanupImages = append(cleanupImages, r.ImageID)
 			}
 		}
@@ -948,8 +1017,8 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 	// Add additional tags and print image names recorded in storage
 	if dest, err := b.resolveNameToImageRef(b.output); err == nil {
 		switch dest.Transport().Name() {
-		case is.Transport.Name():
-			img, err := is.Transport.GetStoreImage(b.store, dest)
+		case storageTransport.Transport.Name():
+			_, img, err := storageTransport.ResolveReference(dest)
 			if err != nil {
 				return imageID, ref, fmt.Errorf("locating just-written image %q: %w", transports.ImageName(dest), err)
 			}
@@ -960,7 +1029,7 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 				logrus.Debugf("assigned names %v to image %q", img.Names, img.ID)
 			}
 			// Report back the caller the tags applied, if any.
-			img, err = is.Transport.GetStoreImage(b.store, dest)
+			_, img, err = storageTransport.ResolveReference(dest)
 			if err != nil {
 				return imageID, ref, fmt.Errorf("locating just-written image %q: %w", transports.ImageName(dest), err)
 			}

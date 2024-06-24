@@ -28,9 +28,8 @@ const (
 	// Package is the name of this package, used in help output and to
 	// identify working containers.
 	Package = "buildah"
-	// Version for the Package.  Bump version in contrib/rpm/buildah.spec
-	// too.
-	Version = "1.29.0"
+	// Version for the Package. Also used by .packit.sh for Packit builds.
+	Version = "1.33.8"
 
 	// DefaultRuntime if containers.conf fails.
 	DefaultRuntime = "runc"
@@ -48,11 +47,19 @@ const (
 	OCI = "oci"
 	// DOCKER used to define the "docker" image format
 	DOCKER = "docker"
+
+	// SEV is a known trusted execution environment type: AMD-SEV (secure encrypted virtualization using encrypted state, requires epyc 1000 "naples")
+	SEV TeeType = "sev"
+	// SNP is a known trusted execution environment type: AMD-SNP (SEV secure nested pages) (requires epyc 3000 "milan")
+	SNP TeeType = "snp"
 )
 
+// TeeType is a supported trusted execution environment type.
+type TeeType string
+
 var (
-	// DefaultCapabilities is the list of capabilities which we grant by
-	// default to containers which are running under UID 0.
+	// Deprecated: DefaultCapabilities values should be retrieved from
+	// github.com/containers/common/pkg/config
 	DefaultCapabilities = []string{
 		"CAP_AUDIT_WRITE",
 		"CAP_CHOWN",
@@ -68,8 +75,8 @@ var (
 		"CAP_SETUID",
 		"CAP_SYS_CHROOT",
 	}
-	// DefaultNetworkSysctl is the list of Kernel parameters which we
-	// grant by default to containers which are running under UID 0.
+	// Deprecated: DefaultNetworkSysctl values should be retrieved from
+	// github.com/containers/common/pkg/config
 	DefaultNetworkSysctl = map[string]string{
 		"net.ipv4.ping_group_range": "0 0",
 	}
@@ -104,6 +111,23 @@ type BuildOutputOption struct {
 	Path     string // Only valid if !IsStdout
 	IsDir    bool
 	IsStdout bool
+}
+
+// ConfidentialWorkloadOptions encapsulates options which control whether or not
+// we output an image whose rootfs contains a LUKS-compatibly-encrypted disk image
+// instead of the usual rootfs contents.
+type ConfidentialWorkloadOptions struct {
+	Convert                  bool
+	AttestationURL           string
+	CPUs                     int
+	Memory                   int
+	TempDir                  string
+	TeeType                  TeeType
+	IgnoreAttestationErrors  bool
+	WorkloadID               string
+	DiskEncryptionPassphrase string
+	Slop                     string
+	FirmwareLibrary          string
 }
 
 // TempDirForURL checks if the passed-in string looks like a URL or -.  If it is,

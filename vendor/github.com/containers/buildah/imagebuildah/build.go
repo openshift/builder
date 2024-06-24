@@ -15,8 +15,10 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/platforms"
+	"github.com/containers/buildah"
 	"github.com/containers/buildah/define"
 	internalUtil "github.com/containers/buildah/internal/util"
+	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/buildah/util"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
@@ -65,7 +67,9 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options define.B
 	if options.CommonBuildOpts == nil {
 		options.CommonBuildOpts = &define.CommonBuildOptions{}
 	}
-
+	if err := parse.Volumes(options.CommonBuildOpts.Volumes); err != nil {
+		return "", nil, fmt.Errorf("validating volumes: %w", err)
+	}
 	if len(paths) == 0 {
 		return "", nil, errors.New("building: no dockerfiles specified")
 	}
@@ -264,6 +268,9 @@ func BuildDockerfiles(ctx context.Context, store storage.Store, options define.B
 			}
 			thisID, thisRef, err := buildDockerfilesOnce(ctx, store, loggerPerPlatform, logPrefix, platformOptions, paths, files)
 			if err != nil {
+				if errorContext := strings.TrimSpace(logPrefix); errorContext != "" {
+					return fmt.Errorf("%s: %w", errorContext, err)
+				}
 				return err
 			}
 			instancesLock.Lock()
@@ -417,35 +424,6 @@ func buildDockerfilesOnce(ctx context.Context, store storage.Store, logger *logr
 			return "", nil, fmt.Errorf("parsing additional Dockerfile %s: %w", containerFiles[i], err)
 		}
 		mainNode.Children = append(mainNode.Children, additionalNode.Children...)
-	}
-
-	// Check if any labels were passed in via the API, and add a final line
-	// to the Dockerfile that would provide the same result.
-	// Reason: Docker adds label modification as a last step which can be
-	// processed like regular steps, and if no modification is done to
-	// layers, its easier to re-use cached layers.
-	if len(options.Labels) > 0 {
-		var labelLine string
-		labels := append([]string{}, options.Labels...)
-		for _, labelSpec := range labels {
-			label := strings.SplitN(labelSpec, "=", 2)
-			key := label[0]
-			value := ""
-			if len(label) > 1 {
-				value = label[1]
-			}
-			// check only for an empty key since docker allows empty values
-			if key != "" {
-				labelLine += fmt.Sprintf(" %q=%q", key, value)
-			}
-		}
-		if len(labelLine) > 0 {
-			additionalNode, err := imagebuilder.ParseDockerfile(strings.NewReader("LABEL" + labelLine + "\n"))
-			if err != nil {
-				return "", nil, fmt.Errorf("while adding additional LABEL step: %w", err)
-			}
-			mainNode.Children = append(mainNode.Children, additionalNode.Children...)
-		}
 	}
 
 	exec, err := newExecutor(logger, logPrefix, store, options, mainNode, containerFiles)
@@ -695,7 +673,7 @@ func baseImages(dockerfilenames []string, dockerfilecontents [][]byte, from stri
 							}
 						}
 						base := child.Next.Value
-						if base != "scratch" && !nicknames[base] {
+						if base != "" && base != buildah.BaseImageFakeName && !nicknames[base] {
 							headingArgs := argsMapToSlice(stage.Builder.HeadingArgs)
 							userArgs := argsMapToSlice(stage.Builder.Args)
 							// append heading args so if --build-arg key=value is not
