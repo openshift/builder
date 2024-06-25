@@ -205,6 +205,7 @@ require (
 	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	go.mongodb.org/mongo-driver v1.11.3 // indirect
 	golang.org/x/tools v0.7.0 // indirect
+	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
 )
 
 replace (
@@ -216,6 +217,8 @@ replace (
 	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0
 
 	golang.org/x/net => golang.org/x/net v0.17.0
+	// Replace deprecated gopkg.in/square/go-jose.v2 with github.com/go-jose/go-jose@v2
+	gopkg.in/square/go-jose.v2 => github.com/go-jose/go-jose v2.6.3+incompatible
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for these in its go.mod
 	k8s.io/api => k8s.io/api v0.26.1
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.1
