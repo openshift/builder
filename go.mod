@@ -192,12 +192,13 @@ require (
 	go.mongodb.org/mongo-driver v1.11.3 // indirect
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1 // indirect
 	golang.org/x/tools v0.9.3 // indirect
-	gopkg.in/go-jose/go-jose.v2 v2.6.1 // indirect
+	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
 )
 
 replace (
-
 	golang.org/x/net => golang.org/x/net v0.17.0
+	// Replace deprecated gopkg.in/square/go-jose.v2 with github.com/go-jose/go-jose@v2
+	gopkg.in/square/go-jose.v2 => github.com/go-jose/go-jose v2.6.3+incompatible
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for these in its go.mod
 	k8s.io/api => k8s.io/api v0.27.3
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.27.3
