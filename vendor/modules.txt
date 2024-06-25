@@ -1090,17 +1090,19 @@ google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/emptypb
 google.golang.org/protobuf/types/known/timestamppb
+# gopkg.in/go-jose/go-jose.v2 v2.6.3
+## explicit
+gopkg.in/go-jose/go-jose.v2/cipher
+gopkg.in/go-jose/go-jose.v2/json
 # gopkg.in/inf.v0 v0.9.1
 ## explicit
 gopkg.in/inf.v0
 # gopkg.in/ini.v1 v1.67.0
 ## explicit
 gopkg.in/ini.v1
-# gopkg.in/square/go-jose.v2 v2.6.0
+# gopkg.in/square/go-jose.v2 v2.6.0 => github.com/go-jose/go-jose v2.6.3+incompatible
 ## explicit
 gopkg.in/square/go-jose.v2
-gopkg.in/square/go-jose.v2/cipher
-gopkg.in/square/go-jose.v2/json
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
@@ -1528,6 +1530,7 @@ sigs.k8s.io/yaml
 # github.com/sigstore/rekor => github.com/sigstore/rekor v1.1.1
 # golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0
 # golang.org/x/net => golang.org/x/net v0.17.0
+# gopkg.in/square/go-jose.v2 => github.com/go-jose/go-jose v2.6.3+incompatible
 # k8s.io/api => k8s.io/api v0.26.1
 # k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.1
 # k8s.io/apimachinery => k8s.io/apimachinery v0.26.1
