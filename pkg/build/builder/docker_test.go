@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -593,4 +594,216 @@ USER 1001`
 			t.Errorf("Received unexpected error: %v", err)
 		}
 	}
+}
+
+// TestCopyLocalObject verifies that we are able to copy mounted Kubernetes Secret or ConfigMap
+// data to the build directory. The build directory is typically where git source code is cloned,
+// though other sources of code may be used as well.
+func TestCopyLocalObject(t *testing.T) {
+	// Test scenario consists of a file tree that simulates the git clone environment
+	// /tmp/source-code-xxxx
+	// ├── git-data
+	// │   ├── Dockerfile
+	// │   └── hello.txt
+	// │   └── linkSrc
+	// │       └── link -> ../linkDst
+	// |   └── linkDst
+	// ├── secrets
+	// │   └── test
+	// │       └── secret.txt
+	// TODO: Update the structure of the `secrets` directory so it more closely matches what
+	// Kubernetes does when it mounts secrets/configmaps.
+	buildDir, err := os.MkdirTemp("", "source-code")
+	t.Logf("buildDir: %s", buildDir)
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(buildDir); err != nil {
+			t.Fatalf("failed to clean up temp dir: %v", err)
+		}
+	}()
+	// Set up secrets/test directory, with "secret.txt" file
+	secretRoot := filepath.Join(buildDir, "secrets")
+	testSecretFile := filepath.Join(secretRoot, "test", "sourceSecret.txt")
+	err = fsCopyFile("testdata/fakesecret/sourceSecret.txt", testSecretFile)
+	if err != nil {
+		t.Fatalf("failed to copy secret data: %v", err)
+	}
+	if _, err := os.Stat(testSecretFile); err != nil {
+		t.Fatalf("failed to stat %q: %v", testSecretFile, err)
+	}
+	// Set up "git-data" directory as fake "git source"
+	gitRoot := filepath.Join(buildDir, "git-data")
+
+	err = filepath.Walk("testdata/fakesource", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		dstBase := filepath.Base(path)
+		return fsCopyFile(path, filepath.Join(gitRoot, dstBase))
+	})
+	if err != nil {
+		t.Fatalf("failed to copy test data: %v", err)
+	}
+	// Git source may contain symlinks. This is OK as long as the symlink is relative and remains
+	// within the git source tree.
+	linkSrc := filepath.Join(gitRoot, "linkSrc")
+	err = os.MkdirAll(linkSrc, os.ModePerm)
+	if err != nil {
+		t.Fatalf("failed to create test directory %q: %v", linkSrc, err)
+	}
+	linkDst := filepath.Join(gitRoot, "linkDst")
+	err = os.MkdirAll(linkDst, os.ModePerm)
+	if err != nil {
+		t.Fatalf("failed to create test directory %q: %v", linkDst, err)
+	}
+	// Create symlink from linkSrc/link to linkDst (directory)
+	err = os.Symlink("../linkDst", filepath.Join(linkSrc, "link"))
+	if err != nil {
+		t.Fatalf("failed to create symlink to linkDst directory: %v", err)
+	}
+	dockerBuilder := &DockerBuilder{
+		inputDir: buildDir,
+	}
+	localObj := buildapiv1.SecretBuildSource{
+		Secret: corev1.LocalObjectReference{
+			Name: "test",
+		},
+		DestinationDir: "secrets",
+	}
+	err = dockerBuilder.copyLocalObject(secretSource(localObj), secretRoot, gitRoot)
+	if err != nil {
+		t.Errorf("unexpected error copying local secret: %v", err)
+	}
+	// sourceSecret.txt should be copied to git-data/secrets/sourceSecret.txt
+	expectedFile := filepath.Join(gitRoot, "secrets", "sourceSecret.txt")
+	if _, err := os.Stat(expectedFile); err != nil {
+		t.Errorf("failed to stat %q: %v", expectedFile, err)
+	}
+	// Try again, this time copying to a destination that happens to be a symlink to another
+	// directory
+	localObj.DestinationDir = filepath.Join("linkSrc", "link")
+	err = dockerBuilder.copyLocalObject(secretSource(localObj), secretRoot, gitRoot)
+	if err != nil {
+		t.Errorf("unexpected error copying local secret: %v", err)
+	}
+	// sourceSecret.txt should be copied to git-data/linkSrc/link/sourceSecret.txt
+	expectedFile = filepath.Join(gitRoot, "linkSrc", "link", "sourceSecret.txt")
+	if _, err := os.Stat(expectedFile); err != nil {
+		t.Errorf("failed to stat %q: %v", expectedFile, err)
+	}
+	// sourceSecret.txt should also show up in git-data/linkDst/sourceSecret.txt
+	expectedFile = filepath.Join(gitRoot, "linkDst", "sourceSecret.txt")
+	if _, err := os.Stat(expectedFile); err != nil {
+		t.Errorf("failed to stat %q: %v", expectedFile, err)
+	}
+
+}
+
+// TestCopyLocalObjectZipSlip verifies that any copied Secret or ConfigMap is not able to be placed
+// outside of the target directory. A well-crafted symbolic link can otherwise allow secret data
+// to be placed in a location outside of our trusted target dirctory.
+func TestCopyLocalObjectZipSlip(t *testing.T) {
+	// Test scenario consists of a file tree that simulates the git clone environment
+	// /tmp/source-code-xxxx
+	// ├── git-data
+	// │   ├── Dockerfile
+	// │   └── hello.txt
+	// │   └── pwn-link -> /tmp/source-code-xxxx/pwned
+	// ├── secrets
+	// │   └── test
+	// │       └── pwned.txt
+	// └── pwned
+	//
+	// If data ends up in the "pwned" directory, we have a "zip-slip" vulnerability.
+	buildDir, err := os.MkdirTemp("", "source-code")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(buildDir); err != nil {
+			t.Fatalf("failed to clean up temp dir: %v", err)
+		}
+	}()
+	// Set up secrets/test directory, with "pwned.txt" file
+	secretRoot := filepath.Join(buildDir, "secrets")
+	testPwnedFile := filepath.Join(secretRoot, "test", "pwned.txt")
+	err = fsCopyFile("testdata/fakesecret/pwned.txt", testPwnedFile)
+	if err != nil {
+		t.Fatalf("failed to copy secret data: %v", err)
+	}
+	if _, err := os.Stat(testPwnedFile); err != nil {
+		t.Fatalf("failed to stat pwned.txt: %v", err)
+	}
+	pwnedPath := filepath.Join(buildDir, "pwned")
+	err = os.MkdirAll(pwnedPath, os.ModePerm)
+	if err != nil {
+		t.Fatalf("failed to create test directory %q: %v", pwnedPath, err)
+	}
+	// Set up "git-data" directory as fake "git source"
+	gitRoot := filepath.Join(buildDir, "git-data")
+	err = filepath.Walk("testdata/fakesource", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		dstBase := filepath.Base(path)
+		return fsCopyFile(path, filepath.Join(gitRoot, dstBase))
+	})
+	if err != nil {
+		t.Fatalf("failed to copy test data: %v", err)
+	}
+	// Add symlink to "pwned" directory in the git root
+	err = os.Symlink(pwnedPath, filepath.Join(gitRoot, "pwn-link"))
+	if err != nil {
+		t.Fatalf("failed to create symlink to pwned directory: %v", err)
+	}
+	dockerBuilder := &DockerBuilder{
+		inputDir: buildDir,
+	}
+	localObj := buildapiv1.SecretBuildSource{
+		Secret: corev1.LocalObjectReference{
+			Name: "test",
+		},
+		DestinationDir: "pwn-link",
+	}
+	err = dockerBuilder.copyLocalObject(secretSource(localObj), secretRoot, gitRoot)
+	if err == nil {
+		t.Error("expected copyLocalObject to fail if the secret tries to write its contents outside the destination directory")
+	}
+	if err != nil && !strings.Contains(err.Error(), "outside of the target directory") {
+		t.Errorf("expected error message to contain %q, got: %v", "outside of the target directory", err)
+	}
+	// Can we stat the pwned.txt file?
+	badPwnedFile := filepath.Join(pwnedPath, "pwned.txt")
+	if _, err := os.Stat(badPwnedFile); err == nil {
+		t.Errorf("secret file %q was copied outside of the trusted build directory to %q", testPwnedFile, badPwnedFile)
+	}
+}
+
+func fsCopyFile(srcPath, dstPath string) error {
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+	parentDir := filepath.Dir(dstPath)
+	if err := os.MkdirAll(parentDir, os.ModePerm); err != nil {
+		return err
+	}
+	dstFile, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+	return nil
 }
