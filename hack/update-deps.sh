@@ -9,7 +9,7 @@ cd "$(dirname "${BASH_SOURCE}")/.."
 
 #os::golang::verify_glide_version
 
-# fail early if any of the staging dirs is checked out
+# fail early if any of the staging dirs are checked out
 for pkg in "$GOPATH/src/k8s.io/kubernetes/staging/src/k8s.io/"*; do
   dir=$(basename $pkg)
   if [ -d "$GOPATH/src/k8s.io/$dir" ]; then
