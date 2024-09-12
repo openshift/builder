@@ -238,14 +238,33 @@ func (d *DockerBuilder) copySecrets(secrets []buildapiv1.SecretBuildSource, targ
 }
 
 func (d *DockerBuilder) copyLocalObject(s localObjectBuildSource, sourceDir, targetDir string) error {
+	if !filepath.IsAbs(sourceDir) {
+		return fmt.Errorf("cannot copy local object - source directory %q must be an absolute path", sourceDir)
+
+	}
+	if !filepath.IsAbs(targetDir) {
+		return fmt.Errorf("cannot copy local object - target directory %q must be an absolute path", targetDir)
+	}
 	dstDir := filepath.Join(targetDir, s.DestinationPath())
 	if err := os.MkdirAll(dstDir, 0777); err != nil {
 		return err
 	}
+	// Evaluate symlinks at the destination dir. EvalSymlinks calls filepath.Clean, ensuring the
+	// returned path is an absolute path (we checked targetDir and thus dstDir is absolute above).
+	dstDir, err := filepath.EvalSymlinks(dstDir)
+	if err != nil {
+		return err
+	}
+	// sourceDir and targetDir should always be absolute paths, therefore HasPrefix can verify if
+	// dstDir is a subdirectory of targetDir.
+	if !strings.HasPrefix(dstDir, targetDir) {
+		return fmt.Errorf("destination path %q is outside of the target directory %q", dstDir, targetDir)
+	}
+
 	log.V(3).Infof("Copying files from the build source %q to %q", s.LocalObjectRef().Name, dstDir)
 
-	// Build sources contain nested directories and fairly baroque links. To prevent extra data being
-	// copied, perform the following steps:
+	// Build sources from Secrets or ConfigMaps contain nested directories and fairly baroque links.
+	// To prevent extra data being copied, perform the following steps:
 	//
 	// 1. Only top level files and directories within the secret directory are candidates
 	// 2. Any item starting with '..' is ignored
