@@ -88,7 +88,8 @@ func (r *testGitRepo) addSubmodule() error {
 	if err := subRepo.addCommit(); err != nil {
 		return err
 	}
-	subCmd := exec.Command("git", "submodule", "add", "file://"+subRepo.Path, "sub")
+	submodulePath := filepath.Join(r.Path, "sub")
+	subCmd := exec.Command("git", "submodule", "add", subRepo.Path, submodulePath)
 	subCmd.Dir = r.Path
 	if out, err := subCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("unable to add submodule: %q", out)
