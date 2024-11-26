@@ -89,7 +89,11 @@ func (r *testGitRepo) addSubmodule() error {
 		return err
 	}
     // Calculate the relative path 
-    relPathSubRepo, err := filepath.Rel("./", subRepo.Path)
+	absCurPath, err := filepath.Abs("./")
+	if err != nil {
+        return err
+    }
+    relPathSubRepo, err := filepath.Rel(absCurPath, subRepo.Path)
     if err != nil {
         return err
     }
