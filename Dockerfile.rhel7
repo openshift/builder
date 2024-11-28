@@ -22,8 +22,7 @@ RUN mkdir -p /var/cache/blobs \
     /etc/pki/tls/certs /etc/docker/certs.d && \
     chmod g+w /etc/pki/tls/certs /etc/docker/certs.d && \
     touch /var/lib/shared/overlay-images/images.lock \
-    /var/lib/shared/overlay-layers/layers.lock
-RUN  git config --global protocol.file.allow always    
+    /var/lib/shared/overlay-layers/layers.lock  
 
 RUN ln -s /usr/bin/openshift-builder /usr/bin/openshift-sti-build && \
     ln -s /usr/bin/openshift-builder /usr/bin/openshift-docker-build && \
