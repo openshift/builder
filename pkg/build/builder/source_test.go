@@ -89,7 +89,7 @@ func (r *testGitRepo) addSubmodule() error {
 		return err
 	}
 	// Set the Git configuration to allow file protocol
-    configCmd := exec.Command("git", "config", "--global", "protocol.file.allow", "always")
+    configCmd := exec.Command("git", "config", "--local", "protocol.file.allow", "always")
     if out, err := configCmd.CombinedOutput(); err != nil {
         return fmt.Errorf("unable to set git config: %q", out)
     }
