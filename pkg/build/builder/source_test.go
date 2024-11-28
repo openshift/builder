@@ -88,12 +88,8 @@ func (r *testGitRepo) addSubmodule() error {
 	if err := subRepo.addCommit(); err != nil {
 		return err
 	}
-	// Set the Git configuration to allow file protocol
-    configCmd := exec.Command("git", "config", "--local", "protocol.file.allow", "always")
-    if out, err := configCmd.CombinedOutput(); err != nil {
-        return fmt.Errorf("unable to set git config: %q", out)
-    }
-	subCmd := exec.Command("git", "submodule", "add", "file://"+subRepo.Path, "sub")
+	
+	subCmd := exec.Command("git", "-c", "protocol.file.allow=always","submodule", "add", "file://"+subRepo.Path, "sub")
 	subCmd.Dir = r.Path
 	if out, err := subCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("unable to add submodule: %q", out)
