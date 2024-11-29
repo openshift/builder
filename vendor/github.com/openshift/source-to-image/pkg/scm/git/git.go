@@ -217,7 +217,7 @@ func (h *stiGit) SubmoduleInit(repo string) error {
 // SubmoduleUpdate checks out submodules to their correct version.
 // Optionally also inits submodules, optionally operates recursively.
 func (h *stiGit) SubmoduleUpdate(repo string, init, recursive bool) error {
-	updateArgs := []string{"-c", "protocol.file.allow=always","submodule", "update"}
+	updateArgs := []string{"submodule", "update"}
 	if init {
 		updateArgs = append(updateArgs, "--init")
 	}

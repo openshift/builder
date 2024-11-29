@@ -362,8 +362,7 @@ func (r *repository) Checkout(location string, ref string) error {
 
 // SubmoduleUpdate updates submodules, optionally recursively
 func (r *repository) SubmoduleUpdate(location string, init, recursive bool) error {
-	//updateArgs := []string{"submodule", "update"}
-	updateArgs := []string{"-c", "protocol.file.allow=always","submodule", "update"}
+	updateArgs := []string{"submodule", "update"}
 	if init {
 		updateArgs = append(updateArgs, "--init")
 	}

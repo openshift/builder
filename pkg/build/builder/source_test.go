@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"runtime/debug"
 	"time"
 
 	buildapiv1 "github.com/openshift/api/build/v1"
@@ -185,7 +186,7 @@ func TestUnqualifiedClone(t *testing.T) {
 	revision := buildapiv1.SourceRevision{Git: &buildapiv1.GitSourceRevision{}}
 	ctx := timing.NewContext(context.Background())
 	if _, err = extractGitSource(ctx, client, source, &revision, destDir, 10*time.Second); err != nil {
-		t.Errorf("%v", err)
+		t.Errorf("%v\n%s", err ,debug.Stack())
 	}
 	for _, f := range repo.Files {
 		if _, err := os.Stat(filepath.Join(destDir, path.Base(f))); os.IsNotExist(err) {
