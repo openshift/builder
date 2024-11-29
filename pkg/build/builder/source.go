@@ -334,7 +334,7 @@ func extractGitSource(ctx context.Context, gitClient GitClient, gitSource *build
 
 		// Recursively update --init
 		if err := gitClient.SubmoduleUpdate(dir, true, true); err != nil {
-			log.Infof("\prabhakar:\t%s\n", err)
+			log.Infof("\tprabhakar:\t%s\n", err)
 			return true, err
 		}
 	}
