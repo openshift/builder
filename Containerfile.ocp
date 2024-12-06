@@ -1,13 +1,12 @@
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.17 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.21-openshift-4.16 AS builder
 WORKDIR /go/src/github.com/openshift/builder
 COPY . .
 RUN hack/build.sh
 
-FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
-# TODO: Add fuse-overlayfs once we build off of RHEL-8 UBI
+FROM registry.ci.openshift.org/ocp/builder:rhel-9-base-openshift-4.16
 RUN INSTALL_PKGS=" \
-      bind-utils bsdtar findutils git hostname lsof runc socat \
-      sysvinit-tools tar tree util-linux wget which \
+      bind-utils bsdtar findutils fuse-overlayfs git git-lfs hostname lsof \
+      netavark procps-ng runc socat tar tree util-linux wget which \
       " && \
     yum install -y --setopt=skip_missing_names_on_install=False $INSTALL_PKGS && \
     yum clean all

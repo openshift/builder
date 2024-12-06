@@ -45,7 +45,7 @@ $ oc scale --replicas 0 -n openshift-cluster-version deployments/cluster-version
 ` OS_GIT_MAJOR: unbound variable`, make sure that you have pulled all the tags from the [openshift/builder](https://github.com/openshift/builder) repo.
  You can use `git fetch upstream --tags` to pull all the tags.
 
-3. Build the image using the `Dockerfile.dev` file, giving it a unique tag:
+3. Build the image using the `Containerfile.ubi` file, giving it a unique tag:
 
 ```
 $ make build-devel-image IMAGE=<MYREPO>/<MYIMAGE> TAG=<MYTAG> 
@@ -54,7 +54,7 @@ $ make build-devel-image IMAGE=<MYREPO>/<MYIMAGE> TAG=<MYTAG>
 or if you are using `buildah`:
 
 ```
-$ buildah bud -t <MYREPO>/<MYIMAGE>:<MYTAG> -f Dockerfile.dev .
+$ buildah bud -t <MYREPO>/<MYIMAGE>:<MYTAG> -f Containerfile.ubi .
 ```
 
 4. Push the image to a registry accessible from the cluster (e.g. your repository on quay.io).
