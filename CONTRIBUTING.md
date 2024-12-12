@@ -67,7 +67,7 @@ $ oc patch configmap openshift-controller-manager-images -n openshift-controller
 6. Watch the openshift controller manager pods rollout (this can take a few minutes):
 
 ```
-$ oc get ds controller-manager -n openshift-controller-manager -w
+$ oc get deployment controller-manager -n openshift-controller-manager -w
 ```
 
 7. Trigger an OpenShift build via `oc start-build`. You can use one of the templates suggested in `oc new-app` to populate your project with a build.
