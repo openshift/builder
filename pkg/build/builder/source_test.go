@@ -162,6 +162,7 @@ func (r *testGitRepo) addCommit() error {
 }
 
 func TestUnqualifiedClone(t *testing.T) {
+	t.Skip("OCPBUGS-45321: git file:// protocol no longer allowed by default. See CVE-2022-39253")
 	repo, err := initializeTestGitRepo("unqualified")
 	defer repo.cleanup()
 	if err != nil {
@@ -202,6 +203,7 @@ func TestUnqualifiedClone(t *testing.T) {
 }
 
 func TestCloneFromRef(t *testing.T) {
+	t.Skip("OCPBUGS-45321: git file:// protocol no longer allowed by default. See CVE-2022-39253")
 	repo, err := initializeTestGitRepo("commit")
 	defer repo.cleanup()
 	if err != nil {
@@ -252,6 +254,7 @@ func TestCloneFromRef(t *testing.T) {
 }
 
 func TestCloneFromBranch(t *testing.T) {
+	t.Skip("OCPBUGS-45321: git file:// protocol no longer allowed by default. See CVE-2022-39253")
 	repo, err := initializeTestGitRepo("branch")
 	defer repo.cleanup()
 	if err != nil {
