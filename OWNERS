@@ -1,8 +1,12 @@
 reviewers:
   - sayan-biswas
   - divyansh42
+  - prabhapa
+  - moebasim
 approvers:
   - adambkaplan
   - bparees
   - sayan-biswas
+  - prabhapa
+  - moebasim
 component: Build
