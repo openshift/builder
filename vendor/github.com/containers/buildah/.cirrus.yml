@@ -6,7 +6,7 @@ env:
     #### Global variables used for all tasks
     ####
     # Name of the ultimate destination branch for this CI run, PR or post-merge.
-    DEST_BRANCH: "release-1.32"
+    DEST_BRANCH: "release-1.33"
     GOPATH: "/var/tmp/go"
     GOSRC: "${GOPATH}/src/github.com/containers/buildah"
     # Overrides default location (/tmp/cirrus) for repo clone
@@ -27,12 +27,12 @@ env:
     ####
     # GCE project where images live
     IMAGE_PROJECT: "libpod-218412"
-    FEDORA_NAME: "fedora-38"
-    PRIOR_FEDORA_NAME: "fedora-37"
+    FEDORA_NAME: "fedora-39β"
+    PRIOR_FEDORA_NAME: "fedora-38"
     DEBIAN_NAME: "debian-13"
 
     # Image identifiers
-    IMAGE_SUFFIX: "c20230816t191118z-f38f37d13"
+    IMAGE_SUFFIX: "c20231004t194547z-f39f38d13"
     FEDORA_CACHE_IMAGE_NAME: "fedora-${IMAGE_SUFFIX}"
     PRIOR_FEDORA_CACHE_IMAGE_NAME: "prior-fedora-${IMAGE_SUFFIX}"
     DEBIAN_CACHE_IMAGE_NAME: "debian-${IMAGE_SUFFIX}"
@@ -120,7 +120,7 @@ vendor_task:
 
     # Runs within Cirrus's "community cluster"
     container:
-        image: docker.io/library/golang:1.18
+        image: docker.io/library/golang:latest
         cpu: 1
         memory: 1
 
@@ -137,15 +137,9 @@ cross_build_task:
     alias: cross_build
     only_if: >-
         $CIRRUS_CHANGE_TITLE !=~ '.*CI:DOCS.*'
-
-    osx_instance:
-        image: ghcr.io/cirruslabs/macos-ventura-base:latest
-
+    env:
+        HOME: /root
     script:
-        - brew update
-        - brew install go
-        - brew install go-md2man
-        - brew install gpgme
         - go version
         - make cross CGO_ENABLED=0
 
