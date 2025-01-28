@@ -12,7 +12,7 @@ require (
 	github.com/fsouza/go-dockerclient v1.7.11
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/opencontainers/runc v1.1.3
+	github.com/opencontainers/runc v1.1.12
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/openshift-eng/openshift-goimports v0.0.0-20220205181405-f887d6f89f13
 	github.com/openshift/api v0.0.0-20220531073726-6c4f186339a7
@@ -57,7 +57,7 @@ require (
 	github.com/containers/libtrust v0.0.0-20200511145503-9c3a6c22cd9a // indirect
 	github.com/containers/ocicrypt v1.1.5 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
-	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
+	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/disiqueira/gotree/v3 v3.0.2 // indirect
 	github.com/docker/docker v20.10.17+incompatible // indirect
@@ -159,7 +159,7 @@ require (
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.6.0 // indirect
+	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/term v0.13.0 // indirect
