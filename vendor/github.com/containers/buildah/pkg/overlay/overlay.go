@@ -6,15 +6,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"errors"
 
 	"github.com/containers/storage/pkg/idtools"
+	"github.com/containers/storage/pkg/mount"
 	"github.com/containers/storage/pkg/system"
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 )
 
 // Options type holds various configuration options for overlay
@@ -49,6 +50,12 @@ type Options struct {
 	RootUID int
 	// RootGID is not used yet but keeping it here for legacy reasons.
 	RootGID int
+	// Force overlay mounting and return a bind mount, rather than
+	// attempting to optimize by having the runtime actually mount and
+	// manage the overlay filesystem.
+	ForceMount bool
+	// MountLabel is a label to force for the overlay filesystem.
+	MountLabel string
 }
 
 // TempDir generates an overlay Temp directory in the container content
@@ -113,10 +120,10 @@ func MountReadOnly(contentDir, source, dest string, rootUID, rootGID int, graphO
 
 // findMountProgram finds if any mount program is specified in the graph options.
 func findMountProgram(graphOptions []string) string {
-	mountMap := map[string]bool{
-		".mount_program":         true,
-		"overlay.mount_program":  true,
-		"overlay2.mount_program": true,
+	mountMap := map[string]struct{}{
+		".mount_program":         {},
+		"overlay.mount_program":  {},
+		"overlay2.mount_program": {},
 	}
 
 	for _, i := range graphOptions {
@@ -126,7 +133,7 @@ func findMountProgram(graphOptions []string) string {
 		}
 		key := s[0]
 		val := s[1]
-		if mountMap[key] {
+		if _, has := mountMap[key]; has {
 			return val
 		}
 	}
@@ -143,6 +150,12 @@ func mountWithMountProgram(mountProgram, overlayOptions, mergeDir string) error 
 		return fmt.Errorf("exec %s: %w", mountProgram, err)
 	}
 	return nil
+}
+
+// mountNatively mounts an overlay at mergeDir using the kernel's mount()
+// system call.
+func mountNatively(overlayOptions, mergeDir string) error {
+	return mount.Mount("overlay", mergeDir, "overlay", overlayOptions)
 }
 
 // Convert ":" to "\:", the path which will be overlay mounted need to be escaped
@@ -180,7 +193,7 @@ func Unmount(contentDir string) error {
 	}
 
 	// Ignore EINVAL as the specified merge dir is not a mount point
-	if err := unix.Unmount(mergeDir, 0); err != nil && !errors.Is(err, os.ErrNotExist) && err != unix.EINVAL {
+	if err := system.Unmount(mergeDir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EINVAL) {
 		return fmt.Errorf("unmount overlay %s: %w", mergeDir, err)
 	}
 	return nil

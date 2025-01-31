@@ -29,7 +29,7 @@ const (
 	// identify working containers.
 	Package = "buildah"
 	// Version for the Package. Also used by .packit.sh for Packit builds.
-	Version = "1.32.2"
+	Version = "1.35.5"
 
 	// DefaultRuntime if containers.conf fails.
 	DefaultRuntime = "runc"
@@ -54,12 +54,15 @@ const (
 	SNP TeeType = "snp"
 )
 
+// DefaultRlimitValue is the value set by default for nofile and nproc
+const RLimitDefaultValue = uint64(1048576)
+
 // TeeType is a supported trusted execution environment type.
 type TeeType string
 
 var (
-	// DefaultCapabilities is the list of capabilities which we grant by
-	// default to containers which are running under UID 0.
+	// Deprecated: DefaultCapabilities values should be retrieved from
+	// github.com/containers/common/pkg/config
 	DefaultCapabilities = []string{
 		"CAP_AUDIT_WRITE",
 		"CAP_CHOWN",
@@ -75,8 +78,8 @@ var (
 		"CAP_SETUID",
 		"CAP_SYS_CHROOT",
 	}
-	// DefaultNetworkSysctl is the list of Kernel parameters which we
-	// grant by default to containers which are running under UID 0.
+	// Deprecated: DefaultNetworkSysctl values should be retrieved from
+	// github.com/containers/common/pkg/config
 	DefaultNetworkSysctl = map[string]string{
 		"net.ipv4.ping_group_range": "0 0",
 	}
@@ -121,7 +124,7 @@ type ConfidentialWorkloadOptions struct {
 	AttestationURL           string
 	CPUs                     int
 	Memory                   int
-	TempDir                  string
+	TempDir                  string // used for the temporary plaintext copy of the disk image
 	TeeType                  TeeType
 	IgnoreAttestationErrors  bool
 	WorkloadID               string
@@ -130,13 +133,49 @@ type ConfidentialWorkloadOptions struct {
 	FirmwareLibrary          string
 }
 
-// TempDirForURL checks if the passed-in string looks like a URL or -.  If it is,
-// TempDirForURL creates a temporary directory, arranges for its contents to be
-// the contents of that URL, and returns the temporary directory's path, along
-// with the name of a subdirectory which should be used as the build context
-// (which may be empty or ".").  Removal of the temporary directory is the
-// responsibility of the caller.  If the string doesn't look like a URL,
-// TempDirForURL returns empty strings and a nil error code.
+// SBOMMergeStrategy tells us how to merge multiple SBOM documents into one.
+type SBOMMergeStrategy string
+
+const (
+	// SBOMMergeStrategyCat literally concatenates the documents.
+	SBOMMergeStrategyCat SBOMMergeStrategy = "cat"
+	// SBOMMergeStrategyCycloneDXByComponentNameAndVersion adds components
+	// from the second document to the first, so long as they have a
+	// name+version combination which is not already present in the
+	// components array.
+	SBOMMergeStrategyCycloneDXByComponentNameAndVersion SBOMMergeStrategy = "merge-cyclonedx-by-component-name-and-version"
+	// SBOMMergeStrategySPDXByPackageNameAndVersionInfo adds packages from
+	// the second document to the first, so long as they have a
+	// name+versionInfo combination which is not already present in the
+	// first document's packages array, and adds hasExtractedLicensingInfos
+	// items from the second document to the first, so long as they include
+	// a licenseId value which is not already present in the first
+	// document's hasExtractedLicensingInfos array.
+	SBOMMergeStrategySPDXByPackageNameAndVersionInfo SBOMMergeStrategy = "merge-spdx-by-package-name-and-versioninfo"
+)
+
+// SBOMScanOptions encapsulates options which control whether or not we run a
+// scanner on the rootfs that we're about to commit, and how.
+type SBOMScanOptions struct {
+	Type            []string          // a shorthand name for a defined group of these options
+	Image           string            // the scanner image to use
+	PullPolicy      PullPolicy        // how to get the scanner image
+	Commands        []string          // one or more commands to invoke for the image rootfs or ContextDir locations
+	ContextDir      []string          // one or more "source" directory locations
+	SBOMOutput      string            // where to save SBOM scanner output outside of the image (i.e., the local filesystem)
+	PURLOutput      string            // where to save PURL list outside of the image (i.e., the local filesystem)
+	ImageSBOMOutput string            // where to save SBOM scanner output in the image
+	ImagePURLOutput string            // where to save PURL list in the image
+	MergeStrategy   SBOMMergeStrategy // how to merge the outputs of multiple scans
+}
+
+// TempDirForURL checks if the passed-in string looks like a URL or "-".  If it
+// is, TempDirForURL creates a temporary directory, arranges for its contents
+// to be the contents of that URL, and returns the temporary directory's path,
+// along with the relative name of a subdirectory which should be used as the
+// build context (which may be empty or ".").  Removal of the temporary
+// directory is the responsibility of the caller.  If the string doesn't look
+// like a URL or "-", TempDirForURL returns empty strings and a nil error code.
 func TempDirForURL(dir, prefix, url string) (name string, subdir string, err error) {
 	if !strings.HasPrefix(url, "http://") &&
 		!strings.HasPrefix(url, "https://") &&
@@ -149,19 +188,24 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 	if err != nil {
 		return "", "", fmt.Errorf("creating temporary directory for %q: %w", url, err)
 	}
+	downloadDir := filepath.Join(name, "download")
+	if err = os.MkdirAll(downloadDir, 0o700); err != nil {
+		return "", "", fmt.Errorf("creating directory %q for %q: %w", downloadDir, url, err)
+	}
 	urlParsed, err := urlpkg.Parse(url)
 	if err != nil {
 		return "", "", fmt.Errorf("parsing url %q: %w", url, err)
 	}
 	if strings.HasPrefix(url, "git://") || strings.HasSuffix(urlParsed.Path, ".git") {
-		combinedOutput, gitSubDir, err := cloneToDirectory(url, name)
+		combinedOutput, gitSubDir, err := cloneToDirectory(url, downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
 			return "", "", fmt.Errorf("cloning %q to %q:\n%s: %w", url, name, string(combinedOutput), err)
 		}
-		return name, gitSubDir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, gitSubDir))
+		return name, filepath.Join(filepath.Base(downloadDir), gitSubDir), nil
 	}
 	if strings.HasPrefix(url, "github.com/") {
 		ghurl := url
@@ -170,28 +214,29 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 		subdir = path.Base(ghurl) + "-master"
 	}
 	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-		err = downloadToDirectory(url, name)
+		err = downloadToDirectory(url, downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
-			return "", subdir, err
+			return "", "", err
 		}
-		return name, subdir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, subdir))
+		return name, filepath.Join(filepath.Base(downloadDir), subdir), nil
 	}
 	if url == "-" {
-		err = stdinToDirectory(name)
+		err = stdinToDirectory(downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
-			return "", subdir, err
+			return "", "", err
 		}
-		logrus.Debugf("Build context is at %q", name)
-		return name, subdir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, subdir))
+		return name, filepath.Join(filepath.Base(downloadDir), subdir), nil
 	}
 	logrus.Debugf("don't know how to retrieve %q", url)
-	if err2 := os.Remove(name); err2 != nil {
+	if err2 := os.RemoveAll(name); err2 != nil {
 		logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 	}
 	return "", "", errors.New("unreachable code reached")
