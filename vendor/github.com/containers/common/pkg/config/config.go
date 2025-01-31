@@ -9,15 +9,14 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/BurntSushi/toml"
+	"github.com/containers/common/internal/attributedstring"
 	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/capabilities"
-	"github.com/containers/common/pkg/util"
-	"github.com/containers/storage/pkg/ioutils"
 	"github.com/containers/storage/pkg/unshare"
 	units "github.com/docker/go-units"
 	selinux "github.com/opencontainers/selinux/go-selinux"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -30,25 +29,7 @@ const (
 	bindirPrefix = "$BINDIR"
 )
 
-// RuntimeStateStore is a constant indicating which state store implementation
-// should be used by engine
-type RuntimeStateStore int
-
-const (
-	// InvalidStateStore is an invalid state store
-	InvalidStateStore RuntimeStateStore = iota
-	// InMemoryStateStore is an in-memory state that will not persist data
-	// on containers and pods between engine instances or after system
-	// reboot
-	InMemoryStateStore RuntimeStateStore = iota
-	// SQLiteStateStore is a state backed by a SQLite database
-	// It is presently disabled
-	SQLiteStateStore RuntimeStateStore = iota
-	// BoltDBStateStore is a state backed by a BoltDB database
-	BoltDBStateStore RuntimeStateStore = iota
-)
-
-var validImageVolumeModes = []string{_typeBind, "tmpfs", "ignore"}
+var validImageVolumeModes = []string{"anonymous", "tmpfs", "ignore"}
 
 // ProxyEnv is a list of Proxy Environment variables
 var ProxyEnv = []string{
@@ -86,17 +67,17 @@ type Config struct {
 // containers global options for containers tools
 type ContainersConfig struct {
 	// Devices to add to all containers
-	Devices []string `toml:"devices,omitempty"`
+	Devices attributedstring.Slice `toml:"devices,omitempty"`
 
 	// Volumes to add to all containers
-	Volumes []string `toml:"volumes,omitempty"`
+	Volumes attributedstring.Slice `toml:"volumes,omitempty"`
 
 	// ApparmorProfile is the apparmor profile name which is used as the
 	// default for the runtime.
 	ApparmorProfile string `toml:"apparmor_profile,omitempty"`
 
 	// Annotation to add to all containers
-	Annotations []string `toml:"annotations,omitempty"`
+	Annotations attributedstring.Slice `toml:"annotations,omitempty"`
 
 	// BaseHostsFile is the path to a hosts file, the entries from this file
 	// are added to the containers hosts file. As special value "image" is
@@ -113,28 +94,28 @@ type ContainersConfig struct {
 
 	// CgroupConf entries specifies a list of cgroup files to write to and their values. For example
 	// "memory.high=1073741824" sets the memory.high limit to 1GB.
-	CgroupConf []string `toml:"cgroup_conf,omitempty"`
+	CgroupConf attributedstring.Slice `toml:"cgroup_conf,omitempty"`
 
 	// Capabilities to add to all containers.
-	DefaultCapabilities []string `toml:"default_capabilities,omitempty"`
+	DefaultCapabilities attributedstring.Slice `toml:"default_capabilities,omitempty"`
 
 	// Sysctls to add to all containers.
-	DefaultSysctls []string `toml:"default_sysctls,omitempty"`
+	DefaultSysctls attributedstring.Slice `toml:"default_sysctls,omitempty"`
 
 	// DefaultUlimits specifies the default ulimits to apply to containers
-	DefaultUlimits []string `toml:"default_ulimits,omitempty"`
+	DefaultUlimits attributedstring.Slice `toml:"default_ulimits,omitempty"`
 
 	// DefaultMountsFile is the path to the default mounts file for testing
 	DefaultMountsFile string `toml:"-"`
 
 	// DNSServers set default DNS servers.
-	DNSServers []string `toml:"dns_servers,omitempty"`
+	DNSServers attributedstring.Slice `toml:"dns_servers,omitempty"`
 
 	// DNSOptions set default DNS options.
-	DNSOptions []string `toml:"dns_options,omitempty"`
+	DNSOptions attributedstring.Slice `toml:"dns_options,omitempty"`
 
 	// DNSSearches set default DNS search domains.
-	DNSSearches []string `toml:"dns_searches,omitempty"`
+	DNSSearches attributedstring.Slice `toml:"dns_searches,omitempty"`
 
 	// EnableKeyring tells the container engines whether to create
 	// a kernel keyring for use within the container
@@ -151,7 +132,7 @@ type ContainersConfig struct {
 	EnableLabeledUsers bool `toml:"label_users,omitempty"`
 
 	// Env is the environment variable list for container process.
-	Env []string `toml:"env,omitempty"`
+	Env attributedstring.Slice `toml:"env,omitempty"`
 
 	// EnvHost Pass all host environment variables into the container.
 	EnvHost bool `toml:"env_host,omitempty"`
@@ -167,7 +148,16 @@ type ContainersConfig struct {
 	Init bool `toml:"init,omitempty"`
 
 	// InitPath is the path for init to run if the Init bool is enabled
+	//
+	// Deprecated: Do not use this field directly use conf.FindInitBinary() instead.
 	InitPath string `toml:"init_path,omitempty"`
+
+	// InterfaceName tells container runtimes how to set interface names
+	// inside containers.
+	// The only valid value at the moment is "device" that indicates the
+	// interface name should be set as the network_interface name from
+	// the network config.
+	InterfaceName string `toml:"interface_name,omitempty"`
 
 	// IPCNS way to create a ipc namespace for the container
 	IPCNS string `toml:"ipcns,omitempty"`
@@ -187,7 +177,7 @@ type ContainersConfig struct {
 	LogTag string `toml:"log_tag,omitempty"`
 
 	// Mount to add to all containers
-	Mounts []string `toml:"mounts,omitempty"`
+	Mounts attributedstring.Slice `toml:"mounts,omitempty"`
 
 	// NetNS indicates how to create a network namespace for the container
 	NetNS string `toml:"netns,omitempty"`
@@ -212,6 +202,18 @@ type ContainersConfig struct {
 	// the container is started. Setting it to true may have negative
 	// performance implications.
 	PrepareVolumeOnCreate bool `toml:"prepare_volume_on_create,omitempty"`
+
+	// Give extended privileges to all containers. A privileged container
+	// turns off the security features that isolate the container from the
+	// host. Dropped Capabilities, limited devices, read-only mount points,
+	// Apparmor/SELinux separation, and Seccomp filters are all disabled.
+	// Due to the disabled security features the privileged field should
+	// almost never be set as containers can easily break out of
+	// confinment.
+	//
+	// Containers running in a user namespace (e.g., rootless containers)
+	// cannot have more privileges than the user that launched them.
+	Privileged bool `toml:"privileged,omitempty"`
 
 	// ReadOnly causes engine to run all containers with root file system mounted read-only
 	ReadOnly bool `toml:"read_only,omitempty"`
@@ -254,15 +256,15 @@ type EngineConfig struct {
 
 	// ConmonEnvVars are environment variables to pass to the Conmon binary
 	// when it is launched.
-	ConmonEnvVars []string `toml:"conmon_env_vars,omitempty"`
+	ConmonEnvVars attributedstring.Slice `toml:"conmon_env_vars,omitempty"`
 
 	// ConmonPath is the path to the Conmon binary used for managing containers.
 	// The first path pointing to a valid file will be used.
-	ConmonPath []string `toml:"conmon_path,omitempty"`
+	ConmonPath attributedstring.Slice `toml:"conmon_path,omitempty"`
 
 	// ConmonRsPath is the path to the Conmon-rs binary used for managing containers.
 	// The first path pointing to a valid file will be used.
-	ConmonRsPath []string `toml:"conmonrs_path,omitempty"`
+	ConmonRsPath attributedstring.Slice `toml:"conmonrs_path,omitempty"`
 
 	// CompatAPIEnforceDockerHub enforces using docker.io for completing
 	// short names in Podman's compatibility REST API.  Note that this will
@@ -274,7 +276,7 @@ type EngineConfig struct {
 	// compose command.  The first found provider is used for execution.
 	// Can be an absolute and relative path or a (file) name.  Make sure to
 	// expand the return items via `os.ExpandEnv`.
-	ComposeProviders []string `toml:"compose_providers,omitempty"`
+	ComposeProviders attributedstring.Slice `toml:"compose_providers,omitempty"`
 
 	// ComposeWarningLogs emits logs on each invocation of the compose
 	// command indicating that an external compose provider is being
@@ -297,7 +299,7 @@ type EngineConfig struct {
 	EnablePortReservation bool `toml:"enable_port_reservation,omitempty"`
 
 	// Environment variables to be used when running the container engine (e.g., Podman, Buildah). For example "http_proxy=internal.proxy.company.com"
-	Env []string `toml:"env,omitempty"`
+	Env attributedstring.Slice `toml:"env,omitempty"`
 
 	// EventsLogFilePath is where the events log is stored.
 	EventsLogFilePath string `toml:"events_logfile_path,omitempty"`
@@ -319,12 +321,12 @@ type EngineConfig struct {
 
 	// HelperBinariesDir is a list of directories which are used to search for
 	// helper binaries.
-	HelperBinariesDir []string `toml:"helper_binaries_dir"`
+	HelperBinariesDir attributedstring.Slice `toml:"helper_binaries_dir,omitempty"`
 
 	// configuration files. When the same filename is present in
 	// multiple directories, the file in the directory listed last in
 	// this slice takes precedence.
-	HooksDir []string `toml:"hooks_dir,omitempty"`
+	HooksDir attributedstring.Slice `toml:"hooks_dir,omitempty"`
 
 	// ImageBuildFormat (DEPRECATED) indicates the default image format to
 	// building container images. Should use ImageDefaultFormat
@@ -357,6 +359,8 @@ type EngineConfig struct {
 	InfraImage string `toml:"infra_image,omitempty"`
 
 	// InitPath is the path to the container-init binary.
+	//
+	// Deprecated: Do not use this field directly use conf.FindInitBinary() instead.
 	InitPath string `toml:"init_path,omitempty"`
 
 	// KubeGenerateType sets the Kubernetes kind/specification to generate by default
@@ -365,11 +369,6 @@ type EngineConfig struct {
 
 	// LockType is the type of locking to use.
 	LockType string `toml:"lock_type,omitempty"`
-
-	// MachineEnabled indicates if Podman is running in a podman-machine VM
-	//
-	// This method is soft deprecated, use machine.IsPodmanMachine instead
-	MachineEnabled bool `toml:"machine_enabled,omitempty"`
 
 	// MultiImageArchive - if true, the container engine allows for storing
 	// archives (e.g., of the docker-archive transport) with multiple
@@ -389,7 +388,7 @@ type EngineConfig struct {
 
 	// NetworkCmdOptions is the default options to pass to the slirp4netns binary.
 	// For example "allow_host_loopback=true"
-	NetworkCmdOptions []string `toml:"network_cmd_options,omitempty"`
+	NetworkCmdOptions attributedstring.Slice `toml:"network_cmd_options,omitempty"`
 
 	// NoPivotRoot sets whether to set no-pivot-root in the OCI runtime.
 	NoPivotRoot bool `toml:"no_pivot_root,omitempty"`
@@ -417,6 +416,14 @@ type EngineConfig struct {
 	// Indicates whether the application should be running in Remote mode
 	Remote bool `toml:"remote,omitempty"`
 
+	// Number of times to retry pulling/pushing images in case of failure
+	Retry uint `toml:"retry,omitempty"`
+
+	// Delay between retries in case pulling/pushing image fails
+	// If set, container engines will retry at the set interval,
+	// otherwise they delay 2 seconds and then exponentially back off.
+	RetryDelay string `toml:"retry_delay,omitempty"`
+
 	// RemoteURI is deprecated, see ActiveService
 	// RemoteURI containers connection information used to connect to remote system.
 	RemoteURI string `toml:"remote_uri,omitempty"`
@@ -429,7 +436,7 @@ type EngineConfig struct {
 	ActiveService string `toml:"active_service,omitempty"`
 
 	// Add existing instances with requested compression algorithms to manifest list
-	AddCompression []string `toml:"add_compression,omitempty"`
+	AddCompression attributedstring.Slice `toml:"add_compression,omitempty"`
 
 	// ServiceDestinations mapped by service Names
 	ServiceDestinations map[string]Destination `toml:"service_destinations,omitempty"`
@@ -441,19 +448,19 @@ type EngineConfig struct {
 	// The first path pointing to a valid file will be used This is used only
 	// when there are no OCIRuntime/OCIRuntimes defined.  It is used only to be
 	// backward compatible with older versions of Podman.
-	RuntimePath []string `toml:"runtime_path,omitempty"`
+	RuntimePath attributedstring.Slice `toml:"runtime_path,omitempty"`
 
 	// RuntimeSupportsJSON is the list of the OCI runtimes that support
 	// --format=json.
-	RuntimeSupportsJSON []string `toml:"runtime_supports_json,omitempty"`
+	RuntimeSupportsJSON attributedstring.Slice `toml:"runtime_supports_json,omitempty"`
 
 	// RuntimeSupportsNoCgroups is a list of OCI runtimes that support
 	// running containers without CGroups.
-	RuntimeSupportsNoCgroups []string `toml:"runtime_supports_nocgroup,omitempty"`
+	RuntimeSupportsNoCgroups attributedstring.Slice `toml:"runtime_supports_nocgroup,omitempty"`
 
 	// RuntimeSupportsKVM is a list of OCI runtimes that support
 	// KVM separation for containers.
-	RuntimeSupportsKVM []string `toml:"runtime_supports_kvm,omitempty"`
+	RuntimeSupportsKVM attributedstring.Slice `toml:"runtime_supports_kvm,omitempty"`
 
 	// SetOptions contains a subset of config options. It's used to indicate if
 	// a given option has either been set by the user or by the parsed
@@ -470,13 +477,6 @@ type EngineConfig struct {
 	// SDNotify tells container engine to allow containers to notify the host systemd of
 	// readiness using the SD_NOTIFY mechanism.
 	SDNotify bool `toml:"-"`
-
-	// StateType is the type of the backing state store. Avoid using multiple
-	// values for this with the same containers/storage configuration on the
-	// same system. Different state types do not interact, and each will see a
-	// separate set of containers, which may cause conflicts in
-	// containers/storage. As such this is not exposed via the config file.
-	StateType RuntimeStateStore `toml:"-"`
 
 	// ServiceTimeout is the number of seconds to wait without a connection
 	// before the `podman system service` times out and exits
@@ -561,24 +561,6 @@ type SetOptions struct {
 	// backwards compatibility with older versions of libpod for which we must
 	// query the database configuration. Not included in the on-disk config.
 	StorageConfigGraphDriverNameSet bool `toml:"-"`
-
-	// StaticDirSet indicates if the StaticDir has been explicitly set by the
-	// config or by the user. It's required to guarantee backwards compatibility
-	// with older versions of libpod for which we must query the database
-	// configuration. Not included in the on-disk config.
-	StaticDirSet bool `toml:"-"`
-
-	// VolumePathSet indicates if the VolumePath has been explicitly set by the
-	// config or by the user. It's required to guarantee backwards compatibility
-	// with older versions of libpod for which we must query the database
-	// configuration. Not included in the on-disk config.
-	VolumePathSet bool `toml:"-"`
-
-	// TmpDirSet indicates if the TmpDir has been explicitly set by the config
-	// or by the user. It's required to guarantee backwards compatibility with
-	// older versions of libpod for which we must query the database
-	// configuration. Not included in the on-disk config.
-	TmpDirSet bool `toml:"-"`
 }
 
 // NetworkConfig represents the "network" TOML config table
@@ -588,10 +570,13 @@ type NetworkConfig struct {
 	NetworkBackend string `toml:"network_backend,omitempty"`
 
 	// CNIPluginDirs is where CNI plugin binaries are stored.
-	CNIPluginDirs []string `toml:"cni_plugin_dirs,omitempty"`
+	CNIPluginDirs attributedstring.Slice `toml:"cni_plugin_dirs,omitempty"`
 
 	// NetavarkPluginDirs is a list of directories which contain netavark plugins.
-	NetavarkPluginDirs []string `toml:"netavark_plugin_dirs,omitempty"`
+	NetavarkPluginDirs attributedstring.Slice `toml:"netavark_plugin_dirs,omitempty"`
+
+	// FirewallDriver is the firewall driver to be used
+	FirewallDriver string `toml:"firewall_driver,omitempty"`
 
 	// DefaultNetwork is the network name of the default network
 	// to attach pods to.
@@ -624,7 +609,7 @@ type NetworkConfig struct {
 
 	// PastaOptions contains a default list of pasta(1) options that should
 	// be used when running pasta.
-	PastaOptions []string `toml:"pasta_options,omitempty"`
+	PastaOptions attributedstring.Slice `toml:"pasta_options,omitempty"`
 }
 
 type SubnetPool struct {
@@ -675,17 +660,19 @@ type MachineConfig struct {
 	// User to use for rootless podman when init-ing a podman machine VM
 	User string `toml:"user,omitempty"`
 	// Volumes are host directories mounted into the VM by default.
-	Volumes []string `toml:"volumes"`
+	Volumes attributedstring.Slice `toml:"volumes,omitempty"`
 	// Provider is the virtualization provider used to run podman-machine VM
 	Provider string `toml:"provider,omitempty"`
+	// Rosetta is the flag to enable Rosetta in the podman-machine VM on Apple Silicon
+	Rosetta bool `toml:"rosetta,omitempty"`
 }
 
-// FarmConfig represents the "farm" TOML config tabls
+// FarmConfig represents the "farm" TOML config tables
 type FarmConfig struct {
 	// Default is the default farm to be used when farming out builds
-	Default string `toml:"default,omitempty"`
+	Default string `json:",omitempty" toml:"default,omitempty"`
 	// List is a map of farms created where key=farm-name and value=list of connections
-	List map[string][]string `toml:"list,omitempty"`
+	List map[string][]string `json:",omitempty" toml:"list,omitempty"`
 }
 
 // Destination represents destination for remote service
@@ -694,10 +681,10 @@ type Destination struct {
 	URI string `toml:"uri"`
 
 	// Identity file with ssh key, optional
-	Identity string `toml:"identity,omitempty"`
+	Identity string `json:",omitempty" toml:"identity,omitempty"`
 
 	// isMachine describes if the remote destination is a machine.
-	IsMachine bool `toml:"is_machine,omitempty"`
+	IsMachine bool `json:",omitempty" toml:"is_machine,omitempty"`
 }
 
 // Consumes container image's os and arch and returns if any dedicated runtime was
@@ -740,12 +727,15 @@ func (c *Config) CheckCgroupsAndAdjustConfig() {
 }
 
 func (c *Config) addCAPPrefix() {
-	for i, val := range c.Containers.DefaultCapabilities {
+	caps := c.Containers.DefaultCapabilities.Get()
+	newCaps := make([]string, 0, len(caps))
+	for _, val := range caps {
 		if !strings.HasPrefix(strings.ToLower(val), "cap_") {
 			val = "CAP_" + strings.ToUpper(val)
 		}
-		c.Containers.DefaultCapabilities[i] = val
+		newCaps = append(newCaps, val)
 	}
+	c.Containers.DefaultCapabilities.Set(newCaps)
 }
 
 // Validate is the main entry point for library configuration validation.
@@ -834,6 +824,10 @@ func (c *ContainersConfig) Validate() error {
 		return err
 	}
 
+	if err := c.validateInterfaceName(); err != nil {
+		return err
+	}
+
 	if err := c.validateTZ(); err != nil {
 		return err
 	}
@@ -880,7 +874,7 @@ func (c *NetworkConfig) Validate() error {
 // to first (version) matching conmon binary. If non is found, we try
 // to do a path lookup of "conmon".
 func (c *Config) FindConmon() (string, error) {
-	return findConmonPath(c.Engine.ConmonPath, "conmon")
+	return findConmonPath(c.Engine.ConmonPath.Get(), "conmon")
 }
 
 func findConmonPath(paths []string, binaryName string) (string, error) {
@@ -910,7 +904,7 @@ func findConmonPath(paths []string, binaryName string) (string, error) {
 // to first (version) matching conmonrs binary. If non is found, we try
 // to do a path lookup of "conmonrs".
 func (c *Config) FindConmonRs() (string, error) {
-	return findConmonPath(c.Engine.ConmonRsPath, "conmonrs")
+	return findConmonPath(c.Engine.ConmonRsPath.Get(), "conmonrs")
 }
 
 // GetDefaultEnv returns the environment variables for the container.
@@ -934,11 +928,11 @@ func (c *Config) GetDefaultEnvEx(envHost, httpProxy bool) []string {
 			}
 		}
 	}
-	return append(env, c.Containers.Env...)
+	return append(env, c.Containers.Env.Get()...)
 }
 
 // Capabilities returns the capabilities parses the Add and Drop capability
-// list from the default capabiltiies for the container
+// list from the default capabilities for the container
 func (c *Config) Capabilities(user string, addCapabilities, dropCapabilities []string) ([]string, error) {
 	userNotRoot := func(user string) bool {
 		if user == "" || user == "root" || user == "0" {
@@ -947,7 +941,7 @@ func (c *Config) Capabilities(user string, addCapabilities, dropCapabilities []s
 		return true
 	}
 
-	defaultCapabilities := c.Containers.DefaultCapabilities
+	defaultCapabilities := c.Containers.DefaultCapabilities.Get()
 	if userNotRoot(user) {
 		defaultCapabilities = []string{}
 	}
@@ -1017,115 +1011,11 @@ func IsValidDeviceMode(mode string) bool {
 	return true
 }
 
-func rootlessConfigPath() (string, error) {
-	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
-		return filepath.Join(configHome, _configPath), nil
-	}
-	home, err := unshare.HomeDir()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(home, UserOverrideContainersConfig), nil
-}
-
-func Path() string {
-	if path := os.Getenv("CONTAINERS_CONF"); path != "" {
-		return path
-	}
-	if unshare.IsRootless() {
-		if rpath, err := rootlessConfigPath(); err == nil {
-			return rpath
-		}
-		return "$HOME/" + UserOverrideContainersConfig
-	}
-	return OverrideContainersConfig
-}
-
-// ReadCustomConfig reads the custom config and only generates a config based on it
-// If the custom config file does not exists, function will return an empty config
-func ReadCustomConfig() (*Config, error) {
-	path, err := customConfigFile()
-	if err != nil {
-		return nil, err
-	}
-	newConfig := &Config{}
-	if _, err := os.Stat(path); err == nil {
-		if err := readConfigFromFile(path, newConfig); err != nil {
-			return nil, err
-		}
-	} else {
-		if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-	}
-	// Let's always initialize the farm list so it is never nil
-	if newConfig.Farms.List == nil {
-		newConfig.Farms.List = make(map[string][]string)
-	}
-	return newConfig, nil
-}
-
-// Write writes the configuration to the default file
-func (c *Config) Write() error {
-	var err error
-	path, err := customConfigFile()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-
-	opts := &ioutils.AtomicFileWriterOptions{ExplicitCommit: true}
-	configFile, err := ioutils.NewAtomicFileWriterWithOpts(path, 0o644, opts)
-	if err != nil {
-		return err
-	}
-	defer configFile.Close()
-
-	enc := toml.NewEncoder(configFile)
-	if err := enc.Encode(c); err != nil {
-		return err
-	}
-
-	// If no errors commit the changes to the config file
-	return configFile.Commit()
-}
-
 // Reload clean the cached config and reloads the configuration from containers.conf files
 // This function is meant to be used for long-running processes that need to reload potential changes made to
 // the cached containers.conf files.
 func Reload() (*Config, error) {
 	return New(&Options{SetDefault: true})
-}
-
-func (c *Config) ActiveDestination() (uri, identity string, machine bool, err error) {
-	if uri, found := os.LookupEnv("CONTAINER_HOST"); found {
-		if v, found := os.LookupEnv("CONTAINER_SSHKEY"); found {
-			identity = v
-		}
-		return uri, identity, false, nil
-	}
-	connEnv := os.Getenv("CONTAINER_CONNECTION")
-	switch {
-	case connEnv != "":
-		d, found := c.Engine.ServiceDestinations[connEnv]
-		if !found {
-			return "", "", false, fmt.Errorf("environment variable CONTAINER_CONNECTION=%q service destination not found", connEnv)
-		}
-		return d.URI, d.Identity, d.IsMachine, nil
-
-	case c.Engine.ActiveService != "":
-		d, found := c.Engine.ServiceDestinations[c.Engine.ActiveService]
-		if !found {
-			return "", "", false, fmt.Errorf("%q service destination not found", c.Engine.ActiveService)
-		}
-		return d.URI, d.Identity, d.IsMachine, nil
-	case c.Engine.RemoteURI != "":
-		return c.Engine.RemoteURI, c.Engine.RemoteIdentity, false, nil
-	}
-	return "", "", false, errors.New("no service destination configured")
 }
 
 var (
@@ -1156,7 +1046,7 @@ func findBindir() string {
 // FindHelperBinary will search the given binary name in the configured directories.
 // If searchPATH is set to true it will also search in $PATH.
 func (c *Config) FindHelperBinary(name string, searchPATH bool) (string, error) {
-	dirList := c.Engine.HelperBinariesDir
+	dirList := c.Engine.HelperBinariesDir.Get()
 	bindirPath := ""
 	bindirSearched := false
 
@@ -1197,7 +1087,7 @@ func (c *Config) FindHelperBinary(name string, searchPATH bool) (string, error) 
 		return exec.LookPath(name)
 	}
 	configHint := "To resolve this error, set the helper_binaries_dir key in the `[engine]` section of containers.conf to the directory containing your helper binaries."
-	if len(c.Engine.HelperBinariesDir) == 0 {
+	if len(c.Engine.HelperBinariesDir.Get()) == 0 {
 		return "", fmt.Errorf("could not find %q because there are no helper binary directories configured.  %s", name, configHint)
 	}
 	return "", fmt.Errorf("could not find %q in one of %v.  %s", name, c.Engine.HelperBinariesDir, configHint)
@@ -1224,7 +1114,7 @@ func (c *Config) ImageCopyTmpDir() (string, error) {
 
 // setupEnv sets the environment variables for the engine
 func (c *Config) setupEnv() error {
-	for _, env := range c.Engine.Env {
+	for _, env := range c.Engine.Env.Get() {
 		splitEnv := strings.SplitN(env, "=", 2)
 		if len(splitEnv) != 2 {
 			logrus.Warnf("invalid environment variable for engine %s, valid configuration is KEY=value pair", env)
@@ -1276,9 +1166,26 @@ func ValidateImageVolumeMode(mode string) error {
 	if mode == "" {
 		return nil
 	}
-	if util.StringInSlice(mode, validImageVolumeModes) {
+	if slices.Contains(validImageVolumeModes, mode) {
 		return nil
 	}
 
 	return fmt.Errorf("invalid image volume mode %q required value: %s", mode, strings.Join(validImageVolumeModes, ", "))
+}
+
+// FindInitBinary will return the path to the init binary (catatonit)
+func (c *Config) FindInitBinary() (string, error) {
+	// Sigh, for some reason we ended up with two InitPath field in containers.conf and
+	// both are used in podman so we have to keep supporting both to prevent regressions.
+	if c.Containers.InitPath != "" {
+		return c.Containers.InitPath, nil
+	}
+	if c.Engine.InitPath != "" {
+		return c.Engine.InitPath, nil
+	}
+	// keep old default working to guarantee backwards compat
+	if _, err := os.Stat(DefaultInitPath); err == nil {
+		return DefaultInitPath, nil
+	}
+	return c.FindHelperBinary(defaultInitName, true)
 }

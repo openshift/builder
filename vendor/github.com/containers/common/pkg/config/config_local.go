@@ -1,5 +1,4 @@
 //go:build !remote
-// +build !remote
 
 package config
 
@@ -10,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/container-orchestrated-devices/container-device-interface/pkg/parser"
 	units "github.com/docker/go-units"
+	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
 func (c *EngineConfig) validatePaths() error {
@@ -31,7 +30,7 @@ func (c *EngineConfig) validatePaths() error {
 }
 
 func (c *ContainersConfig) validateDevices() error {
-	for _, d := range c.Devices {
+	for _, d := range c.Devices.Get() {
 		if parser.IsQualifiedName(d) {
 			continue
 		}
@@ -43,8 +42,16 @@ func (c *ContainersConfig) validateDevices() error {
 	return nil
 }
 
+func (c *ContainersConfig) validateInterfaceName() error {
+	if c.InterfaceName == "device" || c.InterfaceName == "" {
+		return nil
+	}
+
+	return fmt.Errorf("invalid interface_name option %s", c.InterfaceName)
+}
+
 func (c *ContainersConfig) validateUlimits() error {
-	for _, u := range c.DefaultUlimits {
+	for _, u := range c.DefaultUlimits.Get() {
 		ul, err := units.ParseUlimit(u)
 		if err != nil {
 			return fmt.Errorf("unrecognized ulimit %s: %w", u, err)
@@ -65,6 +72,13 @@ func (c *ContainersConfig) validateTZ() error {
 	lookupPaths := []string{
 		"/usr/share/zoneinfo",
 		"/etc/zoneinfo",
+	}
+
+	// Allow using TZDIR to override the lookupPaths. Ref:
+	// https://sourceware.org/git/?p=glibc.git;a=blob;f=time/tzfile.c;h=8a923d0cccc927a106dc3e3c641be310893bab4e;hb=HEAD#l149
+	tzdir := os.Getenv("TZDIR")
+	if tzdir != "" {
+		lookupPaths = []string{tzdir}
 	}
 
 	for _, paths := range lookupPaths {

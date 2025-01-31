@@ -1,3 +1,5 @@
+//go:build !remote
+
 package libimage
 
 import (
@@ -89,14 +91,14 @@ func (l *layerNode) repoTags() ([]string, error) {
 
 // layerTree extracts a layerTree from the layers in the local storage and
 // relates them to the specified images.
-func (r *Runtime) layerTree(images []*Image) (*layerTree, error) {
+func (r *Runtime) layerTree(ctx context.Context, images []*Image) (*layerTree, error) {
 	layers, err := r.store.Layers()
 	if err != nil {
 		return nil, err
 	}
 
 	if images == nil {
-		images, err = r.ListImages(context.Background(), nil, nil)
+		images, err = r.ListImages(ctx, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +149,9 @@ func (t *layerTree) layersOf(image *Image) []*storage.Layer {
 	var layers []*storage.Layer
 	node := t.node(image.TopLayer())
 	for node != nil {
-		layers = append(layers, node.layer)
+		if node.layer != nil {
+			layers = append(layers, node.layer)
+		}
 		node = node.parent
 	}
 	return layers
@@ -199,6 +203,17 @@ func (t *layerTree) children(ctx context.Context, parent *Image, all bool) ([]*I
 	if parent.TopLayer() == "" {
 		for i := range t.emptyImages {
 			empty := t.emptyImages[i]
+			isManifest, err := empty.IsManifestList(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if isManifest {
+				// If this is a manifest list and is already
+				// marked as empty then no instance can be
+				// selected from this list therefore its
+				// better to skip this.
+				continue
+			}
 			isParent, err := checkParent(empty)
 			if err != nil {
 				return nil, err
@@ -287,6 +302,17 @@ func (t *layerTree) parent(ctx context.Context, child *Image) (*Image, error) {
 	if child.TopLayer() == "" {
 		for _, empty := range t.emptyImages {
 			if childID == empty.ID() {
+				continue
+			}
+			isManifest, err := empty.IsManifestList(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if isManifest {
+				// If this is a manifest list and is already
+				// marked as empty then no instance can be
+				// selected from this list therefore its
+				// better to skip this.
 				continue
 			}
 			emptyOCI, err := t.toOCI(ctx, empty)
