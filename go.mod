@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
-	github.com/containers/buildah v1.35.4
+	github.com/containers/buildah v1.35.5
 	github.com/containers/common v0.58.3
 	github.com/containers/image/v5 v5.30.1
 	github.com/containers/storage v1.53.0
