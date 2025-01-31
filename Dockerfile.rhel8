@@ -6,7 +6,7 @@ RUN hack/build.sh
 FROM registry.ci.openshift.org/ocp/builder:rhel-9-base-openshift-4.16
 RUN INSTALL_PKGS=" \
       bind-utils bsdtar findutils fuse-overlayfs git git-lfs hostname lsof \
-      procps-ng runc socat tar tree util-linux wget which \
+      netavark procps-ng runc socat tar tree util-linux wget which \
       " && \
     yum install -y --setopt=skip_missing_names_on_install=False $INSTALL_PKGS && \
     yum clean all

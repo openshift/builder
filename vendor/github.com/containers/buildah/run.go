@@ -3,10 +3,12 @@ package buildah
 import (
 	"fmt"
 	"io"
+	"net"
 
 	"github.com/containers/buildah/define"
 	"github.com/containers/buildah/internal"
 	"github.com/containers/buildah/pkg/sshagent"
+	"github.com/containers/common/libnetwork/etchosts"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage/pkg/lockfile"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -86,7 +88,9 @@ type RunOptions struct {
 	Runtime string
 	// Args adds global arguments for the runtime.
 	Args []string
-	// NoHosts use the images /etc/hosts file
+	// NoHostname won't create new /etc/hostname file
+	NoHostname bool
+	// NoHosts won't create new /etc/hosts file
 	NoHosts bool
 	// NoPivot adds the --no-pivot runtime flag.
 	NoPivot bool
@@ -166,18 +170,22 @@ type RunOptions struct {
 
 // RunMountArtifacts are the artifacts created when using a run mount.
 type runMountArtifacts struct {
-	// RunMountTargets are the run mount targets inside the container
+	// RunMountTargets are the run mount targets inside the container which should be removed
 	RunMountTargets []string
+	// RunOverlayDirs are overlay directories which will need to be cleaned up using overlay.RemoveTemp()
+	RunOverlayDirs []string
 	// TmpFiles are artifacts that need to be removed outside the container
 	TmpFiles []string
-	// Any external images which were mounted inside container
+	// Any images which were mounted, which should be unmounted
 	MountedImages []string
-	// Agents are the ssh agents started
+	// Agents are the ssh agents started, which should have their Shutdown() methods called
 	Agents []*sshagent.AgentServer
 	// SSHAuthSock is the path to the ssh auth sock inside the container
 	SSHAuthSock string
-	// TargetLocks to be unlocked if there are any.
+	// Lock files, which should have their Unlock() methods called
 	TargetLocks []*lockfile.LockFile
+	// Intermediate mount points, which should be Unmount()ed and Removed()d
+	IntermediateMounts []string
 }
 
 // RunMountInfo are the available run mounts for this run
@@ -204,4 +212,13 @@ type IDMaps struct {
 	rootGID    int
 	processUID int
 	processGID int
+}
+
+// netResult type to hold network info for hosts/resolv.conf
+type netResult struct {
+	entries           etchosts.HostEntries
+	dnsServers        []string
+	excludeIPs        []net.IP
+	ipv6              bool
+	keepHostResolvers bool
 }

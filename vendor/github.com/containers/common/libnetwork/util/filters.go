@@ -7,6 +7,7 @@ import (
 	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/filters"
 	"github.com/containers/common/pkg/util"
+	"golang.org/x/exp/slices"
 )
 
 func GenerateNetworkFilters(f map[string][]string) ([]types.FilterFunc, error) {
@@ -32,13 +33,13 @@ func createFilterFuncs(key string, filterValues []string) (types.FilterFunc, err
 	case types.Driver:
 		// matches network driver
 		return func(net types.Network) bool {
-			return util.StringInSlice(net.Driver, filterValues)
+			return slices.Contains(filterValues, net.Driver)
 		}, nil
 
 	case "id":
 		// matches part of one id
 		return func(net types.Network) bool {
-			return util.FilterID(net.ID, filterValues)
+			return filters.FilterID(net.ID, filterValues)
 		}, nil
 
 		// TODO: add dns enabled, internal filter
@@ -67,7 +68,7 @@ func createPruneFilterFuncs(key string, filterValues []string) (types.FilterFunc
 		}, nil
 	case "label!":
 		return func(net types.Network) bool {
-			return !filters.MatchLabelFilters(filterValues, net.Labels)
+			return filters.MatchNegatedLabelFilters(filterValues, net.Labels)
 		}, nil
 	case "until":
 		until, err := filters.ComputeUntilTimestamp(filterValues)

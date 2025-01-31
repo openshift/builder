@@ -1,10 +1,10 @@
 //go:build linux || freebsd
-// +build linux freebsd
 
 package netavark
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 
@@ -48,7 +48,7 @@ func (e *ipamError) Error() string {
 	return msg
 }
 
-func newIPAMError(cause error, msg string, args ...interface{}) *ipamError {
+func newIPAMError(cause error, msg string, args ...any) *ipamError {
 	return &ipamError{
 		msg:   fmt.Sprintf(msg, args...),
 		cause: cause,
@@ -356,6 +356,26 @@ func (n *netavarkNetwork) deallocIPs(opts *types.NetworkOptions) error {
 		return nil
 	})
 	return err
+}
+
+func (n *netavarkNetwork) removeNetworkIPAMBucket(network *types.Network) error {
+	if !requiresIPAMAlloc(network) {
+		return nil
+	}
+	db, err := n.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	return db.Update(func(tx *bbolt.Tx) error {
+		// Ignore ErrBucketNotFound, can happen if the network never allocated any ips,
+		// i.e. because no container was started.
+		if err := tx.DeleteBucket([]byte(network.Name)); err != nil && !errors.Is(err, bbolt.ErrBucketNotFound) {
+			return err
+		}
+		return nil
+	})
 }
 
 // requiresIPAMAlloc return true when we have to allocate ips for this network

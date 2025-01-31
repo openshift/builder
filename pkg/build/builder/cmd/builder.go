@@ -108,7 +108,7 @@ func newBuilderConfigFromEnvironment(out io.Writer, needsDocker bool, isolation,
 			}
 		}
 
-		storeOptions, err := storage.DefaultStoreOptions(false, 0)
+		storeOptions, err := storage.DefaultStoreOptions()
 		if err != nil {
 			return nil, err
 		}

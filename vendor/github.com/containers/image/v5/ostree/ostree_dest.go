@@ -335,7 +335,7 @@ func (d *ostreeImageDestination) importConfig(repo *otbuiltin.Repo, blob *blobTo
 // reflected in the manifest that will be written.
 // If the transport can not reuse the requested blob, TryReusingBlob returns (false, {}, nil); it returns a non-nil error only on an unexpected failure.
 func (d *ostreeImageDestination) TryReusingBlobWithOptions(ctx context.Context, info types.BlobInfo, options private.TryReusingBlobOptions) (bool, private.ReusedBlob, error) {
-	if !impl.OriginalBlobMatchesRequiredCompression(options) {
+	if !impl.OriginalCandidateMatchesTryReusingBlobOptions(options) {
 		return false, private.ReusedBlob{}, nil
 	}
 	if d.repo == nil {
@@ -344,6 +344,10 @@ func (d *ostreeImageDestination) TryReusingBlobWithOptions(ctx context.Context, 
 			return false, private.ReusedBlob{}, err
 		}
 		d.repo = repo
+	}
+
+	if err := info.Digest.Validate(); err != nil { // digest.Digest.Hex() panics on failure, so validate explicitly.
+		return false, private.ReusedBlob{}, err
 	}
 	branch := fmt.Sprintf("ociimage/%s", info.Digest.Hex())
 
@@ -470,12 +474,18 @@ func (d *ostreeImageDestination) Commit(context.Context, types.UnparsedImage) er
 		return nil
 	}
 	for _, layer := range d.schema.LayersDescriptors {
+		if err := layer.Digest.Validate(); err != nil { // digest.Digest.Encoded() panics on failure, so validate explicitly.
+			return err
+		}
 		hash := layer.Digest.Hex()
 		if err = checkLayer(hash); err != nil {
 			return err
 		}
 	}
 	for _, layer := range d.schema.FSLayers {
+		if err := layer.BlobSum.Validate(); err != nil { // digest.Digest.Encoded() panics on failure, so validate explicitly.
+			return err
+		}
 		hash := layer.BlobSum.Hex()
 		if err = checkLayer(hash); err != nil {
 			return err

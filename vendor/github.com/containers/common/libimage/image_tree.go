@@ -1,6 +1,9 @@
+//go:build !remote
+
 package libimage
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -35,7 +38,7 @@ func (i *Image) Tree(traverseChildren bool) (string, error) {
 		fmt.Fprintf(sb, "No Image Layers")
 	}
 
-	layerTree, err := i.runtime.layerTree(nil)
+	layerTree, err := i.runtime.layerTree(context.Background(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -50,7 +53,7 @@ func (i *Image) Tree(traverseChildren bool) (string, error) {
 		return tree.Print(), nil
 	}
 
-	// Walk all layers of the image and assemlbe their data.  Note that the
+	// Walk all layers of the image and assemble their data.  Note that the
 	// tree is constructed in reverse order to remain backwards compatible
 	// with Podman.
 	contents := []string{}
