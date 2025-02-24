@@ -19,6 +19,7 @@ import (
 	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/version"
+	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/lockfile"
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/sirupsen/logrus"
@@ -81,9 +82,23 @@ type InitConfig struct {
 // NewCNINetworkInterface creates the ContainerNetwork interface for the CNI backend.
 // Note: The networks are not loaded from disk until a method is called.
 func NewCNINetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
+	var netns *rootlessnetns.Netns
+	var err error
+	// Do not use unshare.IsRootless() here. We only care if we are running re-exec in the userns,
+	// IsRootless() also returns true if we are root in a userns which is not what we care about and
+	// causes issues as this slower more complicated rootless-netns logic should not be used as root.
+	val, ok := os.LookupEnv(unshare.UsernsEnvName)
+	useRootlessNetns := ok && val == "done"
+	if useRootlessNetns {
+		netns, err = rootlessnetns.New(conf.RunDir, rootlessnetns.CNI, conf.Config)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// root needs to use a globally unique lock because there is only one host netns
 	lockPath := defaultRootLockPath
-	if unshare.IsRootless() {
+	if useRootlessNetns {
 		lockPath = filepath.Join(conf.CNIConfigDir, "cni.lock")
 	}
 
@@ -109,14 +124,6 @@ func NewCNINetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
 	defaultSubnetPools := conf.Config.Network.DefaultSubnetPools
 	if defaultSubnetPools == nil {
 		defaultSubnetPools = config.DefaultSubnetPools
-	}
-
-	var netns *rootlessnetns.Netns
-	if unshare.IsRootless() {
-		netns, err = rootlessnetns.New(conf.RunDir, rootlessnetns.CNI, conf.Config)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	cni := libcni.NewCNIConfig(conf.Config.Network.CNIPluginDirs.Values, &cniExec{})
@@ -331,7 +338,7 @@ func (n *cniNetwork) NetworkInfo() types.NetworkInfo {
 	if err != nil {
 		logrus.Infof("Failed to get the dnsname plugin version: %v", err)
 	}
-	if _, err := os.Stat(dnsPath); err == nil {
+	if err := fileutils.Exists(dnsPath); err == nil {
 		info.DNS = types.DNSNetworkInfo{
 			Path:    dnsPath,
 			Package: dnsPackage,

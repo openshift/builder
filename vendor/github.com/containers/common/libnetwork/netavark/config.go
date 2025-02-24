@@ -10,13 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"time"
 
 	internalutil "github.com/containers/common/libnetwork/internal/util"
 	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/storage/pkg/stringid"
-	"golang.org/x/exp/slices"
 )
 
 func sliceRemoveDuplicates(strList []string) []string {
@@ -325,6 +325,11 @@ func createIpvlanOrMacvlan(network *types.Network) error {
 				if !slices.Contains(types.ValidIPVLANModes, value) {
 					return fmt.Errorf("unknown ipvlan mode %q", value)
 				}
+			}
+		case types.MetricOption:
+			_, err := strconv.ParseUint(value, 10, 32)
+			if err != nil {
+				return err
 			}
 		case types.MTUOption:
 			_, err := internalutil.ParseMTU(value)
