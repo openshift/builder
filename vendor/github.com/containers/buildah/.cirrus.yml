@@ -6,7 +6,7 @@ env:
     #### Global variables used for all tasks
     ####
     # Name of the ultimate destination branch for this CI run, PR or post-merge.
-    DEST_BRANCH: "main"
+    DEST_BRANCH: "release-1.37"
     GOPATH: "/var/tmp/go"
     GOSRC: "${GOPATH}/src/github.com/containers/buildah"
     # Overrides default location (/tmp/cirrus) for repo clone
@@ -32,7 +32,7 @@ env:
     DEBIAN_NAME: "debian-13"
 
     # Image identifiers
-    IMAGE_SUFFIX: "c20240222t143004z-f39f38d13"
+    IMAGE_SUFFIX: "c20240708t152000z-f40f39d13"
     FEDORA_CACHE_IMAGE_NAME: "fedora-${IMAGE_SUFFIX}"
     PRIOR_FEDORA_CACHE_IMAGE_NAME: "prior-fedora-${IMAGE_SUFFIX}"
     DEBIAN_CACHE_IMAGE_NAME: "debian-${IMAGE_SUFFIX}"
@@ -137,15 +137,9 @@ cross_build_task:
     alias: cross_build
     only_if: >-
         $CIRRUS_CHANGE_TITLE !=~ '.*CI:DOCS.*'
-
-    osx_instance:
-        image: ghcr.io/cirruslabs/macos-ventura-base:latest
-
+    env:
+        HOME: /root
     script:
-        - brew update
-        - brew install go
-        - brew install go-md2man
-        - brew install gpgme
         - go version
         - make cross CGO_ENABLED=0
 
@@ -164,7 +158,7 @@ unit_task:
       - vendor
       - cross_build
 
-    timeout_in: 1h
+    timeout_in: 90m
 
     matrix:
         - env:
@@ -181,7 +175,7 @@ unit_task:
 
 
 conformance_task:
-    name: 'Build Conformance w/ $STORAGE_DRIVER'
+    name: 'Debian Conformance w/ $STORAGE_DRIVER'
     alias: conformance
     only_if: *not_build_docs
     depends_on: *smoke_vendor_cross
@@ -194,6 +188,7 @@ conformance_task:
     matrix:
         - env:
             STORAGE_DRIVER: 'vfs'
+            TMPDIR: '/var/tmp'
         - env:
             STORAGE_DRIVER: 'overlay'
 
@@ -221,7 +216,6 @@ integration_task:
             DISTRO_NV: "${DEBIAN_NAME}"
             IMAGE_NAME: "${DEBIAN_CACHE_IMAGE_NAME}"
             STORAGE_DRIVER: 'vfs'
-            CI_DESIRED_RUNTIME: runc
         # OVERLAY
         - env:
             DISTRO_NV: "${FEDORA_NAME}"
@@ -235,7 +229,6 @@ integration_task:
             DISTRO_NV: "${DEBIAN_NAME}"
             IMAGE_NAME: "${DEBIAN_CACHE_IMAGE_NAME}"
             STORAGE_DRIVER: 'overlay'
-            CI_DESIRED_RUNTIME: runc
 
     gce_instance:
         image_name: "$IMAGE_NAME"
