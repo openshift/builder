@@ -1,9 +1,11 @@
 package rootlessnetns
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,9 +15,11 @@ import (
 	"github.com/containers/common/libnetwork/pasta"
 	"github.com/containers/common/libnetwork/resolvconf"
 	"github.com/containers/common/libnetwork/slirp4netns"
+	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/netns"
 	"github.com/containers/common/pkg/systemd"
+	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/homedir"
 	"github.com/containers/storage/pkg/lockfile"
 	"github.com/hashicorp/go-multierror"
@@ -30,6 +34,9 @@ const (
 	rootlessNetnsDir = "rootless-netns"
 	// refCountFile file name for the ref count file
 	refCountFile = "ref-count"
+
+	// infoCacheFile file name for the cache file used to store the rootless netns info
+	infoCacheFile = "info.json"
 
 	// rootlessNetNsConnPidFile is the name of the rootless netns slirp4netns/pasta pid file
 	rootlessNetNsConnPidFile = "rootless-netns-conn.pid"
@@ -50,6 +57,10 @@ type Netns struct {
 
 	// config contains containers.conf options.
 	config *config.Config
+
+	// info contain information about ip addresses used in the netns.
+	// A caller can get this info via Info().
+	info *types.RootlessNetnsInfo
 }
 
 type rootlessNetnsError struct {
@@ -106,6 +117,9 @@ func (n *Netns) getOrCreateNetns() (ns.NetNS, bool, error) {
 			// quick check if pasta/slirp4netns are still running
 			err := unix.Kill(pid, 0)
 			if err == nil {
+				if err := n.deserializeInfo(); err != nil {
+					return nil, false, wrapError("deserialize info", err)
+				}
 				// All good, return the netns.
 				return nsRef, false, nil
 			}
@@ -121,6 +135,15 @@ func (n *Netns) getOrCreateNetns() (ns.NetNS, bool, error) {
 		}
 		// In case of errors continue and setup the network cmd again.
 	} else {
+		// Special case, the file might exist already but is not a valid netns.
+		// One reason could be that a previous setup was killed between creating
+		// the file and mounting it. Or if the file is not on tmpfs (deleted on boot)
+		// you might run into it as well: https://github.com/containers/podman/issues/25144
+		// We have to do this because NewNSAtPath fails with EEXIST otherwise
+		if errors.As(err, &ns.NSPathNotNSErr{}) {
+			// We don't care if this fails, NewNSAtPath() should return the real error.
+			_ = os.Remove(nsPath)
+		}
 		logrus.Debugf("Creating rootless network namespace at %q", nsPath)
 		// We have to create the netns dir again here because it is possible
 		// that cleanup() removed it.
@@ -154,7 +177,7 @@ func (n *Netns) getOrCreateNetns() (ns.NetNS, bool, error) {
 }
 
 func (n *Netns) cleanup() error {
-	if _, err := os.Stat(n.dir); err != nil {
+	if err := fileutils.Exists(n.dir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			// dir does not exists no need for cleanup
 			return nil
@@ -172,7 +195,7 @@ func (n *Netns) cleanup() error {
 	if err := n.cleanupRootlessNetns(); err != nil {
 		multiErr = multierror.Append(multiErr, wrapError("kill network process", err))
 	}
-	if err := os.RemoveAll(n.dir); err != nil {
+	if err := os.RemoveAll(n.dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		multiErr = multierror.Append(multiErr, wrapError("remove rootless netns dir", err))
 	}
 
@@ -187,7 +210,7 @@ func (n *Netns) setupPasta(nsPath string) error {
 		Netns:        nsPath,
 		ExtraOptions: []string{"--pid", pidPath},
 	}
-	res, err := pasta.Setup2(&pastaOpts)
+	res, err := pasta.Setup(&pastaOpts)
 	if err != nil {
 		return fmt.Errorf("setting up Pasta: %w", err)
 	}
@@ -216,6 +239,15 @@ func (n *Netns) setupPasta(nsPath string) error {
 		Nameservers:     res.DNSForwardIPs,
 	}); err != nil {
 		return wrapError("create resolv.conf", err)
+	}
+
+	n.info = &types.RootlessNetnsInfo{
+		IPAddresses:   res.IPAddresses,
+		DnsForwardIps: res.DNSForwardIPs,
+		MapGuestIps:   res.MapGuestAddrIPs,
+	}
+	if err := n.serializeInfo(); err != nil {
+		return wrapError("serialize info", err)
 	}
 
 	return nil
@@ -252,6 +284,12 @@ func (n *Netns) setupSlirp4netns(nsPath string) error {
 	if err != nil {
 		return wrapError("determine default slirp4netns DNS address", err)
 	}
+	nameservers := []string{resolveIP.String()}
+
+	netnsIP, err := slirp4netns.GetIP(res.Subnet)
+	if err != nil {
+		return wrapError("determine default slirp4netns ip address", err)
+	}
 
 	if err := resolvconf.New(&resolvconf.Params{
 		Path: n.getPath(resolvConfName),
@@ -261,16 +299,30 @@ func (n *Netns) setupSlirp4netns(nsPath string) error {
 		},
 		IPv6Enabled:     res.IPv6,
 		KeepHostServers: true,
-		Nameservers:     []string{resolveIP.String()},
+		Nameservers:     nameservers,
 	}); err != nil {
 		return wrapError("create resolv.conf", err)
 	}
+
+	n.info = &types.RootlessNetnsInfo{
+		IPAddresses:   []net.IP{*netnsIP},
+		DnsForwardIps: nameservers,
+	}
+	if err := n.serializeInfo(); err != nil {
+		return wrapError("serialize info", err)
+	}
+
 	return nil
 }
 
 func (n *Netns) cleanupRootlessNetns() error {
 	pidFile := n.getPath(rootlessNetNsConnPidFile)
 	pid, err := readPidFile(pidFile)
+	// do not hard error if the file dos not exists, cleanup should be idempotent
+	if errors.Is(err, fs.ErrNotExist) {
+		logrus.Debugf("Rootless netns conn pid file does not exists %s", pidFile)
+		return nil
+	}
 	if err == nil {
 		// kill the slirp/pasta process so we do not leak it
 		err = unix.Kill(pid, unix.SIGTERM)
@@ -337,7 +389,7 @@ func (n *Netns) setupMounts() error {
 	// 2. Also keep /run/systemd if it exists.
 	// Many files are symlinked into this dir, for example /dev/log.
 	runSystemd := "/run/systemd"
-	_, err = os.Stat(runSystemd)
+	err = fileutils.Exists(runSystemd)
 	if err == nil {
 		newRunSystemd := n.getPath(runSystemd)
 		err = mountAndMkdirDest(runSystemd, newRunSystemd, none, unix.MS_BIND|unix.MS_REC)
@@ -453,6 +505,10 @@ func (n *Netns) setupMounts() error {
 
 	// 5. Mount the new prepared run dir to /run, it has to be recursive to keep the other bind mounts.
 	runDir := n.getPath("run")
+	err = os.MkdirAll(runDir, 0o700)
+	if err != nil {
+		return wrapError("create run directory", err)
+	}
 	// relabel the new run directory to the iptables /run label
 	// this is important, otherwise the iptables command will fail
 	err = label.Relabel(runDir, "system_u:object_r:iptables_var_run_t:s0", false)
@@ -476,7 +532,7 @@ func (n *Netns) mountCNIVarDir() error {
 	// while we could always use /var there are cases where a user might store the cni
 	// configs under /var/custom and this would break
 	for {
-		if _, err := os.Stat(varTarget); err == nil {
+		if err := fileutils.Exists(varTarget); err == nil {
 			varDir = n.getPath(varTarget)
 			break
 		}
@@ -499,14 +555,14 @@ func (n *Netns) mountCNIVarDir() error {
 	return nil
 }
 
-func (n *Netns) runInner(toRun func() error) (err error) {
+func (n *Netns) runInner(toRun func() error, cleanup bool) (err error) {
 	nsRef, newNs, err := n.getOrCreateNetns()
 	if err != nil {
 		return err
 	}
 	defer nsRef.Close()
-	// If a new netns was created make sure to clean it up again on an error to not leak it.
-	if newNs {
+	// If a new netns was created make sure to clean it up again on an error to not leak it if requested.
+	if newNs && cleanup {
 		defer func() {
 			if err != nil {
 				if err := n.cleanup(); err != nil {
@@ -520,12 +576,15 @@ func (n *Netns) runInner(toRun func() error) (err error) {
 		if err := n.setupMounts(); err != nil {
 			return err
 		}
-		return toRun()
+		if err := toRun(); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
 func (n *Netns) Setup(nets int, toRun func() error) error {
-	err := n.runInner(toRun)
+	err := n.runInner(toRun, true)
 	if err != nil {
 		return err
 	}
@@ -534,25 +593,22 @@ func (n *Netns) Setup(nets int, toRun func() error) error {
 }
 
 func (n *Netns) Teardown(nets int, toRun func() error) error {
-	var multiErr *multierror.Error
-	count, countErr := refCount(n.dir, -nets)
-	if countErr != nil {
-		multiErr = multierror.Append(multiErr, countErr)
-	}
-	err := n.runInner(toRun)
+	err := n.runInner(toRun, true)
 	if err != nil {
-		multiErr = multierror.Append(multiErr, err)
+		return err
+	}
+	// decrement only if teardown didn't fail, podman will call us again on errors so we should not double decrement
+	count, err := refCount(n.dir, -nets)
+	if err != nil {
+		return err
 	}
 
-	// only cleanup if the ref count did not throw an error
-	if count == 0 && countErr == nil {
-		err = n.cleanup()
-		if err != nil {
-			multiErr = multierror.Append(multiErr, wrapError("cleanup", err))
-		}
+	// cleanup when ref count is 0
+	if count == 0 {
+		return n.cleanup()
 	}
 
-	return multiErr.ErrorOrNil()
+	return nil
 }
 
 // Run any long running function in the userns.
@@ -574,7 +630,7 @@ func (n *Netns) Run(lock *lockfile.LockFile, toRun func() error) error {
 		return err
 	}
 
-	inErr := n.runInner(inner)
+	inErr := n.runInner(inner, false)
 	// make sure to always reset the ref counter afterwards
 	count, err := refCount(n.dir, -1)
 	if err != nil {
@@ -584,9 +640,8 @@ func (n *Netns) Run(lock *lockfile.LockFile, toRun func() error) error {
 		logrus.Errorf("Failed to decrement ref count: %v", err)
 		return inErr
 	}
-	// runInner() already cleans up the netns when it created a new one on errors
-	// so we only need to do that if there was no error.
-	if inErr == nil && count == 0 {
+
+	if count == 0 {
 		err = n.cleanup()
 		if err != nil {
 			return wrapError("cleanup", err)
@@ -594,6 +649,12 @@ func (n *Netns) Run(lock *lockfile.LockFile, toRun func() error) error {
 	}
 
 	return inErr
+}
+
+// IPAddresses returns the currently used ip addresses in the netns
+// These should then not be assigned for the host.containers.internal entry.
+func (n *Netns) Info() *types.RootlessNetnsInfo {
+	return n.info
 }
 
 func refCount(dir string, inc int) (int, error) {
@@ -631,4 +692,27 @@ func readPidFile(path string) (int, error) {
 		return 0, err
 	}
 	return strconv.Atoi(strings.TrimSpace(string(b)))
+}
+
+func (n *Netns) serializeInfo() error {
+	f, err := os.Create(filepath.Join(n.dir, infoCacheFile))
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(f).Encode(n.info)
+}
+
+func (n *Netns) deserializeInfo() error {
+	f, err := os.Open(filepath.Join(n.dir, infoCacheFile))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	defer f.Close()
+	if n.info == nil {
+		n.info = new(types.RootlessNetnsInfo)
+	}
+	return json.NewDecoder(f).Decode(n.info)
 }

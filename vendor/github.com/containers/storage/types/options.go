@@ -11,6 +11,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	cfg "github.com/containers/storage/pkg/config"
+	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/homedir"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/unshare"
@@ -76,7 +77,7 @@ func loadDefaultStoreOptions() {
 
 	if path, ok := os.LookupEnv("XDG_CONFIG_HOME"); ok {
 		homeConfigFile := filepath.Join(path, "containers", "storage.conf")
-		if _, err := os.Stat(homeConfigFile); err == nil {
+		if err := fileutils.Exists(homeConfigFile); err == nil {
 			// user storage.conf in XDG_CONFIG_HOME if it exists
 			defaultOverrideConfigFile = homeConfigFile
 		} else {
@@ -87,7 +88,7 @@ func loadDefaultStoreOptions() {
 		}
 	}
 
-	_, err := os.Stat(defaultOverrideConfigFile)
+	err := fileutils.Exists(defaultOverrideConfigFile)
 	if err == nil {
 		// The DefaultConfigFile() function returns the path
 		// of the used storage.conf file, by returning defaultConfigFile
@@ -150,7 +151,7 @@ func loadStoreOptionsFromConfFile(storageConf string) (StoreOptions, error) {
 			return storageOpts, err
 		}
 	}
-	_, err = os.Stat(storageConf)
+	err = fileutils.Exists(storageConf)
 	if err != nil && !os.IsNotExist(err) {
 		return storageOpts, err
 	}
@@ -343,15 +344,15 @@ func getRootlessStorageOpts(systemOpts StoreOptions) (StoreOptions, error) {
 			dirEntries, err := os.ReadDir(opts.GraphRoot)
 			if err == nil {
 				for _, entry := range dirEntries {
-					if strings.HasSuffix(entry.Name(), "-images") {
-						opts.GraphDriverName = strings.TrimSuffix(entry.Name(), "-images")
+					if name, ok := strings.CutSuffix(entry.Name(), "-images"); ok {
+						opts.GraphDriverName = name
 						break
 					}
 				}
 			}
 
 			if opts.GraphDriverName == "" {
-				if canUseRootlessOverlay(opts.GraphRoot, opts.RunRoot) {
+				if canUseRootlessOverlay() {
 					opts.GraphDriverName = overlayDriver
 				} else {
 					opts.GraphDriverName = "vfs"
@@ -480,33 +481,6 @@ func ReloadConfigurationFile(configFile string, storeOptions *StoreOptions) erro
 	if config.Storage.Options.MountOpt != "" {
 		storeOptions.GraphDriverOptions = append(storeOptions.GraphDriverOptions, fmt.Sprintf("%s.mountopt=%s", config.Storage.Driver, config.Storage.Options.MountOpt))
 	}
-
-	uidmap, err := idtools.ParseIDMap([]string{config.Storage.Options.RemapUIDs}, "remap-uids")
-	if err != nil {
-		return err
-	}
-	gidmap, err := idtools.ParseIDMap([]string{config.Storage.Options.RemapGIDs}, "remap-gids")
-	if err != nil {
-		return err
-	}
-
-	if config.Storage.Options.RemapUser != "" && config.Storage.Options.RemapGroup == "" {
-		config.Storage.Options.RemapGroup = config.Storage.Options.RemapUser
-	}
-	if config.Storage.Options.RemapGroup != "" && config.Storage.Options.RemapUser == "" {
-		config.Storage.Options.RemapUser = config.Storage.Options.RemapGroup
-	}
-	if config.Storage.Options.RemapUser != "" && config.Storage.Options.RemapGroup != "" {
-		mappings, err := idtools.NewIDMappings(config.Storage.Options.RemapUser, config.Storage.Options.RemapGroup)
-		if err != nil {
-			logrus.Warningf("Error initializing ID mappings for %s:%s %v\n", config.Storage.Options.RemapUser, config.Storage.Options.RemapGroup, err)
-			return err
-		}
-		uidmap = mappings.UIDs()
-		gidmap = mappings.GIDs()
-	}
-	storeOptions.UIDMap = uidmap
-	storeOptions.GIDMap = gidmap
 	storeOptions.RootAutoNsUser = config.Storage.Options.RootAutoUsernsUser
 	if config.Storage.Options.AutoUsernsMinSize > 0 {
 		storeOptions.AutoNsMinSize = config.Storage.Options.AutoUsernsMinSize

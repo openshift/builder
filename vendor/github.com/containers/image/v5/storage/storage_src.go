@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/containers/image/v5/docker/reference"
@@ -34,13 +35,14 @@ type storageImageSource struct {
 	impl.PropertyMethodsInitialize
 	stubs.NoGetBlobAtInitialize
 
-	imageRef              storageReference
-	image                 *storage.Image
-	systemContext         *types.SystemContext // SystemContext used in GetBlob() to create temporary files
-	metadata              storageImageMetadata
-	cachedManifest        []byte     // A cached copy of the manifest, if already known, or nil
-	getBlobMutex          sync.Mutex // Mutex to sync state for parallel GetBlob executions
-	getBlobMutexProtected getBlobMutexProtected
+	imageRef               storageReference
+	image                  *storage.Image
+	systemContext          *types.SystemContext // SystemContext used in GetBlob() to create temporary files
+	metadata               storageImageMetadata
+	cachedManifest         []byte     // A cached copy of the manifest, if already known, or nil
+	cachedManifestMIMEType string     // Valid if cachedManifest != nil
+	getBlobMutex           sync.Mutex // Mutex to sync state for parallel GetBlob executions
+	getBlobMutexProtected  getBlobMutexProtected
 }
 
 // getBlobMutexProtected contains storageImageSource data protected by getBlobMutex.
@@ -107,12 +109,11 @@ func (s *storageImageSource) Close() error {
 // GetBlob returns a stream for the specified blob, and the blob’s size (or -1 if unknown).
 // The Digest field in BlobInfo is guaranteed to be provided, Size may be -1 and MediaType may be optionally provided.
 // May update BlobInfoCache, preferably after it knows for certain that a blob truly exists at a specific location.
-func (s *storageImageSource) GetBlob(ctx context.Context, info types.BlobInfo, cache types.BlobInfoCache) (rc io.ReadCloser, n int64, err error) {
+func (s *storageImageSource) GetBlob(ctx context.Context, info types.BlobInfo, cache types.BlobInfoCache) (io.ReadCloser, int64, error) {
 	// We need a valid digest value.
 	digest := info.Digest
 
-	err = digest.Validate()
-	if err != nil {
+	if err := digest.Validate(); err != nil {
 		return nil, 0, err
 	}
 
@@ -154,7 +155,7 @@ func (s *storageImageSource) GetBlob(ctx context.Context, info types.BlobInfo, c
 	// NOTE: the blob is first written to a temporary file and subsequently
 	// closed.  The intention is to keep the time we own the storage lock
 	// as short as possible to allow other processes to access the storage.
-	rc, n, _, err = s.getBlobAndLayerID(digest, layers)
+	rc, n, _, err := s.getBlobAndLayerID(digest, layers)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -177,7 +178,7 @@ func (s *storageImageSource) GetBlob(ctx context.Context, info types.BlobInfo, c
 	// On Unix and modern Windows (2022 at least) we can eagerly unlink the file to ensure it's automatically
 	// cleaned up on process termination (or if the caller forgets to invoke Close())
 	// On older versions of Windows we will have to fallback to relying on the caller to invoke Close()
-	if err := os.Remove(tmpFile.Name()); err != nil {
+	if err := os.Remove(tmpFile.Name()); err == nil {
 		tmpFileRemovePending = false
 	}
 
@@ -247,7 +248,7 @@ func (s *storageImageSource) GetManifest(ctx context.Context, instanceDigest *di
 		}
 		return blob, manifest.GuessMIMEType(blob), err
 	}
-	if len(s.cachedManifest) == 0 {
+	if s.cachedManifest == nil {
 		// The manifest is stored as a big data item.
 		// Prefer the manifest corresponding to the user-specified digest, if available.
 		if s.imageRef.named != nil {
@@ -267,15 +268,16 @@ func (s *storageImageSource) GetManifest(ctx context.Context, instanceDigest *di
 		}
 		// If the user did not specify a digest, or this is an old image stored before manifestBigDataKey was introduced, use the default manifest.
 		// Note that the manifest may not match the expected digest, and that is likely to fail eventually, e.g. in c/image/image/UnparsedImage.Manifest().
-		if len(s.cachedManifest) == 0 {
+		if s.cachedManifest == nil {
 			cachedBlob, err := s.imageRef.transport.store.ImageBigData(s.image.ID, storage.ImageDigestBigDataKey)
 			if err != nil {
 				return nil, "", err
 			}
 			s.cachedManifest = cachedBlob
 		}
+		s.cachedManifestMIMEType = manifest.GuessMIMEType(s.cachedManifest)
 	}
-	return s.cachedManifest, manifest.GuessMIMEType(s.cachedManifest), err
+	return s.cachedManifest, s.cachedManifestMIMEType, err
 }
 
 // LayerInfosForCopy() returns the list of layer blobs that make up the root filesystem of
@@ -301,15 +303,12 @@ func (s *storageImageSource) LayerInfosForCopy(ctx context.Context, instanceDige
 		uncompressedLayerType = manifest.DockerV2SchemaLayerMediaTypeUncompressed
 	}
 
-	physicalBlobInfos := []types.BlobInfo{}
+	physicalBlobInfos := []types.BlobInfo{} // Built reversed
 	layerID := s.image.TopLayer
 	for layerID != "" {
 		layer, err := s.imageRef.transport.store.Layer(layerID)
 		if err != nil {
 			return nil, fmt.Errorf("reading layer %q in image %q: %w", layerID, s.image.ID, err)
-		}
-		if layer.UncompressedSize < 0 {
-			return nil, fmt.Errorf("uncompressed size for layer %q is unknown", layerID)
 		}
 
 		blobDigest := layer.UncompressedDigest
@@ -332,17 +331,22 @@ func (s *storageImageSource) LayerInfosForCopy(ctx context.Context, instanceDige
 				return nil, fmt.Errorf("parsing expected diffID %q for layer %q: %w", expectedDigest, layerID, err)
 			}
 		}
+		size := layer.UncompressedSize
+		if size < 0 {
+			size = -1
+		}
 		s.getBlobMutex.Lock()
 		s.getBlobMutexProtected.digestToLayerID[blobDigest] = layer.ID
 		s.getBlobMutex.Unlock()
 		blobInfo := types.BlobInfo{
 			Digest:    blobDigest,
-			Size:      layer.UncompressedSize,
+			Size:      size,
 			MediaType: uncompressedLayerType,
 		}
-		physicalBlobInfos = append([]types.BlobInfo{blobInfo}, physicalBlobInfos...)
+		physicalBlobInfos = append(physicalBlobInfos, blobInfo)
 		layerID = layer.Parent
 	}
+	slices.Reverse(physicalBlobInfos)
 
 	res, err := buildLayerInfosForCopy(man.LayerInfos(), physicalBlobInfos)
 	if err != nil {
@@ -453,10 +457,16 @@ func (s *storageImageSource) getSize() (int64, error) {
 		if err != nil {
 			return -1, err
 		}
-		if (layer.TOCDigest == "" && layer.UncompressedDigest == "") || layer.UncompressedSize < 0 {
+		if (layer.TOCDigest == "" && layer.UncompressedDigest == "") || (layer.TOCDigest == "" && layer.UncompressedSize < 0) {
 			return -1, fmt.Errorf("size for layer %q is unknown, failing getSize()", layerID)
 		}
-		sum += layer.UncompressedSize
+		// FIXME: We allow layer.UncompressedSize < 0 above, because currently images in an Additional Layer Store don’t provide that value.
+		// Right now, various callers in Podman (and, also, newImage in this package) don’t expect the size computation to fail.
+		// Should we update the callers, or do we need to continue returning inaccurate information here? Or should we pay the cost
+		// to compute the size from the diff?
+		if layer.UncompressedSize >= 0 {
+			sum += layer.UncompressedSize
+		}
 		if layer.Parent == "" {
 			break
 		}

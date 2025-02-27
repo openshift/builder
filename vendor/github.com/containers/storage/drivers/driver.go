@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/containers/storage/internal/dedup"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/containers/storage/pkg/directory"
+	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/idtools"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
@@ -80,6 +82,23 @@ type ApplyDiffWithDifferOpts struct {
 	Flags map[string]interface{}
 }
 
+// DedupArgs contains the information to perform storage deduplication.
+type DedupArgs struct {
+	// Layers is the list of layers to deduplicate.
+	Layers []string
+
+	// Options that are passed directly to the pkg/dedup.DedupDirs function.
+	Options dedup.DedupOptions
+}
+
+// DedupResult contains the result of the Dedup() call.
+type DedupResult struct {
+	// Deduped represents the total number of bytes saved by deduplication.
+	// This value accounts also for all previously deduplicated data, not only the savings
+	// from the last run.
+	Deduped uint64
+}
+
 // InitFunc initializes the storage driver.
 type InitFunc func(homedir string, options Options) (Driver, error)
 
@@ -138,6 +157,8 @@ type ProtoDriver interface {
 	// AdditionalImageStores returns additional image stores supported by the driver
 	// This API is experimental and can be changed without bumping the major version number.
 	AdditionalImageStores() []string
+	// Dedup performs deduplication of the driver's storage.
+	Dedup(DedupArgs) (DedupResult, error)
 }
 
 // DiffDriver is the interface to use to implement graph diffs
@@ -188,13 +209,14 @@ type Driver interface {
 type DriverWithDifferOutput struct {
 	Differ             Differ
 	Target             string
-	Size               int64
+	Size               int64 // Size of the uncompressed layer, -1 if unknown. Must be known if UncompressedDigest is set.
 	UIDs               []uint32
 	GIDs               []uint32
 	UncompressedDigest digest.Digest
+	CompressedDigest   digest.Digest
 	Metadata           string
 	BigData            map[string][]byte
-	TarSplit           []byte
+	TarSplit           []byte // nil if not available
 	TOCDigest          digest.Digest
 	// RootDirMode is the mode of the root directory of the layer, if specified.
 	RootDirMode *os.FileMode
@@ -209,25 +231,30 @@ const (
 	// DifferOutputFormatDir means the output is a directory and it will
 	// keep the original layout.
 	DifferOutputFormatDir = iota
-	// DifferOutputFormatFlat will store the files by their checksum, in the form
-	// checksum[0:2]/checksum[2:]
+	// DifferOutputFormatFlat will store the files by their checksum, per
+	// pkg/chunked/internal/composefs.RegularFilePathForValidatedDigest.
 	DifferOutputFormatFlat
 )
 
+// DifferFsVerity is a part of the experimental Differ interface and should not be used from outside of c/storage.
+// It configures the fsverity requirement.
 type DifferFsVerity int
 
 const (
 	// DifferFsVerityDisabled means no fs-verity is used
 	DifferFsVerityDisabled = iota
 
-	// DifferFsVerityEnabled means fs-verity is used when supported
-	DifferFsVerityEnabled
+	// DifferFsVerityIfAvailable means fs-verity is used when supported by
+	// the underlying kernel and filesystem.
+	DifferFsVerityIfAvailable
 
-	// DifferFsVerityRequired means fs-verity is required
+	// DifferFsVerityRequired means fs-verity is required.  Note this is not
+	// currently set or exposed by the overlay driver.
 	DifferFsVerityRequired
 )
 
-// DifferOptions overrides how the differ work
+// DifferOptions is a part of the experimental Differ interface and should not be used from outside of c/storage.
+// It overrides how the differ works.
 type DifferOptions struct {
 	// Format defines the destination directory layout format
 	Format DifferOutputFormat
@@ -247,8 +274,8 @@ type Differ interface {
 type DriverWithDiffer interface {
 	Driver
 	// ApplyDiffWithDiffer applies the changes using the callback function.
-	// If id is empty, then a staging directory is created.  The staging directory is guaranteed to be usable with ApplyDiffFromStagingDirectory.
-	ApplyDiffWithDiffer(id, parent string, options *ApplyDiffWithDifferOpts, differ Differ) (output DriverWithDifferOutput, err error)
+	// The staging directory created by this function is guaranteed to be usable with ApplyDiffFromStagingDirectory.
+	ApplyDiffWithDiffer(options *ApplyDiffWithDifferOpts, differ Differ) (output DriverWithDifferOutput, err error)
 	// ApplyDiffFromStagingDirectory applies the changes using the diffOutput target directory.
 	ApplyDiffFromStagingDirectory(id, parent string, diffOutput *DriverWithDifferOutput, options *ApplyDiffWithDifferOpts) error
 	// CleanupStagingDirectory cleanups the staging directory.  It can be used to cleanup the staging directory on errors
@@ -297,8 +324,8 @@ type AdditionalLayerStoreDriver interface {
 	Driver
 
 	// LookupAdditionalLayer looks up additional layer store by the specified
-	// digest and ref and returns an object representing that layer.
-	LookupAdditionalLayer(d digest.Digest, ref string) (AdditionalLayer, error)
+	// TOC digest and ref and returns an object representing that layer.
+	LookupAdditionalLayer(tocDigest digest.Digest, ref string) (AdditionalLayer, error)
 
 	// LookupAdditionalLayer looks up additional layer store by the specified
 	// ID and returns an object representing that layer.
@@ -376,8 +403,6 @@ type Options struct {
 	ImageStore          string
 	DriverPriority      []string
 	DriverOptions       []string
-	UIDMaps             []idtools.IDMap
-	GIDMaps             []idtools.IDMap
 	ExperimentalEnabled bool
 }
 
@@ -471,7 +496,7 @@ func ScanPriorDrivers(root string) map[string]bool {
 
 	for driver := range drivers {
 		p := filepath.Join(root, driver)
-		if _, err := os.Stat(p); err == nil {
+		if err := fileutils.Exists(p); err == nil {
 			driversMap[driver] = true
 		}
 	}
@@ -491,7 +516,7 @@ func driverPut(driver ProtoDriver, id string, mainErr *error) {
 		if *mainErr == nil {
 			*mainErr = err
 		} else {
-			logrus.Errorf(err.Error())
+			logrus.Error(err)
 		}
 	}
 }

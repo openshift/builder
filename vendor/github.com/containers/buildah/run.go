@@ -147,41 +147,55 @@ type RunOptions struct {
 	// after processing the AddCapabilities set.  If a capability appears in both
 	// lists, it will be dropped.
 	DropCapabilities []string
-	// Devices are the additional devices to add to the containers
+	// Devices are parsed additional devices to add
 	Devices define.ContainerDevices
-	// Secrets are the available secrets to use in a RUN
+	// DeviceSpecs are unparsed additional devices to add
+	DeviceSpecs []string
+	// Secrets are the available secrets to use
 	Secrets map[string]define.Secret
-	// SSHSources is the available ssh agents to use in a RUN
+	// SSHSources is the available ssh agents to use
 	SSHSources map[string]*sshagent.Source `json:"-"`
-	// RunMounts are mounts for this run. RunMounts for this run
-	// will not show up in subsequent runs.
+	// RunMounts are unparsed mounts to be added for this run
 	RunMounts []string
 	// Map of stages and container mountpoint if any from stage executor
 	StageMountPoints map[string]internal.StageMountDetails
-	// External Image mounts to be cleaned up.
-	// Buildah run --mount could mount image before RUN calls, RUN could cleanup
-	// them up as well
+	// IDs of mounted images to be unmounted before returning
+	// Deprecated: before 1.39, these images would not be consistently
+	// unmounted if Run() returned an error
 	ExternalImageMounts []string
 	// System context of current build
 	SystemContext *types.SystemContext
 	// CgroupManager to use for running OCI containers
 	CgroupManager string
+	// CDIConfigDir is the location of CDI configuration files, if the files in
+	// the default configuration locations shouldn't be used.
+	CDIConfigDir string
+	// CompatBuiltinVolumes causes the contents of locations marked as
+	// volumes in the container's configuration to be set up as bind mounts to
+	// directories which are not in the container's rootfs, hiding changes
+	// made to contents of those changes when the container is subsequently
+	// committed.
+	CompatBuiltinVolumes types.OptionalBool
 }
 
 // RunMountArtifacts are the artifacts created when using a run mount.
 type runMountArtifacts struct {
-	// RunMountTargets are the run mount targets inside the container
+	// RunMountTargets are the run mount targets inside the container which should be removed
 	RunMountTargets []string
+	// RunOverlayDirs are overlay directories which will need to be cleaned up using overlay.RemoveTemp()
+	RunOverlayDirs []string
 	// TmpFiles are artifacts that need to be removed outside the container
 	TmpFiles []string
-	// Any external images which were mounted inside container
+	// Any images which were mounted, which should be unmounted
 	MountedImages []string
-	// Agents are the ssh agents started
+	// Agents are the ssh agents started, which should have their Shutdown() methods called
 	Agents []*sshagent.AgentServer
 	// SSHAuthSock is the path to the ssh auth sock inside the container
 	SSHAuthSock string
-	// TargetLocks to be unlocked if there are any.
+	// Lock files, which should have their Unlock() methods called
 	TargetLocks []*lockfile.LockFile
+	// Intermediate mount points, which should be Unmount()ed and Removed()d
+	IntermediateMounts []string
 }
 
 // RunMountInfo are the available run mounts for this run
@@ -212,9 +226,10 @@ type IDMaps struct {
 
 // netResult type to hold network info for hosts/resolv.conf
 type netResult struct {
-	entries           etchosts.HostEntries
-	dnsServers        []string
-	excludeIPs        []net.IP
-	ipv6              bool
-	keepHostResolvers bool
+	entries                           etchosts.HostEntries
+	dnsServers                        []string
+	excludeIPs                        []net.IP
+	ipv6                              bool
+	keepHostResolvers                 bool
+	preferredHostContainersInternalIP string
 }
