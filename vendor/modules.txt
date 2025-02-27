@@ -1037,7 +1037,7 @@ google.golang.org/protobuf/types/descriptorpb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/timestamppb
-# gopkg.in/go-jose/go-jose.v2 v2.6.1
+# gopkg.in/go-jose/go-jose.v2 v2.6.3
 ## explicit
 gopkg.in/go-jose/go-jose.v2
 gopkg.in/go-jose/go-jose.v2/cipher
@@ -1045,11 +1045,9 @@ gopkg.in/go-jose/go-jose.v2/json
 # gopkg.in/inf.v0 v0.9.1
 ## explicit
 gopkg.in/inf.v0
-# gopkg.in/square/go-jose.v2 v2.6.0
+# gopkg.in/square/go-jose.v2 v2.6.0 => github.com/go-jose/go-jose v2.6.3+incompatible
 ## explicit
 gopkg.in/square/go-jose.v2
-gopkg.in/square/go-jose.v2/cipher
-gopkg.in/square/go-jose.v2/json
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
@@ -1482,6 +1480,7 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 # golang.org/x/net => golang.org/x/net v0.17.0
+# gopkg.in/square/go-jose.v2 => github.com/go-jose/go-jose v2.6.3+incompatible
 # k8s.io/api => k8s.io/api v0.27.3
 # k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.27.3
 # k8s.io/apimachinery => k8s.io/apimachinery v0.27.3
