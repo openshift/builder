@@ -7,6 +7,7 @@ package parse
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/platforms"
 	"github.com/containers/buildah/define"
 	mkcwtypes "github.com/containers/buildah/internal/mkcw/types"
 	internalParse "github.com/containers/buildah/internal/parse"
@@ -26,6 +27,7 @@ import (
 	"github.com/containers/common/pkg/parse"
 	"github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/types"
+	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/unshare"
 	storageTypes "github.com/containers/storage/types"
@@ -54,6 +56,8 @@ const (
 	// Lifecycle of following directory will be inherited from how host machine treats temporary directory
 	BuildahCacheDir = "buildah-cache"
 )
+
+var errInvalidSecretSyntax = errors.New("incorrect secret flag format: should be --secret id=foo,src=bar[,env=ENV][,type=file|env]")
 
 // RepoNamesToNamedReferences parse the raw string to Named reference
 func RepoNamesToNamedReferences(destList []string) ([]reference.Named, error) {
@@ -245,21 +249,32 @@ func parseSecurityOpts(securityOpts []string, commonOpts *define.CommonBuildOpti
 			commonOpts.ApparmorProfile = con[1]
 		case "seccomp":
 			commonOpts.SeccompProfilePath = con[1]
+		case "mask":
+			commonOpts.Masks = append(commonOpts.Masks, strings.Split(con[1], ":")...)
+		case "unmask":
+			unmasks := strings.Split(con[1], ":")
+			for _, unmask := range unmasks {
+				matches, _ := filepath.Glob(unmask)
+				if len(matches) > 0 {
+					commonOpts.Unmasks = append(commonOpts.Unmasks, matches...)
+					continue
+				}
+				commonOpts.Unmasks = append(commonOpts.Unmasks, unmask)
+			}
 		default:
 			return fmt.Errorf("invalid --security-opt 2: %q", opt)
 		}
-
 	}
 
 	if commonOpts.SeccompProfilePath == "" {
-		if _, err := os.Stat(SeccompOverridePath); err == nil {
+		if err := fileutils.Exists(SeccompOverridePath); err == nil {
 			commonOpts.SeccompProfilePath = SeccompOverridePath
 		} else {
-			if !errors.Is(err, os.ErrNotExist) {
+			if !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
-			if _, err := os.Stat(SeccompDefaultPath); err != nil {
-				if !errors.Is(err, os.ErrNotExist) {
+			if err := fileutils.Exists(SeccompDefaultPath); err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
 					return err
 				}
 			} else {
@@ -326,7 +341,7 @@ func validateExtraHost(val string) error {
 // validateIPAddress validates an Ip address.
 // for dns, ip, and ip6 flags also
 func validateIPAddress(val string) (string, error) {
-	var ip = net.ParseIP(strings.TrimSpace(val))
+	ip := net.ParseIP(strings.TrimSpace(val))
 	if ip != nil {
 		return ip.String(), nil
 	}
@@ -447,6 +462,42 @@ func SystemContextFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name strin
 	return ctx, nil
 }
 
+// pullPolicyWithFlags parses a string value of a pull policy, evaluating it in
+// combination with "always" and "never" boolean flags.
+// Allow for:
+// * --pull
+// * --pull=""
+// * --pull=true
+// * --pull=false
+// * --pull=never
+// * --pull=always
+// * --pull=ifmissing
+// * --pull=missing
+// * --pull=notpresent
+// * --pull=newer
+// * --pull=ifnewer
+// and --pull-always and --pull-never as boolean flags.
+func pullPolicyWithFlags(policySpec string, always, never bool) (define.PullPolicy, error) {
+	if always {
+		return define.PullAlways, nil
+	}
+	if never {
+		return define.PullNever, nil
+	}
+	policy := strings.ToLower(policySpec)
+	switch policy {
+	case "true", "missing", "ifmissing", "notpresent":
+		return define.PullIfMissing, nil
+	case "always":
+		return define.PullAlways, nil
+	case "false", "never":
+		return define.PullNever, nil
+	case "ifnewer", "newer":
+		return define.PullIfNewer, nil
+	}
+	return 0, fmt.Errorf("unrecognized pull policy %q", policySpec)
+}
+
 // PullPolicyFromOptions returns a PullPolicy that reflects the combination of
 // the specified "pull" and undocumented "pull-always" and "pull-never" flags.
 func PullPolicyFromOptions(c *cobra.Command) (define.PullPolicy, error) {
@@ -472,30 +523,23 @@ func PullPolicyFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name string) 
 		return 0, errors.New("can only set one of 'pull' or 'pull-always' or 'pull-never'")
 	}
 
-	// Allow for --pull, --pull=true, --pull=false, --pull=never, --pull=always
-	// --pull-always and --pull-never.  The --pull-never and --pull-always options
-	// will not be documented.
-	pullPolicy := define.PullIfMissing
-	pullFlagValue := findFlagFunc("pull").Value.String()
-	if strings.EqualFold(pullFlagValue, "true") || strings.EqualFold(pullFlagValue, "ifnewer") {
-		pullPolicy = define.PullIfNewer
-	}
+	// The --pull-never and --pull-always options will not be documented.
 	pullAlwaysFlagValue, err := flags.GetBool("pull-always")
 	if err != nil {
-		return 0, err
-	}
-	if pullAlwaysFlagValue || strings.EqualFold(pullFlagValue, "always") {
-		pullPolicy = define.PullAlways
+		return 0, fmt.Errorf("checking the --pull-always flag value: %w", err)
 	}
 	pullNeverFlagValue, err := flags.GetBool("pull-never")
 	if err != nil {
+		return 0, fmt.Errorf("checking the --pull-never flag value: %w", err)
+	}
+
+	// The --pull[=...] flag is the one we really care about.
+	pullFlagValue := findFlagFunc("pull").Value.String()
+	pullPolicy, err := pullPolicyWithFlags(pullFlagValue, pullAlwaysFlagValue, pullNeverFlagValue)
+	if err != nil {
 		return 0, err
 	}
-	if pullNeverFlagValue ||
-		strings.EqualFold(pullFlagValue, "never") ||
-		strings.EqualFold(pullFlagValue, "false") {
-		pullPolicy = define.PullNever
-	}
+
 	logrus.Debugf("Pull Policy for pull [%v]", pullPolicy)
 
 	return pullPolicy, nil
@@ -605,7 +649,9 @@ func AuthConfig(creds string) (*types.DockerAuthConfig, error) {
 	username, password := parseCreds(creds)
 	if username == "" {
 		fmt.Print("Username: ")
-		fmt.Scanln(&username)
+		if _, err := fmt.Scanln(&username); err != nil {
+			return nil, fmt.Errorf("reading user name: %w", err)
+		}
 	}
 	if password == "" {
 		fmt.Print("Password: ")
@@ -628,15 +674,19 @@ func GetBuildOutput(buildOutput string) (define.BuildOutputOption, error) {
 	if len(buildOutput) == 1 && buildOutput == "-" {
 		// Feature parity with buildkit, output tar to stdout
 		// Read more here: https://docs.docker.com/engine/reference/commandline/build/#custom-build-outputs
-		return define.BuildOutputOption{Path: "",
+		return define.BuildOutputOption{
+			Path:     "",
 			IsDir:    false,
-			IsStdout: true}, nil
+			IsStdout: true,
+		}, nil
 	}
 	if !strings.Contains(buildOutput, ",") {
 		// expect default --output <dirname>
-		return define.BuildOutputOption{Path: buildOutput,
+		return define.BuildOutputOption{
+			Path:     buildOutput,
 			IsDir:    true,
-			IsStdout: false}, nil
+			IsStdout: false,
+		}, nil
 	}
 	isDir := true
 	isStdout := false
@@ -681,9 +731,11 @@ func GetBuildOutput(buildOutput string) (define.BuildOutputOption, error) {
 		if isDir {
 			return define.BuildOutputOption{}, fmt.Errorf("invalid build output option %q, type=local and dest=- is not supported", buildOutput)
 		}
-		return define.BuildOutputOption{Path: "",
+		return define.BuildOutputOption{
+			Path:     "",
 			IsDir:    false,
-			IsStdout: true}, nil
+			IsStdout: true,
+		}, nil
 	}
 
 	return define.BuildOutputOption{Path: path, IsDir: isDir, IsStdout: isStdout}, nil
@@ -719,7 +771,7 @@ func GetConfidentialWorkloadOptions(arg string) (define.ConfidentialWorkloadOpti
 			if options.AttestationURL == option {
 				options.AttestationURL = strings.TrimPrefix(option, "attestation-url=")
 			}
-		case strings.HasPrefix(option, "passphrase="), strings.HasPrefix(option, "passphrase="):
+		case strings.HasPrefix(option, "passphrase="):
 			options.Convert = true
 			options.DiskEncryptionPassphrase = strings.TrimPrefix(option, "passphrase=")
 		case strings.HasPrefix(option, "workload_id="), strings.HasPrefix(option, "workload-id="):
@@ -770,7 +822,7 @@ func SBOMScanOptions(c *cobra.Command) (*define.SBOMScanOptions, error) {
 }
 
 // SBOMScanOptionsFromFlagSet parses scan settings from the cli
-func SBOMScanOptionsFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name string) *pflag.Flag) (*define.SBOMScanOptions, error) {
+func SBOMScanOptionsFromFlagSet(flags *pflag.FlagSet, _ func(name string) *pflag.Flag) (*define.SBOMScanOptions, error) {
 	preset, err := flags.GetString("sbom")
 	if err != nil {
 		return nil, fmt.Errorf("invalid value for --sbom: %w", err)
@@ -835,7 +887,7 @@ func SBOMScanOptionsFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name str
 }
 
 // IDMappingOptions parses the build options related to user namespaces and ID mapping.
-func IDMappingOptions(c *cobra.Command, isolation define.Isolation) (usernsOptions define.NamespaceOptions, idmapOptions *define.IDMappingOptions, err error) {
+func IDMappingOptions(c *cobra.Command, _ define.Isolation) (usernsOptions define.NamespaceOptions, idmapOptions *define.IDMappingOptions, err error) {
 	return IDMappingOptionsFromFlagSet(c.Flags(), c.PersistentFlags(), c.Flag)
 }
 
@@ -982,7 +1034,7 @@ func IDMappingOptionsFromFlagSet(flags *pflag.FlagSet, persistentFlags *pflag.Fl
 				usernsOption.Host = true
 			default:
 				how = strings.TrimPrefix(how, "ns:")
-				if _, err := os.Stat(how); err != nil {
+				if err := fileutils.Exists(how); err != nil {
 					return nil, nil, fmt.Errorf("checking %s namespace: %w", string(specs.UserNamespace), err)
 				}
 				logrus.Debugf("setting %q namespace to %q", string(specs.UserNamespace), how)
@@ -1077,7 +1129,7 @@ func NamespaceOptionsFromFlagSet(flags *pflag.FlagSet, findFlagFunc func(name st
 				how = strings.TrimPrefix(how, "ns:")
 				// if not a path we assume it is a comma separated network list, see setupNamespaces() in run_linux.go
 				if filepath.IsAbs(how) || what != string(specs.NetworkNamespace) {
-					if _, err := os.Stat(how); err != nil {
+					if err := fileutils.Exists(how); err != nil {
 						return nil, define.NetworkDefault, fmt.Errorf("checking %s namespace: %w", what, err)
 					}
 				}
@@ -1178,7 +1230,7 @@ func Device(device string) (string, string, string, error) {
 // isValidDeviceMode checks if the mode for device is valid or not.
 // isValid mode is a composition of r (read), w (write), and m (mknod).
 func isValidDeviceMode(mode string) bool {
-	var legalDeviceMode = map[rune]struct{}{
+	legalDeviceMode := map[rune]struct{}{
 		'r': {},
 		'w': {},
 		'm': {},
@@ -1202,7 +1254,6 @@ func GetTempDir() string {
 
 // Secrets parses the --secret flag
 func Secrets(secrets []string) (map[string]define.Secret, error) {
-	invalidSyntax := fmt.Errorf("incorrect secret flag format: should be --secret id=foo,src=bar[,env=ENV,type=file|env]")
 	parsed := make(map[string]define.Secret)
 	for _, secret := range secrets {
 		tokens := strings.Split(secret, ",")
@@ -1222,10 +1273,12 @@ func Secrets(secrets []string) (map[string]define.Secret, error) {
 					return nil, errors.New("invalid secret type, must be file or env")
 				}
 				typ = kv[1]
+			default:
+				return nil, errInvalidSecretSyntax
 			}
 		}
 		if id == "" {
-			return nil, invalidSyntax
+			return nil, errInvalidSecretSyntax
 		}
 		if src == "" {
 			src = id
@@ -1243,18 +1296,18 @@ func Secrets(secrets []string) (map[string]define.Secret, error) {
 			if err != nil {
 				return nil, fmt.Errorf("could not parse secrets: %w", err)
 			}
-			_, err = os.Stat(fullPath)
+			err = fileutils.Exists(fullPath)
 			if err != nil {
 				return nil, fmt.Errorf("could not parse secrets: %w", err)
 			}
 			src = fullPath
 		}
 		newSecret := define.Secret{
+			ID:         id,
 			Source:     src,
 			SourceType: typ,
 		}
 		parsed[id] = newSecret
-
 	}
 	return parsed, nil
 }
@@ -1293,10 +1346,10 @@ func ContainerIgnoreFile(contextDir, path string, containerFiles []string) ([]st
 			containerfile = filepath.Join(contextDir, containerfile)
 		}
 		containerfileIgnore := ""
-		if _, err := os.Stat(containerfile + ".containerignore"); err == nil {
+		if err := fileutils.Exists(containerfile + ".containerignore"); err == nil {
 			containerfileIgnore = containerfile + ".containerignore"
 		}
-		if _, err := os.Stat(containerfile + ".dockerignore"); err == nil {
+		if err := fileutils.Exists(containerfile + ".dockerignore"); err == nil {
 			containerfileIgnore = containerfile + ".dockerignore"
 		}
 		if containerfileIgnore != "" {

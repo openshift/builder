@@ -13,6 +13,7 @@ import (
 	nettypes "github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/apparmor"
 	"github.com/containers/common/pkg/cgroupv2"
+	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/homedir"
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/containers/storage/types"
@@ -45,7 +46,6 @@ var (
 		"/proc/scsi",
 		"/proc/timer_list",
 		"/proc/timer_stats",
-		"/sys/dev/block",
 		"/sys/devices/virtual/powercap",
 		"/sys/firmware",
 		"/sys/fs/selinux",
@@ -74,6 +74,8 @@ var (
 	ErrInvalidArg = errors.New("invalid argument")
 	// DefaultHooksDirs defines the default hooks directory.
 	DefaultHooksDirs = []string{"/usr/share/containers/oci/hooks.d"}
+	// DefaultCdiSpecDirs defines the default cdi spec directories.
+	DefaultCdiSpecDirs = []string{"/etc/cdi"}
 	// DefaultCapabilities is the default for the default_capabilities option in the containers.conf file.
 	DefaultCapabilities = []string{
 		"CAP_CHOWN",
@@ -117,12 +119,12 @@ var (
 	additionalHelperBinariesDir string
 
 	defaultUnixComposeProviders = []string{
-		"docker-compose",
 		"$HOME/.docker/cli-plugins/docker-compose",
 		"/usr/local/lib/docker/cli-plugins/docker-compose",
 		"/usr/local/libexec/docker/cli-plugins/docker-compose",
 		"/usr/lib/docker/cli-plugins/docker-compose",
 		"/usr/libexec/docker/cli-plugins/docker-compose",
+		"docker-compose",
 		"podman-compose",
 	}
 
@@ -204,8 +206,8 @@ func defaultConfig() (*Config, error) {
 		}
 		sigPath := filepath.Join(configHome, DefaultRootlessSignaturePolicyPath)
 		defaultEngineConfig.SignaturePolicyPath = sigPath
-		if _, err := os.Stat(sigPath); err != nil {
-			if _, err := os.Stat(DefaultSignaturePolicyPath); err == nil {
+		if err := fileutils.Exists(sigPath); err != nil {
+			if err := fileutils.Exists(DefaultSignaturePolicyPath); err == nil {
 				defaultEngineConfig.SignaturePolicyPath = DefaultSignaturePolicyPath
 			}
 		}
@@ -228,7 +230,6 @@ func defaultConfig() (*Config, error) {
 			DNSServers:          attributedstring.Slice{},
 			DefaultCapabilities: attributedstring.NewSlice(DefaultCapabilities),
 			DefaultSysctls:      attributedstring.Slice{},
-			DefaultUlimits:      attributedstring.NewSlice(getDefaultProcessLimits()),
 			Devices:             attributedstring.Slice{},
 			EnableKeyring:       true,
 			EnableLabeling:      selinuxEnabled(),
@@ -262,10 +263,11 @@ func defaultConfig() (*Config, error) {
 			CNIPluginDirs:             attributedstring.NewSlice(DefaultCNIPluginDirs),
 			NetavarkPluginDirs:        attributedstring.NewSlice(DefaultNetavarkPluginDirs),
 		},
-		Engine:  *defaultEngineConfig,
-		Secrets: defaultSecretConfig(),
-		Machine: defaultMachineConfig(),
-		Farms:   defaultFarmConfig(),
+		Engine:   *defaultEngineConfig,
+		Secrets:  defaultSecretConfig(),
+		Machine:  defaultMachineConfig(),
+		Farms:    defaultFarmConfig(),
+		Podmansh: defaultPodmanshConfig(),
 	}, nil
 }
 
@@ -301,6 +303,18 @@ func defaultMachineConfig() MachineConfig {
 func defaultFarmConfig() FarmConfig {
 	return FarmConfig{
 		List: map[string][]string{},
+	}
+}
+
+// defaultPodmanshConfig returns the default podmansh configuration.
+func defaultPodmanshConfig() PodmanshConfig {
+	return PodmanshConfig{
+		Shell:     "/bin/sh",
+		Container: "podmansh",
+
+		// A value of 0 means "not set", needed to distinguish if engine.podmansh_timeout or podmansh.timeout should be used
+		// This is needed to keep backwards compatibility to engine.PodmanshTimeout.
+		Timeout: uint(0),
 	}
 }
 
@@ -341,12 +355,14 @@ func defaultEngineConfig() (*EngineConfig, error) {
 	c.VolumePluginTimeout = DefaultVolumePluginTimeout
 	c.CompressionFormat = "gzip"
 
+	c.HealthcheckEvents = true
 	c.HelperBinariesDir.Set(defaultHelperBinariesDir)
 	if additionalHelperBinariesDir != "" {
 		// Prioritize additionalHelperBinariesDir over defaults.
 		c.HelperBinariesDir.Set(append([]string{additionalHelperBinariesDir}, c.HelperBinariesDir.Get()...))
 	}
 	c.HooksDir.Set(DefaultHooksDirs)
+	c.CdiSpecDirs.Set(DefaultCdiSpecDirs)
 	c.ImageDefaultTransport = _defaultTransport
 	c.ImageVolumeMode = _defaultImageVolumeMode
 
@@ -355,7 +371,7 @@ func defaultEngineConfig() (*EngineConfig, error) {
 	c.CgroupManager = defaultCgroupManager()
 	c.ServiceTimeout = uint(5)
 	c.StopTimeout = uint(10)
-	c.PodmanshTimeout = uint(30)
+	c.PodmanshTimeout = uint(30) // deprecated: use podmansh.timeout instead, kept for backwards-compatibility
 	c.ExitCommandDelay = uint(5 * 60)
 	c.Remote = isRemote()
 	c.Retry = 3

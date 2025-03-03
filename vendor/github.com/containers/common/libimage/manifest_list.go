@@ -6,21 +6,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/containers/common/libimage/define"
 	"github.com/containers/common/libimage/manifests"
+	manifesterrors "github.com/containers/common/pkg/manifests"
+	"github.com/containers/common/pkg/supplemented"
 	imageCopy "github.com/containers/image/v5/copy"
 	"github.com/containers/image/v5/docker"
 	"github.com/containers/image/v5/manifest"
+	"github.com/containers/image/v5/oci/layout"
+	"github.com/containers/image/v5/signature"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	structcopier "github.com/jinzhu/copier"
 	"github.com/opencontainers/go-digest"
+	imgspec "github.com/opencontainers/image-spec/specs-go"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
+	"github.com/sirupsen/logrus"
 )
 
 // NOTE: the abstractions and APIs here are a first step to further merge
@@ -101,8 +109,157 @@ func (r *Runtime) lookupManifestList(name string) (*Image, manifests.List, error
 	return image, list, nil
 }
 
+// ConvertToManifestList converts the image into a manifest list if it is not
+// already also a list.  An error is returned if the conversion fails.
+func (i *Image) ConvertToManifestList(ctx context.Context) (*ManifestList, error) {
+	// If we don't need to do anything, don't do anything.
+	if list, err := i.ToManifestList(); err == nil || !errors.Is(err, ErrNotAManifestList) {
+		return list, err
+	}
+
+	// Determine which type we prefer for the new manifest list or image index.
+	_, imageManifestType, err := i.Manifest(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("reading the image's manifest: %w", err)
+	}
+	var preferredListType string
+	switch imageManifestType {
+	case manifest.DockerV2Schema2MediaType,
+		manifest.DockerV2Schema1SignedMediaType,
+		manifest.DockerV2Schema1MediaType,
+		manifest.DockerV2ListMediaType:
+		preferredListType = manifest.DockerV2ListMediaType
+	case imgspecv1.MediaTypeImageManifest, imgspecv1.MediaTypeImageIndex:
+		preferredListType = imgspecv1.MediaTypeImageIndex
+	default:
+		preferredListType = ""
+	}
+
+	// Create a list and add the image's manifest to it.  Use OCI format
+	// for now.  If we need to convert it to Docker format, we'll do that
+	// while copying it.
+	list := manifests.Create()
+	if _, err := list.Add(ctx, &i.runtime.systemContext, i.storageReference, false); err != nil {
+		return nil, fmt.Errorf("generating new image index: %w", err)
+	}
+	listBytes, err := list.Serialize(imgspecv1.MediaTypeImageIndex)
+	if err != nil {
+		return nil, fmt.Errorf("serializing image index: %w", err)
+	}
+	listDigest, err := manifest.Digest(listBytes)
+	if err != nil {
+		return nil, fmt.Errorf("digesting image index: %w", err)
+	}
+
+	// Build an OCI layout containing the image index as the only item.
+	tmp, err := os.MkdirTemp("", "")
+	if err != nil {
+		return nil, fmt.Errorf("serializing initial list: %w", err)
+	}
+	defer os.RemoveAll(tmp)
+
+	// Drop our image index in there.
+	if err := os.Mkdir(filepath.Join(tmp, imgspecv1.ImageBlobsDir), 0o755); err != nil {
+		return nil, fmt.Errorf("creating directory for blobs: %w", err)
+	}
+	if err := os.Mkdir(filepath.Join(tmp, imgspecv1.ImageBlobsDir, listDigest.Algorithm().String()), 0o755); err != nil {
+		return nil, fmt.Errorf("creating directory for %s blobs: %w", listDigest.Algorithm().String(), err)
+	}
+	listFile := filepath.Join(tmp, imgspecv1.ImageBlobsDir, listDigest.Algorithm().String(), listDigest.Encoded())
+	if err := os.WriteFile(listFile, listBytes, 0o644); err != nil {
+		return nil, fmt.Errorf("writing image index for OCI layout: %w", err)
+	}
+
+	// Build the index for the layout.
+	index := imgspecv1.Index{
+		Versioned: imgspec.Versioned{
+			SchemaVersion: 2,
+		},
+		MediaType: imgspecv1.MediaTypeImageIndex,
+		Manifests: []imgspecv1.Descriptor{{
+			MediaType: imgspecv1.MediaTypeImageIndex,
+			Digest:    listDigest,
+			Size:      int64(len(listBytes)),
+		}},
+	}
+	indexBytes, err := json.Marshal(&index)
+	if err != nil {
+		return nil, fmt.Errorf("encoding image index for OCI layout: %w", err)
+	}
+
+	// Write the index for the layout.
+	indexFile := filepath.Join(tmp, imgspecv1.ImageIndexFile)
+	if err := os.WriteFile(indexFile, indexBytes, 0o644); err != nil {
+		return nil, fmt.Errorf("writing top-level index for OCI layout: %w", err)
+	}
+
+	// Write the "why yes, this is an OCI layout" file.
+	layoutFile := filepath.Join(tmp, imgspecv1.ImageLayoutFile)
+	layoutBytes, err := json.Marshal(imgspecv1.ImageLayout{Version: imgspecv1.ImageLayoutVersion})
+	if err != nil {
+		return nil, fmt.Errorf("encoding image layout structure for OCI layout: %w", err)
+	}
+	if err := os.WriteFile(layoutFile, layoutBytes, 0o644); err != nil {
+		return nil, fmt.Errorf("writing oci-layout file: %w", err)
+	}
+
+	// Build an OCI layout reference to use as a source.
+	tmpRef, err := layout.NewReference(tmp, "")
+	if err != nil {
+		return nil, fmt.Errorf("creating reference to directory: %w", err)
+	}
+	bundle := supplemented.Reference(tmpRef, []types.ImageReference{i.storageReference}, imageCopy.CopySystemImage, nil)
+
+	// Build a policy that ensures we don't prevent ourselves from reading
+	// this reference.
+	signaturePolicy, err := signature.DefaultPolicy(&i.runtime.systemContext)
+	if err != nil {
+		return nil, fmt.Errorf("obtaining default signature policy: %w", err)
+	}
+	acceptAnything := signature.PolicyTransportScopes{
+		"": []signature.PolicyRequirement{signature.NewPRInsecureAcceptAnything()},
+	}
+	signaturePolicy.Transports[i.storageReference.Transport().Name()] = acceptAnything
+	signaturePolicy.Transports[tmpRef.Transport().Name()] = acceptAnything
+	policyContext, err := signature.NewPolicyContext(signaturePolicy)
+	if err != nil {
+		return nil, fmt.Errorf("creating new signature policy context: %w", err)
+	}
+	defer func() {
+		if err2 := policyContext.Destroy(); err2 != nil {
+			logrus.Errorf("Destroying signature policy context: %v", err2)
+		}
+	}()
+
+	// Copy from the OCI layout into the same image record, so that it gets
+	// both its own manifest and the image index.
+	copyOptions := imageCopy.Options{
+		ForceManifestMIMEType: imageManifestType,
+	}
+	if _, err := imageCopy.Image(ctx, policyContext, i.storageReference, bundle, &copyOptions); err != nil {
+		return nil, fmt.Errorf("writing updates to image: %w", err)
+	}
+
+	// Now explicitly write the list's manifest to the image as its "main"
+	// manifest.
+	if _, err := list.SaveToImage(i.runtime.store, i.ID(), i.storageImage.Names, preferredListType); err != nil {
+		return nil, fmt.Errorf("saving image index: %w", err)
+	}
+
+	// Reload the record.
+	if err = i.reload(); err != nil {
+		return nil, fmt.Errorf("reloading image record: %w", err)
+	}
+	mList, err := i.runtime.LookupManifestList(i.storageImage.ID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up new manifest list: %w", err)
+	}
+
+	return mList, nil
+}
+
 // ToManifestList converts the image into a manifest list.  An error is thrown
-// if the image is no manifest list.
+// if the image is not a manifest list.
 func (i *Image) ToManifestList() (*ManifestList, error) {
 	list, err := i.getManifestList()
 	if err != nil {
@@ -139,7 +296,7 @@ func (m *ManifestList) LookupInstance(ctx context.Context, architecture, os, var
 		return nil, err
 	}
 
-	allImages, err := m.image.runtime.ListImages(ctx, nil, nil)
+	allImages, err := m.image.runtime.ListImages(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +351,9 @@ func (m *ManifestList) reload() error {
 // getManifestList is a helper to obtain a manifest list
 func (i *Image) getManifestList() (manifests.List, error) {
 	_, list, err := manifests.LoadFromImage(i.runtime.store, i.ID())
+	if errors.Is(err, manifesterrors.ErrManifestTypeNotSupported) {
+		err = fmt.Errorf("%s: %w", err.Error(), ErrNotAManifestList)
+	}
 	return list, err
 }
 
@@ -238,9 +398,7 @@ func (m *ManifestList) Inspect() (*define.ManifestListData, error) {
 	for i, manifest := range ociFormat.Manifests {
 		inspectList.Manifests[i].Annotations = manifest.Annotations
 		inspectList.Manifests[i].ArtifactType = manifest.ArtifactType
-		if manifest.URLs != nil {
-			inspectList.Manifests[i].URLs = slices.Clone(manifest.URLs)
-		}
+		inspectList.Manifests[i].URLs = slices.Clone(manifest.URLs)
 		inspectList.Manifests[i].Data = manifest.Data
 		inspectList.Manifests[i].Files, err = m.list.Files(manifest.Digest)
 		if err != nil {
@@ -252,10 +410,7 @@ func (m *ManifestList) Inspect() (*define.ManifestListData, error) {
 		if platform == nil {
 			platform = &imgspecv1.Platform{}
 		}
-		var osFeatures []string
-		if platform.OSFeatures != nil {
-			osFeatures = slices.Clone(platform.OSFeatures)
-		}
+		osFeatures := slices.Clone(platform.OSFeatures)
 		inspectList.Subject = &define.ManifestListDescriptor{
 			Platform: manifest.Schema2PlatformSpec{
 				OS:           platform.OS,
@@ -314,20 +469,34 @@ type ManifestListAddOptions struct {
 	Password string
 }
 
+func (m *ManifestList) parseNameToExtantReference(ctx context.Context, sys *types.SystemContext, name string, manifestList bool, what string) (types.ImageReference, error) {
+	ref, err := alltransports.ParseImageName(name)
+	if err != nil {
+		withDocker := fmt.Sprintf("%s://%s", docker.Transport.Name(), name)
+		ref, err = alltransports.ParseImageName(withDocker)
+		if err == nil {
+			var src types.ImageSource
+			src, err = ref.NewImageSource(ctx, sys)
+			if err == nil {
+				src.Close()
+			}
+		}
+		if err != nil {
+			image, _, lookupErr := m.image.runtime.LookupImage(name, &LookupImageOptions{ManifestList: manifestList})
+			if lookupErr != nil {
+				return nil, fmt.Errorf("locating %s: %q: %w; %q: %w", what, withDocker, err, name, lookupErr)
+			}
+			ref, err = image.storageReference, nil
+		}
+	}
+	return ref, err
+}
+
 // Add adds one or more manifests to the manifest list and returns the digest
 // of the added instance.
 func (m *ManifestList) Add(ctx context.Context, name string, options *ManifestListAddOptions) (digest.Digest, error) {
 	if options == nil {
 		options = &ManifestListAddOptions{}
-	}
-
-	ref, err := alltransports.ParseImageName(name)
-	if err != nil {
-		withDocker := fmt.Sprintf("%s://%s", docker.Transport.Name(), name)
-		ref, err = alltransports.ParseImageName(withDocker)
-		if err != nil {
-			return "", err
-		}
 	}
 
 	// Now massage in the copy-related options into the system context.
@@ -349,6 +518,12 @@ func (m *ManifestList) Add(ctx context.Context, name string, options *ManifestLi
 			Password: options.Password,
 		}
 	}
+
+	ref, err := m.parseNameToExtantReference(ctx, systemContext, name, false, "image to add to manifest list")
+	if err != nil {
+		return "", err
+	}
+
 	locker, err := manifests.LockerForImage(m.image.runtime.store, m.ID())
 	if err != nil {
 		return "", err
@@ -428,17 +603,9 @@ func (m *ManifestList) AddArtifact(ctx context.Context, options *ManifestListAdd
 		opts.LayerMediaType = &options.LayerType
 	}
 	if options.Subject != "" {
-		ref, err := alltransports.ParseImageName(options.Subject)
+		ref, err := m.parseNameToExtantReference(ctx, nil, options.Subject, true, "subject for artifact manifest")
 		if err != nil {
-			withDocker := fmt.Sprintf("%s://%s", docker.Transport.Name(), options.Subject)
-			ref, err = alltransports.ParseImageName(withDocker)
-			if err != nil {
-				image, _, err := m.image.runtime.LookupImage(options.Subject, &LookupImageOptions{ManifestList: true})
-				if err != nil {
-					return "", fmt.Errorf("locating subject for artifact manifest: %w", err)
-				}
-				ref = image.storageReference
-			}
+			return "", err
 		}
 		opts.SubjectReference = ref
 	}
@@ -472,23 +639,23 @@ func (m *ManifestList) AddArtifact(ctx context.Context, options *ManifestListAdd
 
 // Options for annotating a manifest list.
 type ManifestListAnnotateOptions struct {
-	// Add the specified annotations to the added image.
+	// Add the specified annotations to the added image.  Empty values are ignored.
 	Annotations map[string]string
-	// Add the specified architecture to the added image.
+	// Add the specified architecture to the added image.  Empty values are ignored.
 	Architecture string
-	// Add the specified features to the added image.
+	// Add the specified features to the added image.  Empty values are ignored.
 	Features []string
-	// Add the specified OS to the added image.
+	// Add the specified OS to the added image.  Empty values are ignored.
 	OS string
-	// Add the specified OS features to the added image.
+	// Add the specified OS features to the added image.  Empty values are ignored.
 	OSFeatures []string
-	// Add the specified OS version to the added image.
+	// Add the specified OS version to the added image.  Empty values are ignored.
 	OSVersion string
-	// Add the specified variant to the added image.
+	// Add the specified variant to the added image.  Empty values are ignored unless Architecture is set to a non-empty value.
 	Variant string
-	// Add the specified annotations to the index itself.
+	// Add the specified annotations to the index itself.  Empty values are ignored.
 	IndexAnnotations map[string]string
-	// Set the subject to which the index refers.
+	// Set the subject to which the index refers.  Empty values are ignored.
 	Subject string
 }
 
@@ -525,7 +692,7 @@ func (m *ManifestList) AnnotateInstance(d digest.Digest, options *ManifestListAn
 			return err
 		}
 	}
-	if len(options.Variant) > 0 {
+	if len(options.Architecture) != 0 || len(options.Variant) > 0 {
 		if err := m.list.SetVariant(d, options.Variant); err != nil {
 			return err
 		}
@@ -541,17 +708,9 @@ func (m *ManifestList) AnnotateInstance(d digest.Digest, options *ManifestListAn
 		}
 	}
 	if options.Subject != "" {
-		ref, err := alltransports.ParseImageName(options.Subject)
+		ref, err := m.parseNameToExtantReference(ctx, nil, options.Subject, true, "subject for image index")
 		if err != nil {
-			withDocker := fmt.Sprintf("%s://%s", docker.Transport.Name(), options.Subject)
-			ref, err = alltransports.ParseImageName(withDocker)
-			if err != nil {
-				image, _, err := m.image.runtime.LookupImage(options.Subject, &LookupImageOptions{ManifestList: true})
-				if err != nil {
-					return fmt.Errorf("locating subject for image index: %w", err)
-				}
-				ref = image.storageReference
-			}
+			return err
 		}
 		src, err := ref.NewImageSource(ctx, &m.image.runtime.systemContext)
 		if err != nil {
@@ -633,11 +792,11 @@ func (m *ManifestList) Push(ctx context.Context, destination string, options *Ma
 	// NOTE: we're using the logic in copier to create a proper
 	// types.SystemContext. This prevents us from having an error prone
 	// code duplicate here.
-	copier, err := m.image.runtime.newCopier(&options.CopyOptions)
+	copier, err := m.image.runtime.newCopier(&options.CopyOptions, nil)
 	if err != nil {
 		return "", err
 	}
-	defer copier.close()
+	defer copier.Close()
 
 	pushOptions := manifests.PushOptions{
 		AddCompression:                   options.AddCompression,

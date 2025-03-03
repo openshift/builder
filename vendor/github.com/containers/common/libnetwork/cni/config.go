@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 
 	internalutil "github.com/containers/common/libnetwork/internal/util"
 	"github.com/containers/common/libnetwork/types"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 )
 
 func (n *cniNetwork) NetworkUpdate(_ string, _ types.NetworkUpdateOptions) error {
@@ -86,7 +86,7 @@ func (n *cniNetwork) networkCreate(newNetwork *types.Network, defaultNet bool) (
 	switch newNetwork.Driver {
 	case types.BridgeNetworkDriver:
 		internalutil.MapDockerBridgeDriverOptions(newNetwork)
-		err = internalutil.CreateBridge(n, newNetwork, usedNetworks, n.defaultsubnetPools)
+		err = internalutil.CreateBridge(n, newNetwork, usedNetworks, n.defaultsubnetPools, true)
 		if err != nil {
 			return nil, err
 		}

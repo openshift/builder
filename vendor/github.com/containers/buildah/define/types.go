@@ -29,7 +29,7 @@ const (
 	// identify working containers.
 	Package = "buildah"
 	// Version for the Package. Also used by .packit.sh for Packit builds.
-	Version = "1.35.4"
+	Version = "1.39.0"
 
 	// DefaultRuntime if containers.conf fails.
 	DefaultRuntime = "runc"
@@ -169,13 +169,13 @@ type SBOMScanOptions struct {
 	MergeStrategy   SBOMMergeStrategy // how to merge the outputs of multiple scans
 }
 
-// TempDirForURL checks if the passed-in string looks like a URL or -.  If it is,
-// TempDirForURL creates a temporary directory, arranges for its contents to be
-// the contents of that URL, and returns the temporary directory's path, along
-// with the name of a subdirectory which should be used as the build context
-// (which may be empty or ".").  Removal of the temporary directory is the
-// responsibility of the caller.  If the string doesn't look like a URL,
-// TempDirForURL returns empty strings and a nil error code.
+// TempDirForURL checks if the passed-in string looks like a URL or "-".  If it
+// is, TempDirForURL creates a temporary directory, arranges for its contents
+// to be the contents of that URL, and returns the temporary directory's path,
+// along with the relative name of a subdirectory which should be used as the
+// build context (which may be empty or ".").  Removal of the temporary
+// directory is the responsibility of the caller.  If the string doesn't look
+// like a URL or "-", TempDirForURL returns empty strings and a nil error code.
 func TempDirForURL(dir, prefix, url string) (name string, subdir string, err error) {
 	if !strings.HasPrefix(url, "http://") &&
 		!strings.HasPrefix(url, "https://") &&
@@ -188,19 +188,24 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 	if err != nil {
 		return "", "", fmt.Errorf("creating temporary directory for %q: %w", url, err)
 	}
+	downloadDir := filepath.Join(name, "download")
+	if err = os.MkdirAll(downloadDir, 0o700); err != nil {
+		return "", "", fmt.Errorf("creating directory %q for %q: %w", downloadDir, url, err)
+	}
 	urlParsed, err := urlpkg.Parse(url)
 	if err != nil {
 		return "", "", fmt.Errorf("parsing url %q: %w", url, err)
 	}
 	if strings.HasPrefix(url, "git://") || strings.HasSuffix(urlParsed.Path, ".git") {
-		combinedOutput, gitSubDir, err := cloneToDirectory(url, name)
+		combinedOutput, gitSubDir, err := cloneToDirectory(url, downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
 			return "", "", fmt.Errorf("cloning %q to %q:\n%s: %w", url, name, string(combinedOutput), err)
 		}
-		return name, gitSubDir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, gitSubDir))
+		return name, filepath.Join(filepath.Base(downloadDir), gitSubDir), nil
 	}
 	if strings.HasPrefix(url, "github.com/") {
 		ghurl := url
@@ -209,28 +214,29 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 		subdir = path.Base(ghurl) + "-master"
 	}
 	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-		err = downloadToDirectory(url, name)
+		err = downloadToDirectory(url, downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
-			return "", subdir, err
+			return "", "", err
 		}
-		return name, subdir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, subdir))
+		return name, filepath.Join(filepath.Base(downloadDir), subdir), nil
 	}
 	if url == "-" {
-		err = stdinToDirectory(name)
+		err = stdinToDirectory(downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
-			return "", subdir, err
+			return "", "", err
 		}
-		logrus.Debugf("Build context is at %q", name)
-		return name, subdir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, subdir))
+		return name, filepath.Join(filepath.Base(downloadDir), subdir), nil
 	}
 	logrus.Debugf("don't know how to retrieve %q", url)
-	if err2 := os.Remove(name); err2 != nil {
+	if err2 := os.RemoveAll(name); err2 != nil {
 		logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 	}
 	return "", "", errors.New("unreachable code reached")
@@ -254,9 +260,16 @@ func parseGitBuildContext(url string) (string, string, string) {
 	return gitBranchPart[0], gitSubdir, gitBranch
 }
 
+func isGitTag(remote, ref string) bool {
+	if _, err := exec.Command("git", "ls-remote", "--exit-code", remote, ref).Output(); err != nil {
+		return true
+	}
+	return false
+}
+
 func cloneToDirectory(url, dir string) ([]byte, string, error) {
 	var cmd *exec.Cmd
-	gitRepo, gitSubdir, gitBranch := parseGitBuildContext(url)
+	gitRepo, gitSubdir, gitRef := parseGitBuildContext(url)
 	// init repo
 	cmd = exec.Command("git", "init", dir)
 	combinedOutput, err := cmd.CombinedOutput()
@@ -270,27 +283,23 @@ func cloneToDirectory(url, dir string) ([]byte, string, error) {
 	if err != nil {
 		return combinedOutput, gitSubdir, fmt.Errorf("failed while performing `git remote add`: %w", err)
 	}
-	// fetch required branch or commit and perform checkout
-	// Always default to `HEAD` if nothing specified
-	fetch := "HEAD"
-	if gitBranch != "" {
-		fetch = gitBranch
+
+	if gitRef != "" {
+		if ok := isGitTag(url, gitRef); ok {
+			gitRef += ":refs/tags/" + gitRef
+		}
 	}
-	logrus.Debugf("fetching repo %q and branch (or commit ID) %q to %q", gitRepo, fetch, dir)
-	cmd = exec.Command("git", "fetch", "--depth=1", "origin", "--", fetch)
+
+	logrus.Debugf("fetching repo %q and branch (or commit ID) %q to %q", gitRepo, gitRef, dir)
+	args := []string{"fetch", "-u", "--depth=1", "origin", "--", gitRef}
+	cmd = exec.Command("git", args...)
 	cmd.Dir = dir
 	combinedOutput, err = cmd.CombinedOutput()
 	if err != nil {
 		return combinedOutput, gitSubdir, fmt.Errorf("failed while performing `git fetch`: %w", err)
 	}
-	if fetch == "HEAD" {
-		// We fetched default branch therefore
-		// we don't have any valid `branch` or
-		// `commit` name hence checkout detached
-		// `FETCH_HEAD`
-		fetch = "FETCH_HEAD"
-	}
-	cmd = exec.Command("git", "checkout", fetch)
+
+	cmd = exec.Command("git", "checkout", "FETCH_HEAD")
 	cmd.Dir = dir
 	combinedOutput, err = cmd.CombinedOutput()
 	if err != nil {
@@ -324,7 +333,7 @@ func downloadToDirectory(url, dir string) error {
 		}
 		dockerfile := filepath.Join(dir, "Dockerfile")
 		// Assume this is a Dockerfile
-		if err := ioutils.AtomicWriteFile(dockerfile, body, 0600); err != nil {
+		if err := ioutils.AtomicWriteFile(dockerfile, body, 0o600); err != nil {
 			return fmt.Errorf("failed to write %q to %q: %w", url, dockerfile, err)
 		}
 	}
@@ -342,7 +351,7 @@ func stdinToDirectory(dir string) error {
 	if err := chrootarchive.Untar(reader, dir, nil); err != nil {
 		dockerfile := filepath.Join(dir, "Dockerfile")
 		// Assume this is a Dockerfile
-		if err := ioutils.AtomicWriteFile(dockerfile, b, 0600); err != nil {
+		if err := ioutils.AtomicWriteFile(dockerfile, b, 0o600); err != nil {
 			return fmt.Errorf("failed to write bytes to %q: %w", dockerfile, err)
 		}
 	}

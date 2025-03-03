@@ -96,9 +96,23 @@ type InitConfig struct {
 // NewNetworkInterface creates the ContainerNetwork interface for the netavark backend.
 // Note: The networks are not loaded from disk until a method is called.
 func NewNetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
+	var netns *rootlessnetns.Netns
+	var err error
+	// Do not use unshare.IsRootless() here. We only care if we are running re-exec in the userns,
+	// IsRootless() also returns true if we are root in a userns which is not what we care about and
+	// causes issues as this slower more complicated rootless-netns logic should not be used as root.
+	val, ok := os.LookupEnv(unshare.UsernsEnvName)
+	useRootlessNetns := ok && val == "done"
+	if useRootlessNetns {
+		netns, err = rootlessnetns.New(conf.NetworkRunDir, rootlessnetns.Netavark, conf.Config)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// root needs to use a globally unique lock because there is only one host netns
 	lockPath := defaultRootLockPath
-	if unshare.IsRootless() {
+	if useRootlessNetns {
 		lockPath = filepath.Join(conf.NetworkConfigDir, "netavark.lock")
 	}
 
@@ -121,10 +135,6 @@ func NewNetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
 		return nil, fmt.Errorf("failed to parse default subnet: %w", err)
 	}
 
-	if err := os.MkdirAll(conf.NetworkConfigDir, 0o755); err != nil {
-		return nil, err
-	}
-
 	if err := os.MkdirAll(conf.NetworkRunDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -132,18 +142,6 @@ func NewNetworkInterface(conf *InitConfig) (types.ContainerNetwork, error) {
 	defaultSubnetPools := conf.Config.Network.DefaultSubnetPools
 	if defaultSubnetPools == nil {
 		defaultSubnetPools = config.DefaultSubnetPools
-	}
-
-	var netns *rootlessnetns.Netns
-	// Do not use unshare.IsRootless() here. We only care if we are running re-exec in the userns,
-	// IsRootless() also returns true if we are root in a userns which is not what we care about and
-	// causes issues as this slower more complicated rootless-netns logic should not be used as root.
-	_, useRootlessNetns := os.LookupEnv(unshare.UsernsEnvName)
-	if useRootlessNetns {
-		netns, err = rootlessnetns.New(conf.NetworkRunDir, rootlessnetns.Netavark, conf.Config)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	n := &netavarkNetwork{
@@ -185,6 +183,21 @@ func (n *netavarkNetwork) loadNetworks() error {
 	// check the mod time of the config dir
 	f, err := os.Stat(n.networkConfigDir)
 	if err != nil {
+		// the directory may not exists which is fine. It will be created on the first network create
+		if errors.Is(err, os.ErrNotExist) {
+			// networks are already loaded
+			if n.networks != nil {
+				return nil
+			}
+			networks := make(map[string]*types.Network, 1)
+			networkInfo, err := n.createDefaultNetwork()
+			if err != nil {
+				return fmt.Errorf("failed to create default network %s: %w", n.defaultNetwork, err)
+			}
+			networks[n.defaultNetwork] = networkInfo
+			n.networks = networks
+			return nil
+		}
 		return err
 	}
 	modTime := f.ModTime()
