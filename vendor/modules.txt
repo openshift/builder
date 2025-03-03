@@ -1488,7 +1488,7 @@ k8s.io/kube-openapi/pkg/spec3
 k8s.io/kube-openapi/pkg/util/proto
 k8s.io/kube-openapi/pkg/util/proto/validation
 k8s.io/kube-openapi/pkg/validation/spec
-# k8s.io/kubectl v0.28.2 => k8s.io/kubectl v0.30.2
+# k8s.io/kubectl v0.30.2 => k8s.io/kubectl v0.30.2
 ## explicit; go 1.22.0
 k8s.io/kubectl/pkg/cmd/util
 k8s.io/kubectl/pkg/scheme
@@ -1498,7 +1498,7 @@ k8s.io/kubectl/pkg/util/openapi
 k8s.io/kubectl/pkg/util/templates
 k8s.io/kubectl/pkg/util/term
 k8s.io/kubectl/pkg/validation
-# k8s.io/kubernetes v1.28.2 => k8s.io/kubernetes v1.30.2
+# k8s.io/kubernetes v1.30.2 => k8s.io/kubernetes v1.30.2
 ## explicit; go 1.22.0
 k8s.io/kubernetes/pkg/credentialprovider
 k8s.io/kubernetes/pkg/features
