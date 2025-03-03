@@ -220,6 +220,7 @@ const (
 	// if the generated name conflicts with an existing resource name, up to a maximum number of 7 retries.
 	RetryGenerateName featuregate.Feature = "RetryGenerateName"
 
+<<<<<<< HEAD
 	// owner: @cici37
 	// alpha: v1.30
 	//
@@ -238,6 +239,8 @@ const (
 	// The strict cost is specific for the extended libraries whose cost defined under k8s/apiserver/pkg/cel/library.
 	StrictCostEnforcementForWebhooks featuregate.Feature = "StrictCostEnforcementForWebhooks"
 
+=======
+>>>>>>> origin/master
 	// owner: @caesarxuchao @roycaihw
 	// alpha: v1.20
 	//
@@ -365,10 +368,13 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 
 	StorageVersionHash: {Default: true, PreRelease: featuregate.Beta},
 
+<<<<<<< HEAD
 	StrictCostEnforcementForVAP: {Default: false, PreRelease: featuregate.Beta},
 
 	StrictCostEnforcementForWebhooks: {Default: false, PreRelease: featuregate.Beta},
 
+=======
+>>>>>>> origin/master
 	StructuredAuthenticationConfiguration: {Default: true, PreRelease: featuregate.Beta},
 
 	StructuredAuthorizationConfiguration: {Default: true, PreRelease: featuregate.Beta},

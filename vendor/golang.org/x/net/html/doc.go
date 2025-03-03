@@ -104,7 +104,11 @@ tokenization, and tokenization and tree construction stages of the WHATWG HTML
 parsing specification respectively. While the tokenizer parses and normalizes
 individual HTML tokens, only the parser constructs the DOM tree from the
 tokenized HTML, as described in the tree construction stage of the
+<<<<<<< HEAD
 specification, dynamically modifying or extending the document's DOM tree.
+=======
+specification, dynamically modifying or extending the docuemnt's DOM tree.
+>>>>>>> origin/master
 
 If your use case requires semantically well-formed HTML documents, as defined by
 the WHATWG specification, the parser should be used rather than the tokenizer.
