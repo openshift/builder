@@ -34,9 +34,11 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/hooks"
 	hooksExec "github.com/containers/common/pkg/hooks/exec"
+	"github.com/containers/storage/pkg/fileutils"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/ioutils"
 	"github.com/containers/storage/pkg/lockfile"
+	"github.com/containers/storage/pkg/mount"
 	"github.com/containers/storage/pkg/stringid"
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/docker/go-units"
@@ -45,10 +47,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
+	"tags.cncf.io/container-device-interface/pkg/parser"
 )
-
-// ContainerDevices is an alias for a slice of github.com/opencontainers/runc/libcontainer/configs.Device structures.
-type ContainerDevices define.ContainerDevices
 
 var (
 	// We dont want to remove destinations with /etc, /dev, /sys,
@@ -67,6 +68,96 @@ func setChildProcess() error {
 		return err
 	}
 	return nil
+}
+
+func (b *Builder) cdiSetupDevicesInSpec(deviceSpecs []string, configDir string, spec *specs.Spec) ([]string, error) {
+	var configDirs []string
+	defConfig, err := config.Default()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container config: %w", err)
+	}
+	// The CDI cache prioritizes entries from directories that are later in
+	// the list of ones it scans, so start with our general config, then
+	// append values passed to us through API layers.
+	configDirs = slices.Clone(defConfig.Engine.CdiSpecDirs.Get())
+	if b.CDIConfigDir != "" {
+		configDirs = append(configDirs, b.CDIConfigDir)
+	}
+	if configDir != "" {
+		configDirs = append(configDirs, configDir)
+	}
+	if len(configDirs) == 0 {
+		// No directories to scan for CDI configuration means that CDI
+		// won't have any details for setting up any devices, so we
+		// don't need to be doing anything here.
+		return deviceSpecs, nil
+	}
+	var qualifiedDeviceSpecs, unqualifiedDeviceSpecs []string
+	for _, deviceSpec := range deviceSpecs {
+		if parser.IsQualifiedName(deviceSpec) {
+			qualifiedDeviceSpecs = append(qualifiedDeviceSpecs, deviceSpec)
+		} else {
+			unqualifiedDeviceSpecs = append(unqualifiedDeviceSpecs, deviceSpec)
+		}
+	}
+	if len(qualifiedDeviceSpecs) == 0 {
+		// None of the specified devices were in the form that would be
+		// handled by CDI, so we don't need to do anything here.
+		return deviceSpecs, nil
+	}
+	if err := cdi.Configure(cdi.WithSpecDirs(configDirs...)); err != nil {
+		return nil, fmt.Errorf("CDI default registry ignored configured directories %v: %w", configDirs, err)
+	}
+	leftoverDevices := slices.Clone(deviceSpecs)
+	if err := cdi.Refresh(); err != nil {
+		logrus.Warnf("CDI default registry refresh: %v", err)
+	} else {
+		leftoverDevices, err = cdi.InjectDevices(spec, qualifiedDeviceSpecs...)
+		if err != nil {
+			return nil, fmt.Errorf("CDI device injection (leftover devices: %v): %w", leftoverDevices, err)
+		}
+	}
+	removed := slices.DeleteFunc(slices.Clone(deviceSpecs), func(t string) bool { return slices.Contains(leftoverDevices, t) })
+	logrus.Debugf("CDI taking care of devices %v, leaving devices %v, skipped %v", removed, leftoverDevices, unqualifiedDeviceSpecs)
+	return append(leftoverDevices, unqualifiedDeviceSpecs...), nil
+}
+
+// Extract the device list so that we can still try to make it work if
+// we're running rootless and can't just mknod() the device nodes.
+func separateDevicesFromRuntimeSpec(g *generate.Generator) define.ContainerDevices {
+	var result define.ContainerDevices
+	if g.Config != nil && g.Config.Linux != nil {
+		for _, device := range g.Config.Linux.Devices {
+			var bDevice define.BuildahDevice
+			bDevice.Path = device.Path
+			switch device.Type {
+			case "b":
+				bDevice.Type = 'b'
+			case "c":
+				bDevice.Type = 'c'
+			case "u":
+				bDevice.Type = 'u'
+			case "p":
+				bDevice.Type = 'p'
+			}
+			bDevice.Major = device.Major
+			bDevice.Minor = device.Minor
+			if device.FileMode != nil {
+				bDevice.FileMode = *device.FileMode
+			}
+			if device.UID != nil {
+				bDevice.Uid = *device.UID
+			}
+			if device.GID != nil {
+				bDevice.Gid = *device.GID
+			}
+			bDevice.Source = device.Path
+			bDevice.Destination = device.Path
+			result = append(result, bDevice)
+		}
+	}
+	g.ClearLinuxDevices()
+	return result
 }
 
 // Run runs the specified command in the container's root filesystem.
@@ -147,8 +238,24 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 		g.SetProcessArgs(nil)
 	}
 
-	// Mount devices if any and if session is rootless attempt a bind-mount
-	// just like podman.
+	// Combine the working container's set of devices with the ones for just this run.
+	deviceSpecs := append(append([]string{}, options.DeviceSpecs...), b.DeviceSpecs...)
+	deviceSpecs, err = b.cdiSetupDevicesInSpec(deviceSpecs, options.CDIConfigDir, g.Config) // makes changes to more than just the device list
+	if err != nil {
+		return err
+	}
+	devices := separateDevicesFromRuntimeSpec(g)
+	for _, deviceSpec := range deviceSpecs {
+		device, err := parse.DeviceFromPath(deviceSpec)
+		if err != nil {
+			return fmt.Errorf("setting up device %q: %w", deviceSpec, err)
+		}
+		devices = append(devices, device...)
+	}
+	devices = append(append(devices, options.Devices...), b.Devices...)
+
+	// Mount devices, if any, and if we're rootless attempt to work around not
+	// being able to create device nodes by bind-mounting them from the host, like podman does.
 	if unshare.IsRootless() {
 		// We are going to create bind mounts for devices
 		// but we need to make sure that we don't override
@@ -158,7 +265,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 			mounts[m.Destination] = true
 		}
 		newMounts := []specs.Mount{}
-		for _, d := range b.Devices {
+		for _, d := range devices {
 			// Default permission is read-only.
 			perm := "ro"
 			// Get permission configured for this device but only process `write`
@@ -184,7 +291,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 		}
 		g.Config.Mounts = append(newMounts, g.Config.Mounts...)
 	} else {
-		for _, d := range b.Devices {
+		for _, d := range devices {
 			sDev := specs.LinuxDevice{
 				Type:     string(d.Type),
 				Path:     d.Path,
@@ -317,7 +424,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 		// Only add entries here if we do not have to do setup network,
 		// if we do we have to do it much later after the network setup.
 		if !configureNetwork {
-			err = b.addResolvConfEntries(resolvFile, nil, spec.Linux.Namespaces, false, true)
+			err = b.addResolvConfEntries(resolvFile, nil, spec, false, true)
 			if err != nil {
 				return err
 			}
@@ -369,7 +476,7 @@ rootless=%d
 		SystemContext:    options.SystemContext,
 	}
 
-	runArtifacts, err := b.setupMounts(mountPoint, spec, path, options.Mounts, bindFiles, volumes, b.CommonBuildOpts.Volumes, options.RunMounts, runMountInfo)
+	runArtifacts, err := b.setupMounts(mountPoint, spec, path, options.Mounts, bindFiles, volumes, options.CompatBuiltinVolumes, b.CommonBuildOpts.Volumes, options.RunMounts, runMountInfo)
 	if err != nil {
 		return fmt.Errorf("resolving mountpoints for container %q: %w", b.ContainerID, err)
 	}
@@ -386,7 +493,7 @@ rootless=%d
 	}
 
 	defer func() {
-		if err := b.cleanupRunMounts(options.SystemContext, mountPoint, runArtifacts); err != nil {
+		if err := b.cleanupRunMounts(mountPoint, runArtifacts); err != nil {
 			options.Logger.Errorf("unable to cleanup run mounts %v", err)
 		}
 	}()
@@ -1006,7 +1113,7 @@ func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string,
 				RootGID:                idMaps.rootGID,
 				UpperDirOptionFragment: upperDir,
 				WorkDirOptionFragment:  workDir,
-				GraphOpts:              b.store.GraphOptions(),
+				GraphOpts:              slices.Clone(b.store.GraphOptions()),
 			}
 
 			overlayMount, err := overlay.MountWithOptions(contentDir, host, container, &overlayOpts)
@@ -1015,7 +1122,7 @@ func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string,
 			}
 
 			// If chown true, add correct ownership to the overlay temp directories.
-			if foundU {
+			if err == nil && foundU {
 				if err := chown.ChangeHostPathOwnership(contentDir, true, idMaps.processUID, idMaps.processGID); err != nil {
 					return specs.Mount{}, err
 				}
@@ -1242,7 +1349,7 @@ func setupSpecialMountSpecChanges(spec *specs.Spec, shmSize string) ([]specs.Mou
 	// if userns and host ipc bind mount shm
 	if isUserns && !isIpcns {
 		// bind mount /dev/shm when it exists
-		if _, err := os.Stat("/dev/shm"); err == nil {
+		if err := fileutils.Exists("/dev/shm"); err == nil {
 			shmMount := specs.Mount{
 				Source:      "/dev/shm",
 				Type:        "bind",
@@ -1273,24 +1380,39 @@ func checkIdsGreaterThan5(ids []specs.LinuxIDMapping) bool {
 	return false
 }
 
-// If this function succeeds and returns a non-nil *lockfile.LockFile, the caller must unlock it (when??).
-func (b *Builder) getCacheMount(tokens []string, stageMountPoints map[string]internal.StageMountDetails, idMaps IDMaps, workDir string) (*specs.Mount, *lockfile.LockFile, error) {
+// Returns a Mount to add to the runtime spec's list of mounts, an optional
+// path of a mounted filesystem, unmounted, and an optional lock, or an error.
+//
+// The caller is expected to, after the command which uses the mount exits,
+// unmount the mounted filesystem (if we provided the path to its mountpoint)
+// and remove its mountpoint, , and release the lock (if we took one).
+func (b *Builder) getCacheMount(tokens []string, stageMountPoints map[string]internal.StageMountDetails, idMaps IDMaps, workDir, tmpDir string) (*specs.Mount, string, *lockfile.LockFile, error) {
 	var optionMounts []specs.Mount
-	mount, targetLock, err := volumes.GetCacheMount(tokens, b.store, b.MountLabel, stageMountPoints, workDir)
+	optionMount, intermediateMount, targetLock, err := volumes.GetCacheMount(tokens, stageMountPoints, workDir, tmpDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 	succeeded := false
 	defer func() {
-		if !succeeded && targetLock != nil {
-			targetLock.Unlock()
+		if !succeeded {
+			if intermediateMount != "" {
+				if err := mount.Unmount(intermediateMount); err != nil {
+					b.Logger.Debugf("unmounting %q: %v", intermediateMount, err)
+				}
+				if err := os.Remove(intermediateMount); err != nil {
+					b.Logger.Debugf("removing should-be-empty directory %q: %v", intermediateMount, err)
+				}
+			}
+			if targetLock != nil {
+				targetLock.Unlock()
+			}
 		}
 	}()
-	optionMounts = append(optionMounts, mount)
+	optionMounts = append(optionMounts, optionMount)
 	volumes, err := b.runSetupVolumeMounts(b.MountLabel, nil, optionMounts, idMaps)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 	succeeded = true
-	return &volumes[0], targetLock, nil
+	return &volumes[0], intermediateMount, targetLock, nil
 }
