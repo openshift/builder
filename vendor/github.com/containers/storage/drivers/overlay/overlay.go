@@ -82,7 +82,7 @@ const (
 	lowerFile  = "lower"
 	maxDepth   = 500
 
-	zstdChunkedManifest = "zstd-chunked-manifest"
+	tocArtifact = "toc"
 
 	// idLength represents the number of random characters
 	// which can be used to create the unique link identifier
@@ -1003,8 +1003,10 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts, disable
 		}
 	}
 	if parent != "" {
-		parentBase, parentImageStore, _ := d.dir2(parent)
-		if parentImageStore != "" {
+		parentBase, parentImageStore, inAdditionalStore := d.dir2(parent)
+		// If parentBase path is additional image store, select the image contained in parentBase.
+		// See https://github.com/containers/podman/issues/19748
+		if parentImageStore != "" && !inAdditionalStore {
 			parentBase = parentImageStore
 		}
 		st, err := system.Stat(filepath.Join(parentBase, "diff"))
@@ -1079,12 +1081,13 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts, disable
 	}
 
 	if parent != "" {
-		parentDir, parentImageStore, _ := d.dir2(parent)
-		base := parentDir
-		if parentImageStore != "" {
-			base = parentImageStore
+		parentBase, parentImageStore, inAdditionalStore := d.dir2(parent)
+		// If parentBase path is additional image store, select the image contained in parentBase.
+		// See https://github.com/containers/podman/issues/19748
+		if parentImageStore != "" && !inAdditionalStore {
+			parentBase = parentImageStore
 		}
-		st, err := system.Stat(filepath.Join(base, "diff"))
+		st, err := system.Stat(filepath.Join(parentBase, "diff"))
 		if err != nil {
 			return err
 		}
@@ -1447,7 +1450,9 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 	needsIDMapping := !disableShifting && len(options.UidMaps) > 0 && len(options.GidMaps) > 0 && d.options.mountProgram == ""
 
 	if len(optsList) == 0 {
-		optsList = strings.Split(d.options.mountOptions, ",")
+		if d.options.mountOptions != "" {
+			optsList = strings.Split(d.options.mountOptions, ",")
+		}
 	} else {
 		// If metacopy=on is present in d.options.mountOptions it must be present in the mount
 		// options otherwise the kernel refuses to follow the metacopy xattr.
@@ -1524,14 +1529,7 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		defer cleanupFunc()
 	}
 
-	composefsLayers := filepath.Join(workDirBase, "composefs-layers")
-	if err := os.MkdirAll(composefsLayers, 0o700); err != nil {
-		return "", err
-	}
-
 	skipIDMappingLayers := make(map[string]string)
-
-	composeFsLayers := []string{}
 
 	composefsMounts := []string{}
 	defer func() {
@@ -1540,7 +1538,9 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		}
 	}()
 
-	maybeAddComposefsMount := func(lowerID string, i int) (string, error) {
+	composeFsLayers := []string{}
+	composeFsLayersDir := filepath.Join(workDirBase, "composefs-layers")
+	maybeAddComposefsMount := func(lowerID string, i int, readWrite bool) (string, error) {
 		composefsBlob := d.getComposefsData(lowerID)
 		_, err = os.Stat(composefsBlob)
 		if err != nil {
@@ -1551,7 +1551,11 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		}
 		logrus.Debugf("overlay: using composefs blob %s for lower %s", composefsBlob, lowerID)
 
-		dest := filepath.Join(composefsLayers, fmt.Sprintf("%d", i))
+		if readWrite && i == 0 {
+			return "", fmt.Errorf("cannot mount a composefs layer as writeable")
+		}
+
+		dest := filepath.Join(composeFsLayersDir, fmt.Sprintf("%d", i))
 		if err := os.MkdirAll(dest, 0o700); err != nil {
 			return "", err
 		}
@@ -1571,7 +1575,7 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 
 	diffDir := path.Join(workDirBase, "diff")
 
-	if dest, err := maybeAddComposefsMount(id, 0); err != nil {
+	if dest, err := maybeAddComposefsMount(id, 0, readWrite); err != nil {
 		return "", err
 	} else if dest != "" {
 		diffDir = dest
@@ -1623,7 +1627,7 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 			return "", err
 		}
 		lowerID := filepath.Base(filepath.Dir(linkContent))
-		composefsMount, err := maybeAddComposefsMount(lowerID, i+1)
+		composefsMount, err := maybeAddComposefsMount(lowerID, i+1, readWrite)
 		if err != nil {
 			return "", err
 		}
@@ -1655,8 +1659,6 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		optsList = append(optsList, "metacopy=on", "redirect_dir=on")
 	}
 
-	absLowers = append(absLowers, composeFsLayers...)
-
 	if len(absLowers) == 0 {
 		absLowers = append(absLowers, path.Join(dir, "empty"))
 	}
@@ -1668,13 +1670,21 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 	}
 
 	if err := idtools.MkdirAllAs(diffDir, perms, rootUID, rootGID); err != nil {
-		return "", err
+		if !inAdditionalStore {
+			return "", err
+		}
+		// if it is in an additional store, do not fail if the directory already exists
+		if _, err2 := os.Stat(diffDir); err2 != nil {
+			return "", err
+		}
 	}
 
 	mergedDir := path.Join(workDirBase, "merged")
-	// Create the driver merged dir
-	if err := idtools.MkdirAs(mergedDir, 0o700, rootUID, rootGID); err != nil && !os.IsExist(err) {
-		return "", err
+	// Attempt to create the merged dir only if it doesn't exist.
+	if _, err := os.Stat(mergedDir); err != nil && os.IsNotExist(err) {
+		if err := idtools.MkdirAs(mergedDir, 0o700, rootUID, rootGID); err != nil && !os.IsExist(err) {
+			return "", err
+		}
 	}
 	if count := d.ctr.Increment(mergedDir); count > 1 {
 		return mergedDir, nil
@@ -1750,11 +1760,20 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		absLowers = newAbsDir
 	}
 
+	lowerDirs := strings.Join(absLowers, ":")
+	if len(composeFsLayers) > 0 {
+		composeFsLayersLowerDirs := strings.Join(composeFsLayers, "::")
+		lowerDirs = lowerDirs + "::" + composeFsLayersLowerDirs
+	}
+	// absLowers is not valid anymore now as we have added composeFsLayers to it, so prevent
+	// its usage.
+	absLowers = nil //nolint:ineffassign
+
 	var opts string
 	if readWrite {
-		opts = fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", strings.Join(absLowers, ":"), diffDir, workdir)
+		opts = fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDirs, diffDir, workdir)
 	} else {
-		opts = fmt.Sprintf("lowerdir=%s:%s", diffDir, strings.Join(absLowers, ":"))
+		opts = fmt.Sprintf("lowerdir=%s:%s", diffDir, lowerDirs)
 	}
 	if len(optsList) > 0 {
 		opts = fmt.Sprintf("%s,%s", opts, strings.Join(optsList, ","))
@@ -1798,9 +1817,9 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		if readWrite {
 			diffDir := path.Join(id, "diff")
 			workDir := path.Join(id, "work")
-			opts = fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", strings.Join(absLowers, ":"), diffDir, workDir)
+			opts = fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDirs, diffDir, workDir)
 		} else {
-			opts = fmt.Sprintf("lowerdir=%s:%s", diffDir, strings.Join(absLowers, ":"))
+			opts = fmt.Sprintf("lowerdir=%s:%s", diffDir, lowerDirs)
 		}
 		if len(optsList) > 0 {
 			opts = strings.Join(append([]string{opts}, optsList...), ",")
@@ -1830,7 +1849,7 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 
 // Put unmounts the mount path created for the give id.
 func (d *Driver) Put(id string) error {
-	dir := d.dir(id)
+	dir, _, inAdditionalStore := d.dir2(id)
 	if _, err := os.Stat(dir); err != nil {
 		return err
 	}
@@ -1891,11 +1910,27 @@ func (d *Driver) Put(id string) error {
 		}
 	}
 
-	if err := unix.Rmdir(mountpoint); err != nil && !os.IsNotExist(err) {
-		logrus.Debugf("Failed to remove mountpoint %s overlay: %s - %v", id, mountpoint, err)
-		return fmt.Errorf("removing mount point %q: %w", mountpoint, err)
-	}
+	if !inAdditionalStore {
+		uid, gid := int(0), int(0)
+		fi, err := os.Stat(mountpoint)
+		if err != nil {
+			return err
+		}
+		if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+			uid, gid = int(stat.Uid), int(stat.Gid)
+		}
 
+		tmpMountpoint := path.Join(dir, "merged.1")
+		if err := idtools.MkdirAs(tmpMountpoint, 0o700, uid, gid); err != nil && !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		// rename(2) can be used on an empty directory, as it is the mountpoint after umount, and it retains
+		// its atomic semantic.  In this way the "merged" directory is never removed.
+		if err := unix.Rename(tmpMountpoint, mountpoint); err != nil {
+			logrus.Debugf("Failed to replace mountpoint %s overlay: %s - %v", id, mountpoint, err)
+			return fmt.Errorf("replacing mount point %q: %w", mountpoint, err)
+		}
+	}
 	return nil
 }
 
@@ -2007,11 +2042,34 @@ func (d *Driver) CleanupStagingDirectory(stagingDirectory string) error {
 	return os.RemoveAll(stagingDirectory)
 }
 
+func (d *Driver) supportsDataOnlyLayers() (bool, error) {
+	feature := "dataonly-layers"
+	overlayCacheResult, overlayCacheText, err := cachedFeatureCheck(d.runhome, feature)
+	if err == nil {
+		if overlayCacheResult {
+			logrus.Debugf("Cached value indicated that data-only layers for overlay are supported")
+			return true, nil
+		}
+		logrus.Debugf("Cached value indicated that data-only layers for overlay are not supported")
+		return false, errors.New(overlayCacheText)
+	}
+	supportsDataOnly, err := supportsDataOnlyLayers(d.home)
+	if err2 := cachedFeatureRecord(d.runhome, feature, supportsDataOnly, ""); err2 != nil {
+		return false, fmt.Errorf("recording overlay data-only layers support status: %w", err2)
+	}
+	return supportsDataOnly, err
+}
+
 func (d *Driver) useComposeFs() bool {
 	if !composeFsSupported() || unshare.IsRootless() {
 		return false
 	}
-	return true
+	supportsDataOnlyLayers, err := d.supportsDataOnlyLayers()
+	if err != nil {
+		logrus.Debugf("Check for data-only layers failed with: %v", err)
+		return false
+	}
+	return supportsDataOnlyLayers
 }
 
 // ApplyDiff applies the changes in the new layer using the specified function
@@ -2074,11 +2132,12 @@ func (d *Driver) ApplyDiffFromStagingDirectory(id, parent, stagingDirectory stri
 	if d.useComposeFs() {
 		// FIXME: move this logic into the differ so we don't have to open
 		// the file twice.
-		if err := enableVerityRecursive(stagingDirectory); err != nil && !errors.Is(err, unix.ENOTSUP) && !errors.Is(err, unix.ENOTTY) {
+		verityDigests, err := enableVerityRecursive(stagingDirectory)
+		if err != nil && !errors.Is(err, unix.ENOTSUP) && !errors.Is(err, unix.ENOTTY) {
 			logrus.Warningf("%s", err)
 		}
-		toc := diffOutput.BigData[zstdChunkedManifest]
-		if err := generateComposeFsBlob(toc, d.getComposefsData(id)); err != nil {
+		toc := diffOutput.Artifacts[tocArtifact]
+		if err := generateComposeFsBlob(verityDigests, toc, d.getComposefsData(id)); err != nil {
 			return err
 		}
 	}

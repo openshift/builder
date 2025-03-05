@@ -19,6 +19,7 @@ import (
 	"github.com/containers/buildah/copier"
 	"github.com/containers/buildah/define"
 	"github.com/containers/buildah/internal"
+	"github.com/containers/buildah/internal/tmpdir"
 	"github.com/containers/buildah/internal/volumes"
 	"github.com/containers/buildah/pkg/overlay"
 	"github.com/containers/buildah/pkg/parse"
@@ -34,9 +35,11 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/hooks"
 	hooksExec "github.com/containers/common/pkg/hooks/exec"
+	cutil "github.com/containers/common/pkg/util"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/ioutils"
 	"github.com/containers/storage/pkg/lockfile"
+	"github.com/containers/storage/pkg/mount"
 	"github.com/containers/storage/pkg/stringid"
 	"github.com/containers/storage/pkg/unshare"
 	"github.com/docker/go-units"
@@ -44,6 +47,7 @@ import (
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
 )
 
@@ -71,7 +75,7 @@ func setChildProcess() error {
 
 // Run runs the specified command in the container's root filesystem.
 func (b *Builder) Run(command []string, options RunOptions) error {
-	p, err := os.MkdirTemp("", define.Package)
+	p, err := os.MkdirTemp(tmpdir.GetTempDir(), define.Package)
 	if err != nil {
 		return err
 	}
@@ -260,7 +264,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 	rootIDPair := &idtools.IDPair{UID: int(rootUID), GID: int(rootGID)}
 
 	hostFile := ""
-	if !options.NoHosts && !contains(volumes, config.DefaultHostsFile) && options.ConfigureNetwork != define.NetworkDisabled {
+	if !options.NoHosts && !cutil.StringInSlice(config.DefaultHostsFile, volumes) && options.ConfigureNetwork != define.NetworkDisabled {
 		hostFile, err = b.generateHosts(path, rootIDPair, mountPoint, spec)
 		if err != nil {
 			return err
@@ -268,19 +272,16 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 		bindFiles[config.DefaultHostsFile] = hostFile
 	}
 
-	// generate /etc/hostname if the user intentionally did not override
-	if !(contains(volumes, "/etc/hostname")) {
-		if _, ok := bindFiles["/etc/hostname"]; !ok {
-			hostFile, err := b.generateHostname(path, spec.Hostname, rootIDPair)
-			if err != nil {
-				return err
-			}
-			// Bind /etc/hostname
-			bindFiles["/etc/hostname"] = hostFile
+	if !options.NoHostname && !(cutil.StringInSlice("/etc/hostname", volumes)) {
+		hostFile, err := b.generateHostname(path, spec.Hostname, rootIDPair)
+		if err != nil {
+			return err
 		}
+		// Bind /etc/hostname
+		bindFiles["/etc/hostname"] = hostFile
 	}
 
-	if !contains(volumes, resolvconf.DefaultResolvConf) && options.ConfigureNetwork != define.NetworkDisabled && !(len(b.CommonBuildOpts.DNSServers) == 1 && strings.ToLower(b.CommonBuildOpts.DNSServers[0]) == "none") {
+	if !cutil.StringInSlice(resolvconf.DefaultResolvConf, volumes) && options.ConfigureNetwork != define.NetworkDisabled && !(len(b.CommonBuildOpts.DNSServers) == 1 && strings.ToLower(b.CommonBuildOpts.DNSServers[0]) == "none") {
 		resolvFile, err := b.addResolvConf(path, rootIDPair, b.CommonBuildOpts.DNSServers, b.CommonBuildOpts.DNSSearch, b.CommonBuildOpts.DNSOptions, spec.Linux.Namespaces)
 		if err != nil {
 			return err
@@ -350,7 +351,7 @@ rootless=%d
 	}
 
 	defer func() {
-		if err := b.cleanupRunMounts(options.SystemContext, mountPoint, runArtifacts); err != nil {
+		if err := b.cleanupRunMounts(mountPoint, runArtifacts); err != nil {
 			options.Logger.Errorf("unable to cleanup run mounts %v", err)
 		}
 	}()
@@ -464,7 +465,7 @@ func addCommonOptsToSpec(commonOpts *define.CommonBuildOptions, g *generate.Gene
 		return fmt.Errorf("failed to get container config: %w", err)
 	}
 	// Other process resource limits
-	if err := addRlimits(commonOpts.Ulimit, g, defaultContainerConfig.Containers.DefaultUlimits); err != nil {
+	if err := addRlimits(commonOpts.Ulimit, g, defaultContainerConfig.Containers.DefaultUlimits.Get()); err != nil {
 		return err
 	}
 
@@ -499,7 +500,7 @@ func setupSlirp4netnsNetwork(config *config.Config, netns, cid string, options [
 		Mask: res.Subnet.Mask,
 	}}
 	netStatus := map[string]nettypes.StatusBlock{
-		slirp4netns.BinaryName: nettypes.StatusBlock{
+		slirp4netns.BinaryName: {
 			Interfaces: map[string]nettypes.NetInterface{
 				"tap0": {
 					Subnets: []nettypes.NetAddress{{IPNet: subnet}},
@@ -541,7 +542,7 @@ func setupPasta(config *config.Config, netns string, options []string) (func(), 
 		Mask: net.IPv4Mask(255, 255, 255, 0),
 	}}
 	netStatus := map[string]nettypes.StatusBlock{
-		slirp4netns.BinaryName: nettypes.StatusBlock{
+		slirp4netns.BinaryName: {
 			Interfaces: map[string]nettypes.NetInterface{
 				"tap0": {
 					Subnets: []nettypes.NetAddress{{IPNet: subnet}},
@@ -774,20 +775,6 @@ func setupNamespaces(logger *logrus.Logger, g *generate.Generator, namespaceOpti
 		if err := addSysctl([]string{"net"}); err != nil {
 			return false, "", false, err
 		}
-		for name, val := range define.DefaultNetworkSysctl {
-			// Check that the sysctl we are adding is actually supported
-			// by the kernel
-			p := filepath.Join("/proc/sys", strings.Replace(name, ".", "/", -1))
-			_, err := os.Stat(p)
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				return false, "", false, err
-			}
-			if err == nil {
-				g.AddLinuxSysctl(name, val)
-			} else {
-				logger.Warnf("ignoring sysctl %s since %s doesn't exist", name, p)
-			}
-		}
 	}
 	return configureNetwork, networkString, configureUTS, nil
 }
@@ -965,7 +952,7 @@ func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string,
 				RootGID:                idMaps.rootGID,
 				UpperDirOptionFragment: upperDir,
 				WorkDirOptionFragment:  workDir,
-				GraphOpts:              b.store.GraphOptions(),
+				GraphOpts:              slices.Clone(b.store.GraphOptions()),
 			}
 
 			overlayMount, err := overlay.MountWithOptions(contentDir, host, container, &overlayOpts)
@@ -974,7 +961,7 @@ func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string,
 			}
 
 			// If chown true, add correct ownership to the overlay temp directories.
-			if foundU {
+			if err == nil && foundU {
 				if err := chown.ChangeHostPathOwnership(contentDir, true, idMaps.processUID, idMaps.processGID); err != nil {
 					return specs.Mount{}, err
 				}
@@ -1024,33 +1011,13 @@ func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string,
 }
 
 func setupMaskedPaths(g *generate.Generator) {
-	for _, mp := range []string{
-		"/proc/acpi",
-		"/proc/kcore",
-		"/proc/keys",
-		"/proc/latency_stats",
-		"/proc/timer_list",
-		"/proc/timer_stats",
-		"/proc/sched_debug",
-		"/proc/scsi",
-		"/sys/firmware",
-		"/sys/fs/selinux",
-		"/sys/dev",
-		"/sys/devices/virtual/powercap",
-	} {
+	for _, mp := range config.DefaultMaskedPaths {
 		g.AddLinuxMaskedPaths(mp)
 	}
 }
 
 func setupReadOnlyPaths(g *generate.Generator) {
-	for _, rp := range []string{
-		"/proc/asound",
-		"/proc/bus",
-		"/proc/fs",
-		"/proc/irq",
-		"/proc/sys",
-		"/proc/sysrq-trigger",
-	} {
+	for _, rp := range config.DefaultReadOnlyPaths {
 		g.AddLinuxReadonlyPaths(rp)
 	}
 }
@@ -1252,24 +1219,39 @@ func checkIdsGreaterThan5(ids []specs.LinuxIDMapping) bool {
 	return false
 }
 
-// If this function succeeds and returns a non-nil *lockfile.LockFile, the caller must unlock it (when??).
-func (b *Builder) getCacheMount(tokens []string, stageMountPoints map[string]internal.StageMountDetails, idMaps IDMaps, workDir string) (*specs.Mount, *lockfile.LockFile, error) {
+// Returns a Mount to add to the runtime spec's list of mounts, an optional
+// path of a mounted filesystem, unmounted, and an optional lock, or an error.
+//
+// The caller is expected to, after the command which uses the mount exits,
+// unmount the mounted filesystem (if we provided the path to its mountpoint)
+// and remove its mountpoint, , and release the lock (if we took one).
+func (b *Builder) getCacheMount(tokens []string, stageMountPoints map[string]internal.StageMountDetails, idMaps IDMaps, workDir, tmpDir string) (*specs.Mount, string, *lockfile.LockFile, error) {
 	var optionMounts []specs.Mount
-	mount, targetLock, err := volumes.GetCacheMount(tokens, b.store, b.MountLabel, stageMountPoints, workDir)
+	optionMount, intermediateMount, targetLock, err := volumes.GetCacheMount(tokens, stageMountPoints, workDir, tmpDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 	succeeded := false
 	defer func() {
-		if !succeeded && targetLock != nil {
-			targetLock.Unlock()
+		if !succeeded {
+			if intermediateMount != "" {
+				if err := mount.Unmount(intermediateMount); err != nil {
+					b.Logger.Debugf("unmounting %q: %v", intermediateMount, err)
+				}
+				if err := os.Remove(intermediateMount); err != nil {
+					b.Logger.Debugf("removing should-be-empty directory %q: %v", intermediateMount, err)
+				}
+			}
+			if targetLock != nil {
+				targetLock.Unlock()
+			}
 		}
 	}()
-	optionMounts = append(optionMounts, mount)
+	optionMounts = append(optionMounts, optionMount)
 	volumes, err := b.runSetupVolumeMounts(b.MountLabel, nil, optionMounts, idMaps)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 	succeeded = true
-	return &volumes[0], targetLock, nil
+	return &volumes[0], intermediateMount, targetLock, nil
 }

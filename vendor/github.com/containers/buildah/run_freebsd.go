@@ -16,6 +16,7 @@ import (
 	"github.com/containers/buildah/copier"
 	"github.com/containers/buildah/define"
 	"github.com/containers/buildah/internal"
+	"github.com/containers/buildah/internal/tmpdir"
 	"github.com/containers/buildah/pkg/jail"
 	"github.com/containers/buildah/pkg/overlay"
 	"github.com/containers/buildah/pkg/parse"
@@ -24,6 +25,7 @@ import (
 	"github.com/containers/common/libnetwork/resolvconf"
 	nettypes "github.com/containers/common/libnetwork/types"
 	"github.com/containers/common/pkg/config"
+	cutil "github.com/containers/common/pkg/util"
 	"github.com/containers/storage/pkg/idtools"
 	"github.com/containers/storage/pkg/lockfile"
 	"github.com/containers/storage/pkg/stringid"
@@ -72,7 +74,7 @@ func setChildProcess() error {
 }
 
 func (b *Builder) Run(command []string, options RunOptions) error {
-	p, err := os.MkdirTemp("", Package)
+	p, err := os.MkdirTemp(tmpdir.GetTempDir(), define.Package)
 	if err != nil {
 		return err
 	}
@@ -197,7 +199,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 	rootIDPair := &idtools.IDPair{UID: int(rootUID), GID: int(rootGID)}
 
 	hostFile := ""
-	if !options.NoHosts && !contains(volumes, config.DefaultHostsFile) && options.ConfigureNetwork != define.NetworkDisabled {
+	if !options.NoHosts && !cutil.StringInSlice(config.DefaultHostsFile, volumes) && options.ConfigureNetwork != define.NetworkDisabled {
 		hostFile, err = b.generateHosts(path, rootIDPair, mountPoint, spec)
 		if err != nil {
 			return err
@@ -205,7 +207,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 		bindFiles[config.DefaultHostsFile] = hostFile
 	}
 
-	if !contains(volumes, resolvconf.DefaultResolvConf) && options.ConfigureNetwork != define.NetworkDisabled && !(len(b.CommonBuildOpts.DNSServers) == 1 && strings.ToLower(b.CommonBuildOpts.DNSServers[0]) == "none") {
+	if !cutil.StringInSlice(resolvconf.DefaultResolvConf, volumes) && options.ConfigureNetwork != define.NetworkDisabled && !(len(b.CommonBuildOpts.DNSServers) == 1 && strings.ToLower(b.CommonBuildOpts.DNSServers[0]) == "none") {
 		resolvFile, err := b.addResolvConf(path, rootIDPair, b.CommonBuildOpts.DNSServers, b.CommonBuildOpts.DNSSearch, b.CommonBuildOpts.DNSOptions, nil)
 		if err != nil {
 			return err
@@ -238,7 +240,7 @@ func (b *Builder) Run(command []string, options RunOptions) error {
 	}
 
 	defer func() {
-		if err := b.cleanupRunMounts(options.SystemContext, mountPoint, runArtifacts); err != nil {
+		if err := b.cleanupRunMounts(mountPoint, runArtifacts); err != nil {
 			options.Logger.Errorf("unable to cleanup run mounts %v", err)
 		}
 	}()
@@ -297,7 +299,7 @@ func addCommonOptsToSpec(commonOpts *define.CommonBuildOptions, g *generate.Gene
 		return fmt.Errorf("failed to get container config: %w", err)
 	}
 	// Other process resource limits
-	if err := addRlimits(commonOpts.Ulimit, g, defaultContainerConfig.Containers.DefaultUlimits); err != nil {
+	if err := addRlimits(commonOpts.Ulimit, g, defaultContainerConfig.Containers.DefaultUlimits.Get()); err != nil {
 		return err
 	}
 
@@ -311,9 +313,12 @@ func setupSpecialMountSpecChanges(spec *spec.Spec, shmSize string) ([]specs.Moun
 	return spec.Mounts, nil
 }
 
-// If this function succeeds and returns a non-nil *lockfile.LockFile, the caller must unlock it (when??).
-func (b *Builder) getCacheMount(tokens []string, stageMountPoints map[string]internal.StageMountDetails, idMaps IDMaps, workDir string) (*spec.Mount, *lockfile.LockFile, error) {
-	return nil, nil, errors.New("cache mounts not supported on freebsd")
+// If this succeeded, the caller would be expected to, after the command which
+// uses the mount exits, unmount the mounted filesystem and remove its
+// mountpoint (if we provided the path to its mountpoint), and release the lock
+// (if we took one).
+func (b *Builder) getCacheMount(tokens []string, stageMountPoints map[string]internal.StageMountDetails, idMaps IDMaps, workDir, tmpDir string) (*specs.Mount, string, *lockfile.LockFile, error) {
+	return nil, "", nil, errors.New("cache mounts not supported on freebsd")
 }
 
 func (b *Builder) runSetupVolumeMounts(mountLabel string, volumeMounts []string, optionMounts []specs.Mount, idMaps IDMaps) (mounts []specs.Mount, Err error) {
