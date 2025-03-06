@@ -29,7 +29,7 @@ const (
 	// identify working containers.
 	Package = "buildah"
 	// Version for the Package. Also used by .packit.sh for Packit builds.
-	Version = "1.31.0"
+	Version = "1.33.12"
 
 	// DefaultRuntime if containers.conf fails.
 	DefaultRuntime = "runc"
@@ -47,11 +47,19 @@ const (
 	OCI = "oci"
 	// DOCKER used to define the "docker" image format
 	DOCKER = "docker"
+
+	// SEV is a known trusted execution environment type: AMD-SEV (secure encrypted virtualization using encrypted state, requires epyc 1000 "naples")
+	SEV TeeType = "sev"
+	// SNP is a known trusted execution environment type: AMD-SNP (SEV secure nested pages) (requires epyc 3000 "milan")
+	SNP TeeType = "snp"
 )
 
+// TeeType is a supported trusted execution environment type.
+type TeeType string
+
 var (
-	// DefaultCapabilities is the list of capabilities which we grant by
-	// default to containers which are running under UID 0.
+	// Deprecated: DefaultCapabilities values should be retrieved from
+	// github.com/containers/common/pkg/config
 	DefaultCapabilities = []string{
 		"CAP_AUDIT_WRITE",
 		"CAP_CHOWN",
@@ -67,8 +75,8 @@ var (
 		"CAP_SETUID",
 		"CAP_SYS_CHROOT",
 	}
-	// DefaultNetworkSysctl is the list of Kernel parameters which we
-	// grant by default to containers which are running under UID 0.
+	// Deprecated: DefaultNetworkSysctl values should be retrieved from
+	// github.com/containers/common/pkg/config
 	DefaultNetworkSysctl = map[string]string{
 		"net.ipv4.ping_group_range": "0 0",
 	}
@@ -105,13 +113,30 @@ type BuildOutputOption struct {
 	IsStdout bool
 }
 
-// TempDirForURL checks if the passed-in string looks like a URL or -.  If it is,
-// TempDirForURL creates a temporary directory, arranges for its contents to be
-// the contents of that URL, and returns the temporary directory's path, along
-// with the name of a subdirectory which should be used as the build context
-// (which may be empty or ".").  Removal of the temporary directory is the
-// responsibility of the caller.  If the string doesn't look like a URL,
-// TempDirForURL returns empty strings and a nil error code.
+// ConfidentialWorkloadOptions encapsulates options which control whether or not
+// we output an image whose rootfs contains a LUKS-compatibly-encrypted disk image
+// instead of the usual rootfs contents.
+type ConfidentialWorkloadOptions struct {
+	Convert                  bool
+	AttestationURL           string
+	CPUs                     int
+	Memory                   int
+	TempDir                  string
+	TeeType                  TeeType
+	IgnoreAttestationErrors  bool
+	WorkloadID               string
+	DiskEncryptionPassphrase string
+	Slop                     string
+	FirmwareLibrary          string
+}
+
+// TempDirForURL checks if the passed-in string looks like a URL or "-".  If it
+// is, TempDirForURL creates a temporary directory, arranges for its contents
+// to be the contents of that URL, and returns the temporary directory's path,
+// along with the relative name of a subdirectory which should be used as the
+// build context (which may be empty or ".").  Removal of the temporary
+// directory is the responsibility of the caller.  If the string doesn't look
+// like a URL or "-", TempDirForURL returns empty strings and a nil error code.
 func TempDirForURL(dir, prefix, url string) (name string, subdir string, err error) {
 	if !strings.HasPrefix(url, "http://") &&
 		!strings.HasPrefix(url, "https://") &&
@@ -124,19 +149,24 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 	if err != nil {
 		return "", "", fmt.Errorf("creating temporary directory for %q: %w", url, err)
 	}
+	downloadDir := filepath.Join(name, "download")
+	if err = os.MkdirAll(downloadDir, 0o700); err != nil {
+		return "", "", fmt.Errorf("creating directory %q for %q: %w", downloadDir, url, err)
+	}
 	urlParsed, err := urlpkg.Parse(url)
 	if err != nil {
 		return "", "", fmt.Errorf("parsing url %q: %w", url, err)
 	}
 	if strings.HasPrefix(url, "git://") || strings.HasSuffix(urlParsed.Path, ".git") {
-		combinedOutput, gitSubDir, err := cloneToDirectory(url, name)
+		combinedOutput, gitSubDir, err := cloneToDirectory(url, downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
 			return "", "", fmt.Errorf("cloning %q to %q:\n%s: %w", url, name, string(combinedOutput), err)
 		}
-		return name, gitSubDir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, gitSubDir))
+		return name, filepath.Join(filepath.Base(downloadDir), gitSubDir), nil
 	}
 	if strings.HasPrefix(url, "github.com/") {
 		ghurl := url
@@ -145,28 +175,29 @@ func TempDirForURL(dir, prefix, url string) (name string, subdir string, err err
 		subdir = path.Base(ghurl) + "-master"
 	}
 	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-		err = downloadToDirectory(url, name)
+		err = downloadToDirectory(url, downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
-			return "", subdir, err
+			return "", "", err
 		}
-		return name, subdir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, subdir))
+		return name, filepath.Join(filepath.Base(downloadDir), subdir), nil
 	}
 	if url == "-" {
-		err = stdinToDirectory(name)
+		err = stdinToDirectory(downloadDir)
 		if err != nil {
 			if err2 := os.RemoveAll(name); err2 != nil {
 				logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 			}
-			return "", subdir, err
+			return "", "", err
 		}
-		logrus.Debugf("Build context is at %q", name)
-		return name, subdir, nil
+		logrus.Debugf("Build context is at %q", filepath.Join(downloadDir, subdir))
+		return name, filepath.Join(filepath.Base(downloadDir), subdir), nil
 	}
 	logrus.Debugf("don't know how to retrieve %q", url)
-	if err2 := os.Remove(name); err2 != nil {
+	if err2 := os.RemoveAll(name); err2 != nil {
 		logrus.Debugf("error removing temporary directory %q: %v", name, err2)
 	}
 	return "", "", errors.New("unreachable code reached")
