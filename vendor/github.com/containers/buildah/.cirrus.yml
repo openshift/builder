@@ -137,9 +137,10 @@ cross_build_task:
     only_if: &not_docs $CIRRUS_CHANGE_TITLE !=~ '.*CI:DOCS.*'
 
     osx_instance:
-        image: 'big-sur-base'
+        image: ghcr.io/cirruslabs/macos-ventura-base:latest
 
     script:
+        - brew upgrade
         - brew update
         - brew install go
         - brew install go-md2man
@@ -185,7 +186,7 @@ conformance_task:
     gce_instance:
         image_name: "${UBUNTU_CACHE_IMAGE_NAME}"
 
-    timeout_in: 25m
+    timeout_in: 45m
 
     matrix:
         - env:
