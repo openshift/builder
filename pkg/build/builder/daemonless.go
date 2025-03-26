@@ -298,6 +298,13 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 	// in runtime-tools's generator logic.
 	seccompProfilePath := "/usr/share/containers/seccomp.json"
 
+	// If we have /dev/kvm, pass it down to the build process since it likely means
+	// that it was allocated to us with that expectation.
+	devices := []string{}
+	if _, err := os.Stat("/dev/kvm"); err == nil {
+		devices = append(devices, "/dev/kvm")
+	}
+
 	options := imagebuildah.BuildOptions{
 		ContextDirectory: contextDir,
 		PullPolicy:       pullPolicy,
@@ -334,6 +341,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		MaxPullPushRetries:      DefaultPushOrPullRetryCount,
 		PullPushRetryDelay:      DefaultPushOrPullRetryDelay,
 		SkipUnusedStages:        types.OptionalBoolFalse,
+		Devices:                 devices,
 	}
 
 	if os.Getenv("BUILDAH_QUIET") == "true" {
