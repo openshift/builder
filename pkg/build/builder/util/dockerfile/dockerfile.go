@@ -62,6 +62,11 @@ func Write(node *parser.Node) []byte {
 				}
 				buf.Write([]byte(n.Value))
 			}
+			for _, heredoc := range node.Heredocs {
+				buf.Write([]byte(heredoc.Content))
+				buf.Write([]byte("\n"))
+				buf.Write([]byte(heredoc.Name))
+			}
 			buf.Write([]byte("\n"))
 			return buf.Bytes()
 		}
