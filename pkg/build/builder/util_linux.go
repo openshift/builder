@@ -127,10 +127,7 @@ func GetCGroupLimits() (*s2iapi.CGroupLimits, error) {
 	if memoryByteLimit > 92233720368547 {
 		memoryByteLimit = 92233720368547
 	}
-	// limit the number of microseconds to a million
-	if cpuQuota > 1000000 {
-		cpuQuota = 1000000
-	}
+
 	if cpuPeriod > 1000000 {
 		cpuPeriod = 1000000
 	}
