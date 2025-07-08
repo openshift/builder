@@ -94,6 +94,36 @@ WORKDIR /home
 HEALTHCHECK --interval=60s --timeout=10s CMD ["/usr/bin/true"]
 `,
 		},
+		"Dockerfile with heredoc": {
+			in: `# This is a Dockerfile
+FROM scratch
+LABEL version=1.0
+# Here we start building a second image
+FROM busybox
+ENV PATH=/bin
+RUN <<EOF <<ALSO
+pwd
+EOF
+ls -1
+ALSO
+RUN <<EOF
+["ls","-1"]
+EOF
+`,
+			want: `FROM scratch
+LABEL version=1.0
+FROM busybox
+ENV PATH=/bin
+RUN <<EOF <<ALSO
+pwd
+EOF
+ls -1
+ALSO
+RUN <<EOF
+["ls","-1"]
+EOF
+`,
+		},
 	}
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
