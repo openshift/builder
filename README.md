@@ -1,7 +1,7 @@
 # OpenShift Builder
 
 The OpenShift Builder container image drives OpenShift's
-[Builds using BuildConfig](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/builds_using_buildconfig/index),
+[Builds using BuildConfig](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/builds_using_buildconfig/index),
 leveraging [Buildah](https://github.com/containers/buildah) and
 [Source-To-Image](https://github.com/openshift/source-to-image) to turn source code into images
 that can be deployed on Kubernetes. The container image also handles the lifecycle of the build,
@@ -16,7 +16,7 @@ the CNCF [Shipwright](https://shipwright.io) project.
 The OpenShift Builder container image is intended to run exclusively as a container within an
 OpenShift build pod. The best way to run the container image is to follow the official documentation
 on how to run a build with
-[BuildConfigs](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/builds_using_buildconfig/understanding-image-builds).
+[BuildConfigs](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/builds_using_buildconfig/understanding-image-builds).
 
 ## Contributing
 
