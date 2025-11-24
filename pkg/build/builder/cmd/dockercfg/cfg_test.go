@@ -1,7 +1,6 @@
 package dockercfg
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +15,7 @@ func TestGetDockerAuth(t *testing.T) {
 
 	content := "{ \"auths\": { \"test-server-1.tld\":{\"auth\":\"Zm9vOmJhcgo=\",\"email\":\"test@email.test.com\"}}}"
 
-	tmpDirPath, err := ioutil.TempDir("", "test_foo_bar_")
+	tmpDirPath, err := os.MkdirTemp("", "test_foo_bar_")
 	if err != nil {
 		t.Fatalf("Creating tmp dir fail: %v", err)
 		return

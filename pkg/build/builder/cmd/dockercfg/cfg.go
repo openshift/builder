@@ -2,7 +2,6 @@ package dockercfg
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -121,7 +120,7 @@ func readSpecificDockerConfigJSONFile(filePath string) error {
 	var contents []byte
 	var err error
 
-	if contents, err = ioutil.ReadFile(filePath); err != nil {
+	if contents, err = os.ReadFile(filePath); err != nil {
 		log.V(4).Infof("error reading file: %v", err)
 		return err
 	}

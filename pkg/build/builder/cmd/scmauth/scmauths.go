@@ -2,7 +2,6 @@ package scmauth
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 
@@ -21,7 +20,7 @@ func GitAuths(sourceURL *s2igit.URL) SCMAuths {
 	return auths
 }
 
-func (a SCMAuths) present(files []os.FileInfo) SCMAuths {
+func (a SCMAuths) present(files []os.DirEntry) SCMAuths {
 	scmAuthsPresent := map[string]SCMAuth{}
 	for _, file := range files {
 		log.V(4).Infof("Finding auth for %q", file.Name())
@@ -53,7 +52,7 @@ func (a SCMAuths) doSetup(secretsDir string) (SCMAuthContext, error) {
 }
 
 func (a SCMAuths) Setup(secretsDir string) (env []string, overrideURL *url.URL, gitConfig string, err error) {
-	files, err := ioutil.ReadDir(secretsDir)
+	files, err := os.ReadDir(secretsDir)
 	if err != nil {
 		return nil, nil, "", err
 	}
