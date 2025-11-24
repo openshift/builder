@@ -6,7 +6,6 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -369,7 +368,7 @@ func readSourceInfo() (*git.SourceInfo, error) {
 		return nil, nil
 	}
 
-	data, err := ioutil.ReadFile(sourceInfoPath)
+	data, err := os.ReadFile(sourceInfoPath)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +388,7 @@ func readSourceInfo() (*git.SourceInfo, error) {
 func addBuildParameters(dir string, build *buildapiv1.Build, sourceInfo *git.SourceInfo) error {
 	dockerfilePath := getDockerfilePath(dir, build)
 
-	in, err := ioutil.ReadFile(dockerfilePath)
+	in, err := os.ReadFile(dockerfilePath)
 	if err != nil {
 		return err
 	}

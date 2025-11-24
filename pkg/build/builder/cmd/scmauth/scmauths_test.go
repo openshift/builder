@@ -1,7 +1,6 @@
 package scmauth
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -34,7 +33,7 @@ func scmAuths() SCMAuths {
 func TestPresent(t *testing.T) {
 	secretDir := secretDir(t, "one", "three")
 	defer os.RemoveAll(secretDir)
-	files, err := ioutil.ReadDir(secretDir)
+	files, err := os.ReadDir(secretDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

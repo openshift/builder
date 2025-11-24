@@ -2,7 +2,7 @@ package scmauth
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 
 	s2igit "github.com/openshift/source-to-image/pkg/scm/git"
@@ -27,7 +27,7 @@ func (s CACert) Setup(baseDir string, context SCMAuthContext) (string, error) {
 	if !(s.SourceURL.Type == s2igit.URLTypeURL && s.SourceURL.URL.Scheme == "https" && s.SourceURL.URL.Opaque == "") {
 		return "", nil
 	}
-	gitconfig, err := ioutil.TempFile("", "ca.crt.")
+	gitconfig, err := os.CreateTemp("", "ca.crt.")
 	if err != nil {
 		return "", err
 	}

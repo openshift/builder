@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -372,7 +371,7 @@ func (s *S2IBuilder) Build() error {
 
 	startTime := metav1.Now()
 	if _, err := os.Stat(config.AsDockerfile); !os.IsNotExist(err) {
-		in, err := ioutil.ReadFile(config.AsDockerfile)
+		in, err := os.ReadFile(config.AsDockerfile)
 		if err != nil {
 			return err
 		}

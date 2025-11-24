@@ -1,7 +1,6 @@
 package scmauth
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,12 +10,12 @@ import (
 )
 
 func secretDir(t *testing.T, files ...string) string {
-	dir, err := ioutil.TempDir("", "test")
+	dir, err := os.MkdirTemp("", "test")
 	if err != nil {
 		t.Fatalf("error creating temp dir: %v", err)
 	}
 	for _, f := range files {
-		err := ioutil.WriteFile(filepath.Join(dir, f), []byte("test"), 0600)
+		err := os.WriteFile(filepath.Join(dir, f), []byte("test"), 0600)
 		if err != nil {
 			t.Fatalf("error creating test file: %v", err)
 		}

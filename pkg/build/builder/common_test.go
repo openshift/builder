@@ -3,7 +3,6 @@ package builder
 import (
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -520,7 +519,7 @@ func Test_addBuildParameters(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			f, err := ioutil.TempFile("", "builder-dockertest")
+			f, err := os.CreateTemp("", "builder-dockertest")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -546,7 +545,7 @@ func Test_addBuildParameters(t *testing.T) {
 			build.Spec.Source.Images = test.build
 			sourceInfo := &git.SourceInfo{}
 			testErr := addBuildParameters(filepath.Dir(f.Name()), build, sourceInfo)
-			out, err := ioutil.ReadFile(f.Name())
+			out, err := os.ReadFile(f.Name())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -672,7 +671,7 @@ func Test_findReferencedImages(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			f, err := ioutil.TempFile("", "builder-dockertest")
+			f, err := os.CreateTemp("", "builder-dockertest")
 			if err != nil {
 				t.Fatal(err)
 			}

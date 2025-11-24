@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"io/ioutil"
 	"math"
 	"os"
 	"reflect"
@@ -145,7 +144,7 @@ func TestReadMaxStringOrInt64(t *testing.T) {
 			expectedErr: true,
 		},
 	}
-	tmpDir, err := ioutil.TempDir(os.TempDir(), t.Name())
+	tmpDir, err := os.MkdirTemp(os.TempDir(), t.Name())
 	if err != nil {
 		t.Fatalf("error creating tmp dir: %s", err.Error())
 	}

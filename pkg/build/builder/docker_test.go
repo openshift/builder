@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -391,7 +390,7 @@ func TestDockerfilePath(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		buildDir, err := ioutil.TempDir("", "dockerfile-path")
+		buildDir, err := os.MkdirTemp("", "dockerfile-path")
 		if err != nil {
 			t.Errorf("failed to create tmpdir: %v", err)
 			continue
@@ -407,7 +406,7 @@ func TestDockerfilePath(t *testing.T) {
 			t.Errorf("failed to create directory %s: %v", filepath.Dir(absoluteDockerfilePath), err)
 			continue
 		}
-		if err = ioutil.WriteFile(absoluteDockerfilePath, []byte(from), os.FileMode(0644)); err != nil {
+		if err = os.WriteFile(absoluteDockerfilePath, []byte(from), os.FileMode(0644)); err != nil {
 			t.Errorf("failed to write dockerfile to %s: %v", absoluteDockerfilePath, err)
 			continue
 		}
@@ -465,7 +464,7 @@ func TestDockerfilePath(t *testing.T) {
 		}
 
 		// check that our Dockerfile has been modified
-		dockerfileData, err := ioutil.ReadFile(absoluteDockerfilePath)
+		dockerfileData, err := os.ReadFile(absoluteDockerfilePath)
 		if err != nil {
 			t.Errorf("failed to read dockerfile %s: %v", absoluteDockerfilePath, err)
 			continue
@@ -573,7 +572,7 @@ USER 1001`
 
 	client := buildfake.Clientset{}
 
-	buildDir, err := ioutil.TempDir("", "dockerfile-path")
+	buildDir, err := os.MkdirTemp("", "dockerfile-path")
 	if err != nil {
 		t.Errorf("failed to create tmpdir: %v", err)
 	}
