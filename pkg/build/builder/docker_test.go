@@ -596,6 +596,79 @@ USER 1001`
 	}
 }
 
+func TestPullImageDigestReference(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantRepo string
+		wantTag  string
+	}{
+		{
+			name:     "tag reference",
+			input:    "registry:5000/ns/image:latest",
+			wantRepo: "registry:5000/ns/image",
+			wantTag:  "latest",
+		},
+		{
+			name:     "digest reference preserves full name in repository",
+			input:    "registry:5000/ns/image@sha256:abc123def456",
+			wantRepo: "registry:5000/ns/image@sha256:abc123def456",
+			wantTag:  "",
+		},
+		{
+			name:     "internal registry digest reference",
+			input:    "image-registry.openshift-image-registry.svc:5000/ci-op-xxx/pipeline@sha256:aabbccdd",
+			wantRepo: "image-registry.openshift-image-registry.svc:5000/ci-op-xxx/pipeline@sha256:aabbccdd",
+			wantTag:  "",
+		},
+		{
+			name:     "simple tag",
+			input:    "myimage:v1",
+			wantRepo: "myimage",
+			wantTag:  "v1",
+		},
+		{
+			name:     "no tag",
+			input:    "myimage",
+			wantRepo: "myimage",
+			wantTag:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotOpts docker.PullImageOptions
+			dockerClient := &FakeDocker{
+				pullImageFunc: func(opts docker.PullImageOptions, searchPaths []string) error {
+					gotOpts = opts
+					return nil
+				},
+			}
+			d := &DockerBuilder{
+				dockerClient: dockerClient,
+				build: &buildapiv1.Build{
+					Spec: buildapiv1.BuildSpec{
+						CommonSpec: buildapiv1.CommonSpec{
+							Strategy: buildapiv1.BuildStrategy{
+								DockerStrategy: &buildapiv1.DockerBuildStrategy{},
+							},
+						},
+					},
+				},
+			}
+			err := d.pullImage(tt.input, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if gotOpts.Repository != tt.wantRepo {
+				t.Errorf("Repository = %q, want %q", gotOpts.Repository, tt.wantRepo)
+			}
+			if gotOpts.Tag != tt.wantTag {
+				t.Errorf("Tag = %q, want %q", gotOpts.Tag, tt.wantTag)
+			}
+		})
+	}
+}
+
 // TestCopyLocalObject verifies that we are able to copy mounted Kubernetes Secret or ConfigMap
 // data to the build directory. The build directory is typically where git source code is cloned,
 // though other sources of code may be used as well.
