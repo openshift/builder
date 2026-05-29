@@ -1,7 +1,6 @@
 package scmauth
 
 import (
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -31,7 +30,7 @@ func TestSSHPrivateKeySetup(t *testing.T) {
 	if !isSet {
 		t.Errorf("GIT_SSH is not set")
 	}
-	buf, err := ioutil.ReadFile(fileName)
+	buf, err := os.ReadFile(fileName)
 	if err != nil {
 		t.Errorf("problem reading ssh file %s", err.Error())
 	}
@@ -55,7 +54,7 @@ func TestSSHPrivateKeyWithKnownHostsSetup(t *testing.T) {
 	if !isSet {
 		t.Errorf("GIT_SSH is not set")
 	}
-	buf, err := ioutil.ReadFile(fileName)
+	buf, err := os.ReadFile(fileName)
 	if err != nil {
 		t.Errorf("problem reading ssh file %s", err.Error())
 	}

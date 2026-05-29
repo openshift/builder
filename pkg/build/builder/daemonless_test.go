@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -429,7 +428,7 @@ func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 		},
 	}
 	for _, tc := range cases {
-		tmpDir, err := ioutil.TempDir(os.TempDir(), tc.name)
+		tmpDir, err := os.MkdirTemp(os.TempDir(), tc.name)
 		if err != nil {
 			t.Fatalf(err.Error())
 		}
@@ -498,7 +497,7 @@ func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 			splitMount := strings.Split(mounts[0], ":")
 			if len(splitMount) > 0 {
 				copyDir := splitMount[0]
-				files, err := ioutil.ReadDir(copyDir)
+				files, err := os.ReadDir(copyDir)
 				if err != nil {
 					t.Fatalf(err.Error())
 				}
@@ -573,7 +572,7 @@ func TestRHRepoMount(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tmpDir, err := ioutil.TempDir(os.TempDir(), tc.name)
+		tmpDir, err := os.MkdirTemp(os.TempDir(), tc.name)
 		if err != nil {
 			t.Fatalf(err.Error())
 		}

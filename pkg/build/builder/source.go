@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,7 +86,7 @@ func GitClone(ctx context.Context, gitClient GitClient, gitSource *buildapiv1.Gi
 				log.V(0).Infof("error: Unable to serialized git source info: %v", err)
 				return sourceInfo, nil
 			}
-			err = ioutil.WriteFile(filepath.Join(buildWorkDirMount, "sourceinfo.json"), sourceInfoJson, 0644)
+			err = os.WriteFile(filepath.Join(buildWorkDirMount, "sourceinfo.json"), sourceInfoJson, 0644)
 			if err != nil {
 				log.V(0).Infof("error: Unable to serialized git source info: %v", err)
 				return sourceInfo, nil
@@ -126,7 +125,7 @@ func ManageDockerfile(dir string, build *buildapiv1.Build) error {
 		if len(build.Spec.Source.ContextDir) != 0 {
 			baseDir = filepath.Join(baseDir, build.Spec.Source.ContextDir)
 		}
-		if err := ioutil.WriteFile(filepath.Join(baseDir, "Dockerfile"), []byte(*dockerfileSource), 0660); err != nil {
+		if err := os.WriteFile(filepath.Join(baseDir, "Dockerfile"), []byte(*dockerfileSource), 0660); err != nil {
 			build.Status.Phase = buildapiv1.BuildPhaseFailed
 			build.Status.Reason = buildapiv1.StatusReasonManageDockerfileFailed
 			build.Status.Message = builderutil.StatusMessageManageDockerfileFailed

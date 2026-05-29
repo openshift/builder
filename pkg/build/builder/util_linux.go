@@ -3,7 +3,6 @@ package builder
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +89,7 @@ func GetCGroupLimits() (*s2iapi.CGroupLimits, error) {
 	for _, filename := range []string{memoryLimitFile, cpuQuotaFile, cpuPeriodFile, cpuSharesFile} {
 		if _, ok := fileContents[filename]; !ok {
 			var b []byte
-			b, err = ioutil.ReadFile(filename)
+			b, err = os.ReadFile(filename)
 			if err != nil {
 				goto returnError
 			}

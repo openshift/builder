@@ -3,7 +3,6 @@ package builder
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -50,13 +49,13 @@ type testGitRepo struct {
 
 func initializeTestGitRepo(name string) (*testGitRepo, error) {
 	repo := &testGitRepo{Name: name}
-	dir, err := ioutil.TempDir("", "test-"+repo.Name)
+	dir, err := os.MkdirTemp("", "test-"+repo.Name)
 	if err != nil {
 		return repo, err
 	}
 	repo.Path = dir
 	tmpfn := filepath.Join(dir, "initial-file")
-	if err := ioutil.WriteFile(tmpfn, []byte("test"), 0666); err != nil {
+	if err := os.WriteFile(tmpfn, []byte("test"), 0666); err != nil {
 		return repo, fmt.Errorf("unable to create temporary file")
 	}
 	repo.Files = append(repo.Files, tmpfn)
@@ -139,11 +138,11 @@ func (r *testGitRepo) cleanup() {
 }
 
 func (r *testGitRepo) addCommit() error {
-	f, err := ioutil.TempFile(r.Path, "")
+	f, err := os.CreateTemp(r.Path, "")
 	if err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(f.Name(), []byte("test"), 0666); err != nil {
+	if err := os.WriteFile(f.Name(), []byte("test"), 0666); err != nil {
 		return fmt.Errorf("unable to create temporary file %q", f.Name())
 	}
 	addCmd := exec.Command("git", "add", ".")
@@ -178,7 +177,7 @@ func TestUnqualifiedClone(t *testing.T) {
 	if err := repo.addCommit(); err != nil {
 		t.Errorf("unable to add commit: %v", err)
 	}
-	destDir, err := ioutil.TempDir("", "clone-dest-")
+	destDir, err := os.MkdirTemp("", "clone-dest-")
 	defer os.RemoveAll(destDir)
 	client := git.NewRepositoryWithEnv([]string{})
 	source := &buildapiv1.GitBuildSource{URI: "file://" + repo.Path}
@@ -219,7 +218,7 @@ func TestCloneFromRef(t *testing.T) {
 	if err := repo.addCommit(); err != nil {
 		t.Errorf("unable to add commit: %v", err)
 	}
-	destDir, err := ioutil.TempDir("", "commit-dest-")
+	destDir, err := os.MkdirTemp("", "commit-dest-")
 	defer os.RemoveAll(destDir)
 	client := git.NewRepositoryWithEnv([]string{})
 	firstCommitRef, err := repo.getRef(-1)
@@ -279,7 +278,7 @@ func TestCloneFromBranch(t *testing.T) {
 	if err := repo.addCommit(); err != nil {
 		t.Errorf("unable to add commit: %v", err)
 	}
-	destDir, err := ioutil.TempDir("", "branch-dest-")
+	destDir, err := os.MkdirTemp("", "branch-dest-")
 	defer os.RemoveAll(destDir)
 	client := git.NewRepositoryWithEnv([]string{})
 	source := &buildapiv1.GitBuildSource{
@@ -386,7 +385,7 @@ func TestCopyImageSourceFromFilesystem(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			testDir, err := ioutil.TempDir("", "copy-src-from-fs")
+			testDir, err := os.MkdirTemp("", "copy-src-from-fs")
 			if err != nil {
 				t.Fatalf("failed to create test directory: %v", err)
 			}
@@ -431,7 +430,7 @@ func createTestFile(testDir string, filename string, content string) error {
 			return err
 		}
 	}
-	return ioutil.WriteFile(file, []byte(content), 0644)
+	return os.WriteFile(file, []byte(content), 0644)
 }
 
 func createTestSymlink(testDir string, linkname string, source string) error {
@@ -458,7 +457,7 @@ func verifyFile(filename string, expectedContent string, t *testing.T) {
 	case mode&os.ModeSymlink != 0:
 		t.Errorf("expected regular file for %s, got symlink", filename)
 	case mode.IsRegular():
-		data, err := ioutil.ReadFile(filename)
+		data, err := os.ReadFile(filename)
 		if err != nil {
 			t.Errorf("could not read %s: %v", filename, err)
 		}

@@ -2,7 +2,7 @@ package scmauth
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 )
 
@@ -16,7 +16,7 @@ type SSHPrivateKey struct{}
 // SSH key while accessing private repository. Note that this does _not_ generate a .gitconfig
 // file or set the GIT_CONFIG environment variable.
 func (SSHPrivateKey) Setup(baseDir string, context SCMAuthContext) (string, error) {
-	script, err := ioutil.TempFile("", "gitssh")
+	script, err := os.CreateTemp("", "gitssh")
 	if err != nil {
 		return "", err
 	}
@@ -26,7 +26,7 @@ func (SSHPrivateKey) Setup(baseDir string, context SCMAuthContext) (string, erro
 	}
 	foundPrivateKey := false
 	foundKnownHosts := false
-	files, err := ioutil.ReadDir(baseDir)
+	files, err := os.ReadDir(baseDir)
 	if err != nil {
 		return "", err
 	}

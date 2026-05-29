@@ -2,7 +2,6 @@ package scmauth
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -66,12 +65,12 @@ func (u UsernamePassword) Setup(baseDir string, context SCMAuthContext) (string,
 
 	// Write git config if needed
 	if gitconfigURL != nil {
-		gitcredentials, err := ioutil.TempFile("", "gitcredentials.")
+		gitcredentials, err := os.CreateTemp("", "gitcredentials.")
 		if err != nil {
 			return "", err
 		}
 		defer gitcredentials.Close()
-		gitconfig, err := ioutil.TempFile("", "gitcredentialscfg.")
+		gitconfig, err := os.CreateTemp("", "gitcredentialscfg.")
 		if err != nil {
 			return "", err
 		}
