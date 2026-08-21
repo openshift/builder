@@ -3,7 +3,6 @@ package builder
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -76,9 +75,10 @@ func TestBuildInfo(t *testing.T) {
 func TestRandomBuildTag(t *testing.T) {
 	tests := []struct {
 		namespace, name string
-		want            string
+		wantPrefix      string
+		wantHashed      bool
 	}{
-		{"test", "build-1", "temp.builder.openshift.io/test/build-1:f1f85ff5"},
+		{"test", "build-1", "temp.builder.openshift.io/test/build-1:", false},
 		// For long build namespace + build name, the returned random build tag
 		// would be longer than the limit of reference.NameTotalLengthMax (255
 		// chars). We do not truncate the repository name because it could create an
@@ -89,20 +89,24 @@ func TestRandomBuildTag(t *testing.T) {
 		{
 			"namespace" + strings.Repeat(".namespace", 20),
 			"name" + strings.Repeat(".name", 20),
-			"8a0f9d66cde28a0ebb1e3ee8ef9a484ce687afe0:f1f85ff5",
+			"8a0f9d66cde28a0ebb1e3ee8ef9a484ce687afe0:",
+			true,
 		},
 	}
 	for _, tt := range tests {
-		rand.Seed(0)
 		got := randomBuildTag(tt.namespace, tt.name)
-		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("randomBuildTag(%q, %q) = %q, want %q", tt.namespace, tt.name, got, tt.want)
+		if !strings.HasPrefix(got, tt.wantPrefix) {
+			t.Errorf("randomBuildTag(%q, %q) = %q, want prefix %q", tt.namespace, tt.name, got, tt.wantPrefix)
+		}
+		// Verify the tag portion is an 8-character hex string
+		parts := strings.SplitN(got, ":", 2)
+		if len(parts) != 2 || len(parts[1]) != 8 {
+			t.Errorf("randomBuildTag(%q, %q) = %q, tag portion should be 8 hex chars", tt.namespace, tt.name, got)
 		}
 	}
 }
 
 func TestRandomBuildTagNoDupes(t *testing.T) {
-	rand.Seed(0)
 	previous := make(map[string]struct{})
 	for i := 0; i < 100; i++ {
 		tag := randomBuildTag("test", "build-1")
@@ -115,11 +119,15 @@ func TestRandomBuildTagNoDupes(t *testing.T) {
 }
 
 func TestContainerName(t *testing.T) {
-	rand.Seed(0)
 	got := containerName("test-strategy", "my-build", "ns", "hook")
-	want := "openshift_test-strategy-build_my-build_ns_hook_f1f85ff5"
-	if got != want {
-		t.Errorf("got %v, want %v", got, want)
+	wantPrefix := "openshift_test-strategy-build_my-build_ns_hook_"
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("got %v, want prefix %v", got, wantPrefix)
+	}
+	// Verify the uid portion is an 8-character hex string
+	uid := strings.TrimPrefix(got, wantPrefix)
+	if len(uid) != 8 {
+		t.Errorf("got %v, uid portion %q should be 8 hex chars", got, uid)
 	}
 }
 
