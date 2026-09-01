@@ -940,7 +940,7 @@ go.starlark.net/resolve
 go.starlark.net/starlark
 go.starlark.net/starlarkstruct
 go.starlark.net/syntax
-# golang.org/x/crypto v0.31.0
+# golang.org/x/crypto v0.31.0 => github.com/openshift-sustaining/crypto v0.33.0-sec.5
 ## explicit; go 1.20
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
@@ -997,21 +997,21 @@ golang.org/x/net/websocket
 ## explicit; go 1.18
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
-# golang.org/x/sync v0.10.0
+# golang.org/x/sync v0.11.0
 ## explicit; go 1.18
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.28.0
+# golang.org/x/sys v0.30.0
 ## explicit; go 1.18
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.27.0
+# golang.org/x/term v0.29.0
 ## explicit; go 1.18
 golang.org/x/term
-# golang.org/x/text v0.21.0
+# golang.org/x/text v0.22.0
 ## explicit; go 1.18
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal
@@ -1611,3 +1611,4 @@ tags.cncf.io/container-device-interface/specs-go
 # k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.30.2
 # github.com/distribution/reference => github.com/distribution/reference v0.5.0
 # github.com/docker/docker => github.com/docker/docker v25.0.3+incompatible
+# golang.org/x/crypto => github.com/openshift-sustaining/crypto v0.33.0-sec.5
