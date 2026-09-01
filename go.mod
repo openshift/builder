@@ -23,7 +23,7 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
-	golang.org/x/sys v0.17.0
+	golang.org/x/sys v0.21.0
 	k8s.io/api v0.27.3
 	k8s.io/apimachinery v0.27.3
 	k8s.io/client-go v1.5.2
@@ -123,12 +123,12 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	golang.org/x/crypto v0.19.0 // indirect
-	golang.org/x/mod v0.13.0 // indirect
-	golang.org/x/net v0.18.0 // indirect
+	golang.org/x/mod v0.17.0 // indirect
+	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/oauth2 v0.14.0 // indirect
-	golang.org/x/sync v0.5.0 // indirect
-	golang.org/x/term v0.17.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
+	golang.org/x/term v0.21.0 // indirect
+	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/grpc v1.58.3 // indirect
@@ -196,7 +196,7 @@ require (
 	github.com/vbauerster/mpb/v8 v8.6.2 // indirect
 	go.mongodb.org/mongo-driver v1.11.3 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
-	golang.org/x/tools v0.14.0 // indirect
+	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230920204549-e6e6cdab5c13 // indirect
 	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
 	tags.cncf.io/container-device-interface v0.6.2 // indirect
@@ -234,3 +234,5 @@ replace (
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.27.3
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.27.3
 )
+
+replace golang.org/x/crypto => github.com/openshift-sustaining/crypto v0.24.0-sec.4
