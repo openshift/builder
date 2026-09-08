@@ -201,10 +201,10 @@ func checkRemoteGit(gitClient GitClient, url string, initialTimeout time.Duratio
 		log.V(4).Infof("git ls-remote --heads %s", url)
 		out, errOut, err = gitClient.TimedListRemote(timeout, url, "--heads")
 		if len(out) != 0 {
-			log.V(4).Infof(out)
+			log.V(4).Infof("%s", out)
 		}
 		if len(errOut) != 0 {
-			log.V(4).Infof(errOut)
+			log.V(4).Infof("%s", errOut)
 		}
 		if err != nil {
 			if _, ok := err.(*git.TimeoutError); ok {
