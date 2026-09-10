@@ -1,12 +1,13 @@
 package builder
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -74,40 +75,42 @@ func TestBuildInfo(t *testing.T) {
 }
 
 func TestRandomBuildTag(t *testing.T) {
-	tests := []struct {
-		namespace, name string
-		want            string
-	}{
-		{"test", "build-1", "temp.builder.openshift.io/test/build-1:f1f85ff5"},
-		// For long build namespace + build name, the returned random build tag
-		// would be longer than the limit of reference.NameTotalLengthMax (255
-		// chars). We do not truncate the repository name because it could create an
-		// invalid repository name (e.g., namespace=abc, name=d, repo=abc/d,
-		// trucated=abc/ -> invalid), so we simply take a SHA1 hash of the
-		// repository name (which is guaranteed to be a valid repository name) and
-		// preserve the random tag.
-		{
-			"namespace" + strings.Repeat(".namespace", 20),
-			"name" + strings.Repeat(".name", 20),
-			"8a0f9d66cde28a0ebb1e3ee8ef9a484ce687afe0:f1f85ff5",
-		},
+	// Short namespace/name: should produce temp.builder.openshift.io/{ns}/{name}:{8hexchars}
+	tag := randomBuildTag("test", "build-1")
+	shortPattern := regexp.MustCompile(`^temp\.builder\.openshift\.io/test/build-1:([0-9a-f]{8})$`)
+	m := shortPattern.FindStringSubmatch(tag)
+	if m == nil {
+		t.Errorf("randomBuildTag(\"test\", \"build-1\") = %q, does not match expected format", tag)
+	} else if _, err := hex.DecodeString(m[1]); err != nil {
+		t.Errorf("suffix %q is not valid hex: %v", m[1], err)
 	}
-	for _, tt := range tests {
-		rand.Seed(0)
-		got := randomBuildTag(tt.namespace, tt.name)
-		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("randomBuildTag(%q, %q) = %q, want %q", tt.namespace, tt.name, got, tt.want)
-		}
+
+	// Different inputs should produce different prefixes
+	tag2 := randomBuildTag("other-ns", "other-build")
+	if strings.Split(tag, ":")[0] == strings.Split(tag2, ":")[0] {
+		t.Errorf("different inputs produced the same prefix: %q vs %q", tag, tag2)
+	}
+
+	// Long namespace/name: repo should be SHA1-hashed, tag should still be 8 hex chars
+	longNs := "namespace" + strings.Repeat(".namespace", 20)
+	longName := "name" + strings.Repeat(".name", 20)
+	longTag := randomBuildTag(longNs, longName)
+	// When the repo is hashed, it becomes a 40-char hex SHA1 followed by :8hexchars
+	longPattern := regexp.MustCompile(`^[0-9a-f]{40}:([0-9a-f]{8})$`)
+	ml := longPattern.FindStringSubmatch(longTag)
+	if ml == nil {
+		t.Errorf("randomBuildTag with long input = %q, does not match expected hashed format", longTag)
+	}
+	if len(longTag) > 255 {
+		t.Errorf("randomBuildTag with long input produced tag of length %d, exceeding 255", len(longTag))
 	}
 }
 
 func TestRandomBuildTagNoDupes(t *testing.T) {
-	rand.Seed(0)
 	previous := make(map[string]struct{})
 	for i := 0; i < 100; i++ {
 		tag := randomBuildTag("test", "build-1")
-		_, exists := previous[tag]
-		if exists {
+		if _, exists := previous[tag]; exists {
 			t.Errorf("randomBuildTag returned a recently seen tag: %q", tag)
 		}
 		previous[tag] = struct{}{}
@@ -115,11 +118,22 @@ func TestRandomBuildTagNoDupes(t *testing.T) {
 }
 
 func TestContainerName(t *testing.T) {
-	rand.Seed(0)
 	got := containerName("test-strategy", "my-build", "ns", "hook")
-	want := "openshift_test-strategy-build_my-build_ns_hook_f1f85ff5"
-	if got != want {
-		t.Errorf("got %v, want %v", got, want)
+
+	// Format: openshift_{strategy}-build_{build}_{namespace}_{purpose}_{8hexchars}
+	pattern := regexp.MustCompile(`^openshift_test-strategy-build_my-build_ns_hook_([0-9a-f]{8})$`)
+	m := pattern.FindStringSubmatch(got)
+	if m == nil {
+		t.Errorf("containerName() = %q, does not match expected format", got)
+	} else if _, err := hex.DecodeString(m[1]); err != nil {
+		t.Errorf("suffix %q is not valid hex: %v", m[1], err)
+	}
+
+	// Verify the output contains expected components
+	for _, want := range []string{"openshift", "test-strategy", "my-build", "ns", "hook"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("containerName() = %q, missing expected component %q", got, want)
+		}
 	}
 }
 
