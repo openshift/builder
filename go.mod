@@ -1,8 +1,8 @@
 module github.com/openshift/builder
 
-go 1.22.8
+go 1.23.0
 
-toolchain go1.23.1
+toolchain go1.23.12
 
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
@@ -25,7 +25,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.6
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.35.0
 	k8s.io/api v0.30.2
 	k8s.io/apimachinery v0.30.2
 	k8s.io/client-go v0.30.2
@@ -116,13 +116,13 @@ require (
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.starlark.net v0.0.0-20230525235612-a134d8f9ddca // indirect
-	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/crypto v0.41.0 // indirect
+	golang.org/x/mod v0.26.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/term v0.29.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/term v0.34.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	google.golang.org/grpc v1.69.4 // indirect
 	google.golang.org/protobuf v1.36.2 // indirect
@@ -258,3 +258,5 @@ replace github.com/distribution/reference => github.com/distribution/reference v
 replace github.com/docker/docker => github.com/docker/docker v25.0.3+incompatible
 
 replace golang.org/x/crypto => github.com/openshift-sustaining/crypto v0.33.0-sec.5
+
+replace golang.org/x/net => github.com/openshift-sustaining/net v0.43.0-sec.4
