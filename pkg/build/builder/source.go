@@ -381,7 +381,7 @@ func copyImageSourceFromFilesytem(sourceDir, destDir string) error {
 func extractSourceFromImage(ctx context.Context, dockerClient DockerClient, store storage.Store, image, buildDir string, imageSecretIndex int, paths []buildapiv1.ImageSourcePath, forcePull bool, blobCacheDirectory string) error {
 	log.V(4).Infof("Extracting image source from image %s", image)
 
-	pullPolicy := buildah.PullIfMissing
+	pullPolicy := buildah.PullIfNewer
 	if forcePull {
 		pullPolicy = buildah.PullAlways
 	}

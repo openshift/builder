@@ -255,7 +255,7 @@ func buildDaemonlessImage(sc types.SystemContext, store storage.Store, isolation
 		args[ev.Name] = ev.Value
 	}
 
-	pullPolicy := buildah.PullIfMissing
+	pullPolicy := buildah.PullIfNewer
 	if opts.Pull {
 		log.V(2).Infof("Forcing fresh pull of base image.")
 		pullPolicy = buildah.PullAlways
@@ -838,7 +838,11 @@ func (d *DaemonlessClient) RemoveContainer(opts docker.RemoveContainerOptions) e
 func (d *DaemonlessClient) PullImage(opts docker.PullImageOptions, searchPaths []string) error {
 	imageName := opts.Repository
 	if opts.Tag != "" {
-		imageName = imageName + ":" + opts.Tag
+		if strings.Contains(opts.Tag, ":") {
+			imageName = imageName + "@" + opts.Tag
+		} else {
+			imageName = imageName + ":" + opts.Tag
+		}
 	}
 	return pullDaemonlessImage(d.SystemContext, d.Store, imageName, searchPaths, d.BlobCacheDirectory)
 }
