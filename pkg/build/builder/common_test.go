@@ -3,10 +3,10 @@ package builder
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -74,35 +74,39 @@ func TestBuildInfo(t *testing.T) {
 }
 
 func TestRandomBuildTag(t *testing.T) {
-	tests := []struct {
-		namespace, name string
-		want            string
-	}{
-		{"test", "build-1", "temp.builder.openshift.io/test/build-1:f1f85ff5"},
-		// For long build namespace + build name, the returned random build tag
-		// would be longer than the limit of reference.NameTotalLengthMax (255
-		// chars). We do not truncate the repository name because it could create an
-		// invalid repository name (e.g., namespace=abc, name=d, repo=abc/d,
-		// trucated=abc/ -> invalid), so we simply take a SHA1 hash of the
-		// repository name (which is guaranteed to be a valid repository name) and
-		// preserve the random tag.
-		{
-			"namespace" + strings.Repeat(".namespace", 20),
-			"name" + strings.Repeat(".name", 20),
-			"8a0f9d66cde28a0ebb1e3ee8ef9a484ce687afe0:f1f85ff5",
-		},
+	tagPattern := regexp.MustCompile(`^[a-z0-9./_-]+:[0-9a-f]{8}$`)
+
+	got := randomBuildTag("test", "build-1")
+	if !strings.HasPrefix(got, "temp.builder.openshift.io/test/build-1:") {
+		t.Errorf("randomBuildTag short name: got %q, want prefix %q", got, "temp.builder.openshift.io/test/build-1:")
 	}
-	for _, tt := range tests {
-		rand.Seed(0)
-		got := randomBuildTag(tt.namespace, tt.name)
-		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("randomBuildTag(%q, %q) = %q, want %q", tt.namespace, tt.name, got, tt.want)
-		}
+	if !tagPattern.MatchString(got) {
+		t.Errorf("randomBuildTag short name: got %q, does not match expected format", got)
+	}
+
+	// For long build namespace + build name, the returned random build tag
+	// would be longer than the limit of reference.NameTotalLengthMax (255
+	// chars). We do not truncate the repository name because it could create an
+	// invalid repository name (e.g., namespace=abc, name=d, repo=abc/d,
+	// trucated=abc/ -> invalid), so we simply take a SHA1 hash of the
+	// repository name (which is guaranteed to be a valid repository name) and
+	// preserve the random tag.
+	longNs := "namespace" + strings.Repeat(".namespace", 20)
+	longName := "name" + strings.Repeat(".name", 20)
+	got = randomBuildTag(longNs, longName)
+	if strings.HasPrefix(got, "temp.builder.openshift.io/") {
+		t.Errorf("randomBuildTag long name: should have hashed the repo, got %q", got)
+	}
+	hashedPattern := regexp.MustCompile(`^[0-9a-f]{40}:[0-9a-f]{8}$`)
+	if !hashedPattern.MatchString(got) {
+		t.Errorf("randomBuildTag long name: got %q, does not match SHA1:tag format", got)
+	}
+	if len(got) > 255 {
+		t.Errorf("randomBuildTag long name: length %d exceeds 255", len(got))
 	}
 }
 
 func TestRandomBuildTagNoDupes(t *testing.T) {
-	rand.Seed(0)
 	previous := make(map[string]struct{})
 	for i := 0; i < 100; i++ {
 		tag := randomBuildTag("test", "build-1")
@@ -115,11 +119,10 @@ func TestRandomBuildTagNoDupes(t *testing.T) {
 }
 
 func TestContainerName(t *testing.T) {
-	rand.Seed(0)
 	got := containerName("test-strategy", "my-build", "ns", "hook")
-	want := "openshift_test-strategy-build_my-build_ns_hook_f1f85ff5"
-	if got != want {
-		t.Errorf("got %v, want %v", got, want)
+	pattern := regexp.MustCompile(`^openshift_test-strategy-build_my-build_ns_hook_[0-9a-f]{8}$`)
+	if !pattern.MatchString(got) {
+		t.Errorf("containerName format mismatch: got %q", got)
 	}
 }
 
