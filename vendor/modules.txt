@@ -331,9 +331,19 @@ github.com/coreos/go-systemd/v22/dbus
 # github.com/cyberphone/json-canonicalization v0.0.0-20231011164504-785e29786b46
 ## explicit
 github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer
-# github.com/cyphar/filepath-securejoin v0.2.4
-## explicit; go 1.13
+# github.com/cyphar/filepath-securejoin v0.5.1
+## explicit; go 1.18
 github.com/cyphar/filepath-securejoin
+github.com/cyphar/filepath-securejoin/internal/consts
+github.com/cyphar/filepath-securejoin/pathrs-lite
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/assert
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/fd
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/gocompat
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/kernelversion
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/linux
+github.com/cyphar/filepath-securejoin/pathrs-lite/internal/procfs
+github.com/cyphar/filepath-securejoin/pathrs-lite/procfs
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
@@ -628,6 +638,12 @@ github.com/moby/sys/mountinfo
 # github.com/moby/sys/sequential v0.5.0
 ## explicit; go 1.17
 github.com/moby/sys/sequential
+# github.com/moby/sys/user v0.3.0
+## explicit; go 1.17
+github.com/moby/sys/user
+# github.com/moby/sys/userns v0.1.0
+## explicit; go 1.21
+github.com/moby/sys/userns
 # github.com/moby/term v0.5.0
 ## explicit; go 1.18
 github.com/moby/term
@@ -661,8 +677,9 @@ github.com/opencontainers/go-digest/digestset
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/opencontainers/runc v1.1.12
-## explicit; go 1.17
+# github.com/opencontainers/runc v1.2.8
+## explicit; go 1.22
+github.com/opencontainers/runc/internal/pathrs
 github.com/opencontainers/runc/libcontainer/apparmor
 github.com/opencontainers/runc/libcontainer/cgroups
 github.com/opencontainers/runc/libcontainer/configs
@@ -670,7 +687,7 @@ github.com/opencontainers/runc/libcontainer/devices
 github.com/opencontainers/runc/libcontainer/user
 github.com/opencontainers/runc/libcontainer/userns
 github.com/opencontainers/runc/libcontainer/utils
-# github.com/opencontainers/runtime-spec v1.1.0
+# github.com/opencontainers/runtime-spec v1.2.0
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/opencontainers/runtime-tools v0.9.1-0.20230914150019-408c51e934dc
@@ -678,7 +695,7 @@ github.com/opencontainers/runtime-spec/specs-go
 github.com/opencontainers/runtime-tools/generate
 github.com/opencontainers/runtime-tools/generate/seccomp
 github.com/opencontainers/runtime-tools/validate/capabilities
-# github.com/opencontainers/selinux v1.11.0
+# github.com/opencontainers/selinux v1.12.0
 ## explicit; go 1.19
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
@@ -887,7 +904,7 @@ go.starlark.net/resolve
 go.starlark.net/starlark
 go.starlark.net/starlarkstruct
 go.starlark.net/syntax
-# golang.org/x/crypto v0.23.0 => github.com/openshift-sustaining/crypto v0.33.0-sec.5
+# golang.org/x/crypto v0.31.0 => github.com/openshift-sustaining/crypto v0.33.0-sec.5
 ## explicit; go 1.20
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
@@ -927,7 +944,7 @@ golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.25.0
+# golang.org/x/net v0.33.0
 ## explicit; go 1.18
 golang.org/x/net/context
 golang.org/x/net/html
