@@ -115,7 +115,7 @@ require (
 	go.mozilla.org/pkcs7 v0.0.0-20210826202110-33d05740a352 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.starlark.net v0.0.0-20230525235612-a134d8f9ddca // indirect
-	golang.org/x/crypto v0.23.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/oauth2 v0.14.0 // indirect
