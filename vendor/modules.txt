@@ -887,7 +887,7 @@ go.starlark.net/resolve
 go.starlark.net/starlark
 go.starlark.net/starlarkstruct
 go.starlark.net/syntax
-# golang.org/x/crypto v0.23.0 => github.com/openshift-sustaining/crypto v0.33.0-sec.5
+# golang.org/x/crypto v0.52.0 => github.com/openshift-sustaining/crypto v0.33.0-sec.5
 ## explicit; go 1.20
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
