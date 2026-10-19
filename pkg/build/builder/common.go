@@ -163,12 +163,21 @@ func buildInfo(build *buildapiv1.Build, sourceInfo *git.SourceInfo) []KeyValue {
 	return kv
 }
 
+// randSource is the source of randomness used to generate build tags and
+// container names. It is seeded once at process startup. We use an explicit
+// *rand.Rand instead of the top-level math/rand functions so that tests can
+// inject a deterministic source via rand.New(rand.NewSource(0)). This is
+// required because math/rand.Seed is a no-op as of Go 1.24 and can no longer be
+// used to make the global source deterministic.
+var randSource = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 // randomBuildTag generates a random tag used for building images in such a way
 // that the built image can be referred to unambiguously even in the face of
-// concurrent builds with the same name in the same namespace.
-func randomBuildTag(namespace, name string) string {
+// concurrent builds with the same name in the same namespace. The random tag is
+// drawn from r so callers (and tests) can control the source of randomness.
+func randomBuildTag(r *rand.Rand, namespace, name string) string {
 	repo := fmt.Sprintf("temp.builder.openshift.io/%s/%s", namespace, name)
-	randomTag := fmt.Sprintf("%08x", rand.Uint32())
+	randomTag := fmt.Sprintf("%08x", r.Uint32())
 	maxRepoLen := reference.NameTotalLengthMax - len(randomTag) - 1
 	if len(repo) > maxRepoLen {
 		repo = fmt.Sprintf("%x", sha1.Sum([]byte(repo)))
@@ -177,9 +186,10 @@ func randomBuildTag(namespace, name string) string {
 }
 
 // containerName creates names for Docker containers launched by a build. It is
-// meant to resemble Kubernetes' pkg/kubelet/dockertools.BuildDockerName.
-func containerName(strategyName, buildName, namespace, containerPurpose string) string {
-	uid := fmt.Sprintf("%08x", rand.Uint32())
+// meant to resemble Kubernetes' pkg/kubelet/dockertools.BuildDockerName. The
+// random suffix is drawn from r so callers (and tests) can control randomness.
+func containerName(r *rand.Rand, strategyName, buildName, namespace, containerPurpose string) string {
+	uid := fmt.Sprintf("%08x", r.Uint32())
 	return fmt.Sprintf("%s_%s-build_%s_%s_%s_%s",
 		containerNamePrefix,
 		strategyName,

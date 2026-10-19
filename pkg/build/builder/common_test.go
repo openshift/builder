@@ -93,8 +93,8 @@ func TestRandomBuildTag(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		rand.Seed(0)
-		got := randomBuildTag(tt.namespace, tt.name)
+		r := rand.New(rand.NewSource(0))
+		got := randomBuildTag(r, tt.namespace, tt.name)
 		if !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("randomBuildTag(%q, %q) = %q, want %q", tt.namespace, tt.name, got, tt.want)
 		}
@@ -102,10 +102,10 @@ func TestRandomBuildTag(t *testing.T) {
 }
 
 func TestRandomBuildTagNoDupes(t *testing.T) {
-	rand.Seed(0)
+	r := rand.New(rand.NewSource(0))
 	previous := make(map[string]struct{})
 	for i := 0; i < 100; i++ {
-		tag := randomBuildTag("test", "build-1")
+		tag := randomBuildTag(r, "test", "build-1")
 		_, exists := previous[tag]
 		if exists {
 			t.Errorf("randomBuildTag returned a recently seen tag: %q", tag)
@@ -115,8 +115,8 @@ func TestRandomBuildTagNoDupes(t *testing.T) {
 }
 
 func TestContainerName(t *testing.T) {
-	rand.Seed(0)
-	got := containerName("test-strategy", "my-build", "ns", "hook")
+	r := rand.New(rand.NewSource(0))
+	got := containerName(r, "test-strategy", "my-build", "ns", "hook")
 	want := "openshift_test-strategy-build_my-build_ns_hook_f1f85ff5"
 	if got != want {
 		t.Errorf("got %v, want %v", got, want)

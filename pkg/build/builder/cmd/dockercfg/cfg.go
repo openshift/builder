@@ -147,7 +147,7 @@ func GetDockerConfigPath(paths []string) (string, error) {
 			absDockerConfigFileLocation, err := filepath.Abs(filepath.Join(configPath, file))
 			if err != nil {
 				log.V(4).Infof("while trying to canonicalize %s: %v", configPath, err)
-				errList = append(errList)
+				errList = append(errList, err)
 				continue
 			}
 			log.V(4).Infof("looking for %s at %s", file, absDockerConfigFileLocation)

@@ -77,7 +77,7 @@ func (d *DockerBuilder) Build() error {
 		push = true
 	}
 
-	buildTag := randomBuildTag(d.build.Namespace, d.build.Name)
+	buildTag := randomBuildTag(randSource, d.build.Namespace, d.build.Name)
 	dockerfilePath := getDockerfilePath(buildDir, d.build)
 
 	imageNames, err := findReferencedImages(dockerfilePath, d.build.Spec.Strategy.DockerStrategy.BuildArgs)

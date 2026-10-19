@@ -165,7 +165,7 @@ func (s *S2IBuilder) Build() error {
 	injections = append(injections, injectSecrets(s.build.Spec.Source.Secrets)...)
 	injections = append(injections, injectConfigMaps(s.build.Spec.Source.ConfigMaps)...)
 
-	buildTag := randomBuildTag(s.build.Namespace, s.build.Name)
+	buildTag := randomBuildTag(randSource, s.build.Namespace, s.build.Name)
 	scriptDownloadProxyConfig, err := scriptProxyConfig(s.build)
 	if err != nil {
 		return err
