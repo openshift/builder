@@ -2,7 +2,6 @@ package scmauth
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,13 +16,13 @@ var log = utillog.ToFile(os.Stderr, 2)
 // section to the provided path.
 // Returns the path to the git configuration file, and error if raised.
 func createGitConfig(includePath string, context SCMAuthContext) (string, error) {
-	tempDir, err := ioutil.TempDir("", "git")
+	tempDir, err := os.MkdirTemp("", "git")
 	if err != nil {
 		return "", err
 	}
 	gitconfig := filepath.Join(tempDir, ".gitconfig")
 	content := fmt.Sprintf("[include]\npath = %s\n", includePath)
-	if err := ioutil.WriteFile(gitconfig, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(gitconfig, []byte(content), 0600); err != nil {
 		return "", err
 	}
 	// The GIT_CONFIG variable won't affect regular git operation
@@ -61,6 +60,6 @@ func ensureGitConfigIncludes(path string, context SCMAuthContext) (string, error
 
 	lines = append(lines, fmt.Sprintf("path = %s", path))
 	content := []byte(strings.Join(lines, "\n"))
-	err = ioutil.WriteFile(gitconfig, content, 0600)
+	err = os.WriteFile(gitconfig, content, 0600)
 	return gitconfig, err
 }

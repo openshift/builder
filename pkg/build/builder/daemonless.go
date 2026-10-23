@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -191,7 +190,7 @@ func pullDaemonlessImage(sc types.SystemContext, store storage.Store, imageName 
 	// in case the node credentials facilitate the pulling of the image
 	mergedCreds := mergeNodeCredentials(dockerConfigCreds)
 
-	dstFile, err := ioutil.TempFile("", "config")
+	dstFile, err := os.CreateTemp("", "config")
 	if err != nil {
 		return fmt.Errorf("error creating tmp credentials file: %v", err)
 	}
@@ -407,7 +406,7 @@ func appendRHRepoMount(pathStart string, mountsMap *TransientMounts) error {
 
 	// Add a bind of repo file, to pass along anything that the runtime mounted from the node
 	log.V(0).Infof("Adding transient rw bind mount for %s", path)
-	tmpDir, err := ioutil.TempDir("/tmp", repoFile+"-copy")
+	tmpDir, err := os.MkdirTemp("/tmp", repoFile+"-copy")
 	if err != nil {
 		log.V(0).Infof("Falling back to the Red Hat yum repository configuration in the base image: failed to create tmpdir for %s secret: %v", repoFile, err)
 		return nil
@@ -445,7 +444,7 @@ func coreAppendSecretLinksToDirs(pathStart, pathEnd string, mountsMap *Transient
 
 	// Add a bind of dir secret, to pass along anything that the runtime mounted from the node
 	log.V(0).Infof("Adding transient rw bind mount for %s", path)
-	tmpDir, err := ioutil.TempDir("/tmp", pathEnd+"-copy")
+	tmpDir, err := os.MkdirTemp("/tmp", pathEnd+"-copy")
 	if err != nil {
 		log.V(0).Infof("Red Hat subscription content will not be available in this build: failed to create tmpdir for %s secrets: %v", pathEnd, err)
 		return nil
