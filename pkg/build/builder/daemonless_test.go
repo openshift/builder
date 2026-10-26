@@ -431,7 +431,7 @@ func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 	for _, tc := range cases {
 		tmpDir, err := ioutil.TempDir(os.TempDir(), tc.name)
 		if err != nil {
-			t.Fatalf(err.Error())
+			t.Fatal(err)
 		}
 		defer os.RemoveAll(tmpDir)
 		if tc.exists {
@@ -440,39 +440,39 @@ func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 				// regular file
 				_, err = os.Create(filepath.Join(tmpDir, path))
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 
 			case tc.mode&os.ModeDir != 0:
 				// dir
 				err = os.Mkdir(filepath.Join(tmpDir, path), 0777)
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 				_, err = os.Create(filepath.Join(tmpDir, path, "ca"))
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 			case tc.mode&os.ModeSymlink != 0:
 				// symlink
 				if tc.badLink {
 					_, err = os.Create(filepath.Join(tmpDir, path+"-link-destination"))
 					if err != nil {
-						t.Fatalf(err.Error())
+						t.Fatal(err)
 					}
 				} else {
 					err = os.Mkdir(filepath.Join(tmpDir, path+"-link-destination"), 0777)
 					if err != nil {
-						t.Fatalf(err.Error())
+						t.Fatal(err)
 					}
 					_, err = os.Create(filepath.Join(tmpDir, path+"-link-destination", "ca"))
 					if err != nil {
-						t.Fatalf(err.Error())
+						t.Fatal(err)
 					}
 				}
 				err = os.Symlink(filepath.Join(tmpDir, path+"-link-destination"), filepath.Join(tmpDir, path))
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 			}
 			mountsMap := make(TransientMounts)
@@ -500,7 +500,7 @@ func coreTestSubscriptionDirMounts(t *testing.T, path string, fn appendFunc) {
 				copyDir := splitMount[0]
 				files, err := ioutil.ReadDir(copyDir)
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 				found := false
 				for _, file := range files {
@@ -575,7 +575,7 @@ func TestRHRepoMount(t *testing.T) {
 	for _, tc := range cases {
 		tmpDir, err := ioutil.TempDir(os.TempDir(), tc.name)
 		if err != nil {
-			t.Fatalf(err.Error())
+			t.Fatal(err)
 		}
 		defer os.RemoveAll(tmpDir)
 		if tc.exists {
@@ -584,31 +584,31 @@ func TestRHRepoMount(t *testing.T) {
 				// regular file
 				_, err = os.Create(filepath.Join(tmpDir, path))
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 
 			case tc.mode&os.ModeDir != 0:
 				// dir
 				err = os.Mkdir(filepath.Join(tmpDir, path), 0777)
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 			case tc.mode&os.ModeSymlink != 0:
 				// symlink
 				if tc.badLink {
 					err = os.Mkdir(filepath.Join(tmpDir, path+"-link-destination"), 0777)
 					if err != nil {
-						t.Fatalf(err.Error())
+						t.Fatal(err)
 					}
 				} else {
 					_, err = os.Create(filepath.Join(tmpDir, path+"-link-destination"))
 					if err != nil {
-						t.Fatalf(err.Error())
+						t.Fatal(err)
 					}
 				}
 				err = os.Symlink(filepath.Join(tmpDir, path+"-link-destination"), filepath.Join(tmpDir, path))
 				if err != nil {
-					t.Fatalf(err.Error())
+					t.Fatal(err)
 				}
 			}
 
